@@ -2925,7 +2925,19 @@
             return;
           }
 
+          const recordsBeforeFetch = getRecordsSnapshot();
           const result = await fetchRemoteRecords();
+          if (recordsBeforeFetch !== getRecordsSnapshot()
+            || state.remote.pushLocalNext
+            || state.remote.writeInFlight
+            || state.remote.writeQueued) {
+            updateStorageStatus();
+            if (!opts.silent) {
+              setStatus("本地有新改动，已跳过 GitHub 旧数据。");
+            }
+            return;
+          }
+
           if (result.missing) {
             if (opts.createIfMissing || state.records.length) {
               const ok = await writeCurrentRecordsToRemote();
@@ -3072,7 +3084,9 @@
           return;
         }
 
+        state.remote.pushLocalNext = true;
         state.remote.writeQueued = true;
+        saveRemoteSyncSettingsToLocal();
         window.clearTimeout(remoteWriteTimer);
         remoteWriteTimer = window.setTimeout(function () {
           remoteWriteTimer = null;
@@ -3082,7 +3096,17 @@
       }
 
       async function writeQueuedRemote() {
-        if (!state.remote.enabled || state.remote.writeInFlight) {
+        if (!state.remote.enabled) {
+          return;
+        }
+
+        if (state.remote.writeInFlight) {
+          window.clearTimeout(remoteWriteTimer);
+          remoteWriteTimer = window.setTimeout(function () {
+            remoteWriteTimer = null;
+            writeQueuedRemote();
+          }, 300);
+          updateStorageStatus();
           return;
         }
 
@@ -3199,6 +3223,10 @@
 
       function recordsEqual(left, right) {
         return JSON.stringify(left || []) === JSON.stringify(right || []);
+      }
+
+      function getRecordsSnapshot() {
+        return JSON.stringify(state.records || []);
       }
 
       function render() {
@@ -3738,10 +3766,10 @@
         const keyword = state.search.toLowerCase();
         return state.records
           .slice()
-          .sort(sortRecords)
+          .sort(sortVisibleRecords)
           .filter(function (record) {
             if (state.filter === "completed") {
-              if (!isVisuallyCompleted(record) || record.type === "idea") {
+              if (!isVisuallyCompleted(record)) {
                 return false;
               }
             } else if (state.filter === "all") {
@@ -3767,6 +3795,18 @@
 
             return haystack.includes(keyword);
           });
+      }
+
+      function sortVisibleRecords(a, b) {
+        if (state.filter === "completed") {
+          const aIdea = a.type === "idea";
+          const bIdea = b.type === "idea";
+          if (aIdea !== bIdea) {
+            return aIdea ? 1 : -1;
+          }
+        }
+
+        return sortRecords(a, b);
       }
 
       function sortRecords(a, b) {

@@ -360,6 +360,8 @@
     .composer-actions {
       flex: 0 0 auto;
       gap: 6px;
+      margin-left: auto;
+      justify-content: flex-end;
     }
 
     .sync-action {
@@ -423,6 +425,11 @@
 
     input[type="datetime-local"]::-webkit-calendar-picker-indicator {
       opacity: 0.55;
+    }
+
+    input[type="datetime-local"] {
+      min-width: 0;
+      max-width: 100%;
     }
 
     .segmented {
@@ -1136,6 +1143,11 @@
         align-items: center;
       }
 
+      .composer-actions {
+        width: 100%;
+        justify-content: flex-end;
+      }
+
       .meta-note {
         flex: 1 1 100%;
         font-size: 10px;
@@ -1143,6 +1155,11 @@
 
       .composer-advanced {
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      }
+
+      #quickEventAt {
+        grid-column: 1 / -1;
+        width: 100%;
       }
 
       .composer-advanced .ghost,
@@ -2240,6 +2257,24 @@
         }
 
         try {
+          if (state.sync.handle) {
+            const permissionGranted = await requestSyncPermission("readwrite");
+            if (!permissionGranted) {
+              setStatus("云盘备份需要授权。");
+              return;
+            }
+
+            const ok = await writeCurrentRecordsToSyncFile();
+            if (!ok) {
+              setStatus("云盘备份写入失败，已保存在当前浏览器。");
+              return;
+            }
+
+            await storeSyncHandle(state.sync.handle);
+            setStatus(state.remote.enabled ? "已覆盖当前云盘备份。" : "已覆盖当前同步文件。");
+            return;
+          }
+
           const handle = await window.showSaveFilePicker({
             suggestedName: DEFAULT_SYNC_FILE_NAME,
             types: getJsonFilePickerTypes(),
@@ -2249,13 +2284,13 @@
           await setSyncHandle(handle, false);
           const permissionGranted = await requestSyncPermission("readwrite");
           if (!permissionGranted) {
-            setStatus("同步文件需要授权。");
+            setStatus(state.remote.enabled ? "云盘备份需要授权。" : "同步文件需要授权。");
             return;
           }
 
           const ok = await writeCurrentRecordsToSyncFile();
           if (!ok) {
-            setStatus("同步文件写入失败，已保存在当前浏览器。");
+            setStatus(state.remote.enabled ? "云盘备份写入失败，已保存在当前浏览器。" : "同步文件写入失败，已保存在当前浏览器。");
             return;
           }
 
@@ -4810,19 +4845,28 @@
         }
 
         if (cloudRestoreButton) {
-          const canRestoreBackup = Boolean(state.remote.enabled && state.remote.error && state.sync.handle && !state.sync.permissionNeeded);
-          cloudRestoreButton.hidden = !canRestoreBackup;
-          cloudRestoreButton.disabled = !canRestoreBackup || state.sync.writeInFlight || state.sync.writeQueued || state.remote.writeInFlight || state.remote.writeQueued;
+          const hasCloudBackup = Boolean(state.remote.enabled && state.sync.handle);
+          cloudRestoreButton.hidden = !hasCloudBackup;
+          cloudRestoreButton.disabled = !hasCloudBackup || state.sync.writeInFlight || state.sync.writeQueued || state.remote.writeInFlight || state.remote.writeQueued;
           cloudRestoreButton.textContent = "从备份恢复";
           cloudRestoreButton.title = "从云盘备份文件恢复记录";
         }
 
         if (connectSyncButton) {
-          connectSyncButton.textContent = state.sync.handle && state.sync.permissionNeeded ? "授权同步文件" : "连接同步文件";
+          if (state.sync.handle && state.sync.permissionNeeded) {
+            connectSyncButton.textContent = state.remote.enabled ? "授权备份" : "授权同步文件";
+          } else {
+            connectSyncButton.textContent = state.remote.enabled ? "连接备份" : "连接同步文件";
+          }
         }
 
         if (createSyncButton) {
           createSyncButton.disabled = !state.sync.supported;
+          if (state.sync.handle) {
+            createSyncButton.textContent = state.remote.enabled ? "覆盖备份" : "覆盖同步文件";
+          } else {
+            createSyncButton.textContent = state.remote.enabled ? "新建备份" : "新建同步文件";
+          }
         }
 
         if (remoteSyncButton) {

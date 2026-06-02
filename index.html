@@ -1354,6 +1354,7 @@
             </div>
             <div class="composer-actions">
               <button id="syncActionButton" class="ghost sync-action" type="button">连接同步</button>
+              <button id="cloudRestoreButton" class="ghost sync-action" type="button" hidden>恢复备份</button>
               <button id="quickMoreButton" class="ghost icon-only" type="button" aria-label="展开手动选项" aria-expanded="false" title="展开手动选项">⋯</button>
               <button id="addButton" class="primary icon-only" type="button" aria-label="新增记录" title="新增记录">+</button>
             </div>
@@ -1479,6 +1480,7 @@
           token: "",
           sha: "",
           lastSyncAt: "",
+          pushLocalNext: false,
           writeInFlight: false,
           writeQueued: false,
           panelOpen: false,
@@ -1501,6 +1503,7 @@
       const summaryText = document.getElementById("summaryText");
       const statusText = document.getElementById("statusText");
       const syncActionButton = document.getElementById("syncActionButton");
+      const cloudRestoreButton = document.getElementById("cloudRestoreButton");
       const exportButton = document.getElementById("exportButton");
       const importButton = document.getElementById("importButton");
       const createSyncButton = document.getElementById("createSyncButton");
@@ -1526,7 +1529,7 @@
       populateRemoteSyncPanel();
       render();
       updateStorageStatus();
-      restoreStoredSyncFile().then(function () {
+      restoreStoredSyncFile({ readRecords: !state.remote.enabled }).then(function () {
         startRemoteSync(true);
       });
       focusQuickInput();
@@ -1549,6 +1552,7 @@
 
         addButton.addEventListener("click", addRecord);
         syncActionButton.addEventListener("click", handleSyncAction);
+        cloudRestoreButton.addEventListener("click", restoreRecordsFromCloudBackup);
         quickMoreButton.addEventListener("click", function () {
           toggleComposerAdvanced();
         });
@@ -1615,11 +1619,6 @@
       }
 
       async function handleSyncAction() {
-        if (state.sync.handle && (state.sync.permissionNeeded || state.sync.error)) {
-          await authorizeStoredSyncFile();
-          return;
-        }
-
         if (state.remote.enabled) {
           await syncRemoteRecords();
           return;
@@ -1643,6 +1642,44 @@
 
         await checkForSyncFileChanges();
         setStatus("已检查同步文件。");
+      }
+
+      async function restoreRecordsFromCloudBackup() {
+        if (!state.sync.handle) {
+          setStatus("还没有连接云盘备份文件。");
+          return;
+        }
+
+        try {
+          const permissionGranted = await requestSyncPermission("readwrite");
+          if (!permissionGranted) {
+            setStatus("云盘备份需要授权。");
+            return;
+          }
+
+          const result = await loadRecordsFromSyncFile();
+          if (result === "empty") {
+            setStatus("云盘备份文件为空。");
+            return;
+          }
+
+          if (result === "loaded") {
+            state.remote.pushLocalNext = Boolean(state.remote.enabled);
+            if (state.remote.pushLocalNext) {
+              saveRemoteSyncSettingsToLocal();
+              queueRemoteWrite();
+            }
+            setStatus("已从云盘备份恢复。");
+            return;
+          }
+
+          setStatus("无法读取云盘备份。");
+        } catch (error) {
+          console.error(error);
+          state.sync.error = "云盘备份恢复失败";
+          updateStorageStatus();
+          setStatus("云盘备份恢复失败。");
+        }
       }
 
       function handleListClick(event) {
@@ -2157,8 +2194,10 @@
           }
 
           await storeSyncHandle(handle);
-          startSyncPolling();
-          setStatus("已新建并连接同步文件。");
+          if (!state.remote.enabled) {
+            startSyncPolling();
+          }
+          setStatus(state.remote.enabled ? "已新建云盘备份文件。" : "已新建并连接同步文件。");
         } catch (error) {
           if (error && error.name === "AbortError") {
             return;
@@ -2199,19 +2238,30 @@
             return;
           }
 
-          const result = await loadRecordsFromSyncFile();
-          if (result === "empty") {
+          if (state.remote.enabled) {
             const ok = await writeCurrentRecordsToSyncFile();
             if (!ok) {
               setStatus("同步文件写入失败，已保存在当前浏览器。");
               return;
             }
-            setStatus("同步文件为空，已写入当前记录。");
-          } else if (result === "loaded") {
-            setStatus("已读取同步文件。");
+            setStatus("已连接云盘备份并写入当前记录。");
+          } else {
+            const result = await loadRecordsFromSyncFile();
+            if (result === "empty") {
+              const ok = await writeCurrentRecordsToSyncFile();
+              if (!ok) {
+                setStatus("同步文件写入失败，已保存在当前浏览器。");
+                return;
+              }
+              setStatus("同步文件为空，已写入当前记录。");
+            } else if (result === "loaded") {
+              setStatus("已读取同步文件。");
+            }
           }
           await storeSyncHandle(handle);
-          startSyncPolling();
+          if (!state.remote.enabled) {
+            startSyncPolling();
+          }
         } catch (error) {
           if (error && error.name === "AbortError") {
             return;
@@ -2241,20 +2291,29 @@
             return;
           }
 
-          const result = await loadRecordsFromSyncFile();
-          if (result === "empty") {
+          if (state.remote.enabled) {
             const ok = await writeCurrentRecordsToSyncFile();
             if (!ok) {
               setStatus("同步文件写入失败，已保存在当前浏览器。");
               return;
             }
-            setStatus("同步文件为空，已写入当前记录。");
-          } else if (result === "loaded") {
-            setStatus("已读取同步文件。");
+            setStatus("云盘备份已授权并写入当前记录。");
           } else {
-            setStatus("同步文件已授权。");
+            const result = await loadRecordsFromSyncFile();
+            if (result === "empty") {
+              const ok = await writeCurrentRecordsToSyncFile();
+              if (!ok) {
+                setStatus("同步文件写入失败，已保存在当前浏览器。");
+                return;
+              }
+              setStatus("同步文件为空，已写入当前记录。");
+            } else if (result === "loaded") {
+              setStatus("已读取同步文件。");
+            } else {
+              setStatus("同步文件已授权。");
+            }
+            startSyncPolling();
           }
-          startSyncPolling();
         } catch (error) {
           console.error(error);
           state.sync.error = "同步文件授权失败";
@@ -2263,7 +2322,11 @@
         }
       }
 
-      async function restoreStoredSyncFile() {
+      async function restoreStoredSyncFile(options) {
+        const opts = Object.assign({
+          readRecords: true
+        }, options || {});
+
         if (!state.sync.supported) {
           updateStorageStatus();
           return;
@@ -2280,6 +2343,19 @@
           const hasPermission = await querySyncPermission("readwrite");
           if (!hasPermission) {
             state.sync.permissionNeeded = true;
+            updateStorageStatus();
+            return;
+          }
+
+          if (!opts.readRecords) {
+            try {
+              const file = await state.sync.handle.getFile();
+              state.sync.lastModified = file.lastModified || 0;
+              state.sync.error = "";
+            } catch (error) {
+              console.error(error);
+              state.sync.error = "云盘备份读取失败";
+            }
             updateStorageStatus();
             return;
           }
@@ -2622,6 +2698,7 @@
           state.remote.token = token;
           state.remote.sha = typeof saved.sha === "string" ? saved.sha : "";
           state.remote.lastSyncAt = typeof saved.lastSyncAt === "string" ? saved.lastSyncAt : "";
+          state.remote.pushLocalNext = Boolean(saved.pushLocalNext);
         } catch (error) {
           console.error(error);
         }
@@ -2639,7 +2716,8 @@
           path: state.remote.path,
           token: state.remote.token,
           sha: state.remote.sha,
-          lastSyncAt: state.remote.lastSyncAt
+          lastSyncAt: state.remote.lastSyncAt,
+          pushLocalNext: Boolean(state.remote.pushLocalNext)
         }));
       }
 
@@ -2661,6 +2739,7 @@
         state.remote.token = token;
         state.remote.sha = "";
         state.remote.lastSyncAt = "";
+        state.remote.pushLocalNext = false;
         state.remote.error = "";
         state.remote.panelOpen = false;
         remoteSyncPanel.hidden = true;
@@ -2680,6 +2759,7 @@
         state.remote.token = "";
         state.remote.sha = "";
         state.remote.lastSyncAt = "";
+        state.remote.pushLocalNext = false;
         state.remote.error = "";
         state.remote.writeQueued = false;
         window.clearTimeout(remoteWriteTimer);
@@ -2725,6 +2805,16 @@
           state.remote.error = "";
           updateStorageStatus();
 
+          if (state.remote.pushLocalNext) {
+            const ok = await writeCurrentRecordsToRemote();
+            if (ok && !opts.silent) {
+              setStatus("已将本地恢复结果写回 GitHub。");
+            } else if (!ok && !opts.silent) {
+              setStatus(state.remote.error + "。");
+            }
+            return;
+          }
+
           const result = await fetchRemoteRecords();
           if (result.missing) {
             if (opts.createIfMissing || state.records.length) {
@@ -2759,6 +2849,7 @@
           state.records = result.records;
           state.editingId = null;
           saveLocalRecords();
+          queueSyncFileWrite();
           saveRemoteSyncSettingsToLocal();
           render();
           updateStorageStatus();
@@ -2828,10 +2919,14 @@
             body: JSON.stringify(body)
           });
 
-          if (response.status === 409) {
+          if (response.status === 409 || response.status === 422) {
             const latest = await fetchRemoteRecords();
             state.remote.sha = latest.sha || "";
-            body.sha = state.remote.sha;
+            if (state.remote.sha) {
+              body.sha = state.remote.sha;
+            } else {
+              delete body.sha;
+            }
             response = await fetch(getRemoteContentsUrl(false), {
               method: "PUT",
               headers: getRemoteHeaders(true),
@@ -2846,6 +2941,7 @@
           const data = await response.json();
           state.remote.sha = data && data.content && typeof data.content.sha === "string" ? data.content.sha : state.remote.sha;
           state.remote.lastSyncAt = new Date().toISOString();
+          state.remote.pushLocalNext = false;
           state.remote.error = "";
           saveRemoteSyncSettingsToLocal();
           updateStorageStatus();
@@ -4613,10 +4709,18 @@
           syncActionButton.textContent = getSyncActionText();
           syncActionButton.title = getSyncActionTitle();
           syncActionButton.classList.toggle("attention", Boolean(
-            (state.sync.handle && (state.sync.permissionNeeded || state.sync.error))
+            (!state.remote.enabled && state.sync.handle && (state.sync.permissionNeeded || state.sync.error))
             || state.remote.error
             || (!state.sync.supported && !state.remote.enabled)
           ));
+        }
+
+        if (cloudRestoreButton) {
+          const canRestoreBackup = Boolean(state.remote.enabled && state.remote.error && state.sync.handle);
+          cloudRestoreButton.hidden = !canRestoreBackup;
+          cloudRestoreButton.disabled = !canRestoreBackup || state.sync.writeInFlight || state.sync.writeQueued || state.remote.writeInFlight || state.remote.writeQueued;
+          cloudRestoreButton.textContent = state.sync.permissionNeeded ? "授权备份" : "恢复备份";
+          cloudRestoreButton.title = state.sync.permissionNeeded ? "授权云盘备份文件" : "从云盘备份文件恢复记录";
         }
 
         if (connectSyncButton) {
@@ -4642,14 +4746,6 @@
       }
 
       function getSyncActionText() {
-        if (state.sync.handle && state.sync.permissionNeeded) {
-          return "授权同步";
-        }
-
-        if (state.sync.handle && state.sync.error) {
-          return "重试同步";
-        }
-
         if (state.remote.enabled && (state.remote.writeInFlight || state.remote.writeQueued)) {
           return "同步中";
         }
@@ -4666,6 +4762,14 @@
           return "已同步";
         }
 
+        if (state.sync.handle && state.sync.permissionNeeded) {
+          return "授权同步";
+        }
+
+        if (state.sync.handle && state.sync.error) {
+          return "重试同步";
+        }
+
         if (!state.sync.supported) {
           return "GitHub同步";
         }
@@ -4678,16 +4782,20 @@
       }
 
       function getSyncActionTitle() {
+        if (state.remote.enabled && state.remote.error) {
+          return "重试 GitHub 主同步";
+        }
+
+        if (state.remote.enabled) {
+          return "手动从 GitHub 同步";
+        }
+
         if (state.sync.permissionNeeded) {
           return "重新授权已选择的同步文件";
         }
 
         if (state.sync.error) {
           return "重试读取或写入同步文件";
-        }
-
-        if (state.remote.enabled) {
-          return "手动从 GitHub 同步";
         }
 
         if (!state.sync.supported) {
@@ -4703,15 +4811,22 @@
 
       function getStorageStatusText() {
         if (state.remote.enabled) {
+          const backupText = getCloudBackupStatusText();
+          const suffix = backupText ? "；备份：" + backupText : "";
+
           if (state.remote.error) {
-            return state.remote.error + "；本地有备份。";
+            return "主同步：" + state.remote.error + suffix;
+          }
+
+          if (state.remote.pushLocalNext) {
+            return "主同步：等待将本地恢复结果写回 GitHub" + suffix;
           }
 
           if (state.remote.writeInFlight || state.remote.writeQueued) {
-            return "正在同步到 GitHub：" + state.remote.repo + "/" + state.remote.path;
+            return "主同步：正在写入 GitHub " + state.remote.repo + "/" + state.remote.path + suffix;
           }
 
-          return "已连接 GitHub 同步：" + state.remote.repo + "/" + state.remote.path;
+          return "主同步：GitHub 已连接 " + state.remote.repo + "/" + state.remote.path + suffix;
         }
 
         if (!state.sync.supported) {
@@ -4740,6 +4855,31 @@
         }
 
         return "已连接同步文件：" + fileName;
+      }
+
+      function getCloudBackupStatusText() {
+        if (!state.sync.supported) {
+          return "";
+        }
+
+        if (!state.sync.handle) {
+          return "未连接云盘文件";
+        }
+
+        const fileName = state.sync.fileName || DEFAULT_SYNC_FILE_NAME;
+        if (state.sync.permissionNeeded) {
+          return "云盘文件需要授权：" + fileName;
+        }
+
+        if (state.sync.error) {
+          return state.sync.error + "：" + fileName;
+        }
+
+        if (state.sync.writeInFlight || state.sync.writeQueued) {
+          return "正在写入云盘文件 " + fileName;
+        }
+
+        return "云盘文件已连接 " + fileName;
       }
 
       function formatDateTime(value) {

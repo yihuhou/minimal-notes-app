@@ -1526,6 +1526,7 @@
 
       const state = {
         records: loadRecords(),
+        recordsRevision: 0,
         filter: "all",
         search: "",
         editingId: null,
@@ -1551,6 +1552,8 @@
           token: "",
           sha: "",
           lastSyncAt: "",
+          lastPayloadAt: "",
+          staleSha: "",
           pushLocalNext: false,
           writeInFlight: false,
           writeQueued: false,
@@ -2814,6 +2817,8 @@
           state.remote.token = token;
           state.remote.sha = typeof saved.sha === "string" ? saved.sha : "";
           state.remote.lastSyncAt = typeof saved.lastSyncAt === "string" ? saved.lastSyncAt : "";
+          state.remote.lastPayloadAt = typeof saved.lastPayloadAt === "string" ? saved.lastPayloadAt : "";
+          state.remote.staleSha = typeof saved.staleSha === "string" ? saved.staleSha : "";
           state.remote.pushLocalNext = Boolean(saved.pushLocalNext);
         } catch (error) {
           console.error(error);
@@ -2833,6 +2838,8 @@
           token: state.remote.token,
           sha: state.remote.sha,
           lastSyncAt: state.remote.lastSyncAt,
+          lastPayloadAt: state.remote.lastPayloadAt,
+          staleSha: state.remote.staleSha,
           pushLocalNext: Boolean(state.remote.pushLocalNext)
         }));
       }
@@ -2855,6 +2862,8 @@
         state.remote.token = token;
         state.remote.sha = "";
         state.remote.lastSyncAt = "";
+        state.remote.lastPayloadAt = "";
+        state.remote.staleSha = "";
         state.remote.pushLocalNext = false;
         state.remote.error = "";
         state.remote.panelOpen = false;
@@ -2875,6 +2884,8 @@
         state.remote.token = "";
         state.remote.sha = "";
         state.remote.lastSyncAt = "";
+        state.remote.lastPayloadAt = "";
+        state.remote.staleSha = "";
         state.remote.pushLocalNext = false;
         state.remote.error = "";
         state.remote.writeQueued = false;
@@ -2931,9 +2942,11 @@
             return;
           }
 
+          const revisionBeforeFetch = state.recordsRevision;
           const recordsBeforeFetch = getRecordsSnapshot();
           const result = await fetchRemoteRecords();
-          if (recordsBeforeFetch !== getRecordsSnapshot()
+          if (revisionBeforeFetch !== state.recordsRevision
+            || recordsBeforeFetch !== getRecordsSnapshot()
             || state.remote.pushLocalNext
             || state.remote.writeInFlight
             || state.remote.writeQueued) {
@@ -2961,6 +2974,17 @@
             return;
           }
 
+          if (isStaleRemoteResult(result)) {
+            state.remote.staleSha = result.sha || state.remote.staleSha;
+            state.remote.error = "";
+            saveRemoteSyncSettingsToLocal();
+            updateStorageStatus();
+            if (!opts.silent) {
+              setStatus("GitHub 返回了旧数据，已跳过。");
+            }
+            return;
+          }
+
           const recordsChanged = !recordsEqual(state.records, result.records);
           if (recordsChanged
             && !state.remote.lastSyncAt
@@ -2973,6 +2997,8 @@
 
           state.remote.sha = result.sha;
           state.remote.lastSyncAt = new Date().toISOString();
+          state.remote.lastPayloadAt = result.payloadAt || state.remote.lastPayloadAt;
+          state.remote.staleSha = "";
           state.remote.error = "";
           state.records = result.records;
           state.editingId = null;
@@ -3014,10 +3040,14 @@
 
         const data = await response.json();
         const text = decodeBase64Utf8(String(data.content || ""));
+        const payload = parseRecordsEnvelope(text);
         return {
           missing: false,
-          records: parseRecordsPayload(text),
-          sha: typeof data.sha === "string" ? data.sha : ""
+          records: payload.records,
+          sha: typeof data.sha === "string" ? data.sha : "",
+          savedAt: payload.savedAt,
+          syncedAt: payload.syncedAt,
+          payloadAt: payload.payloadAt
         };
       }
 
@@ -3026,19 +3056,25 @@
           return false;
         }
 
+        const revisionAtWriteStart = state.recordsRevision;
+        const recordsSnapshot = getRecordsPayloadSnapshot();
+        const baseSha = state.remote.sha;
+        const syncedAt = new Date().toISOString();
+        const payload = buildRecordsPayload({ syncedAt: syncedAt }, recordsSnapshot);
+        const payloadAt = getPayloadTimestamp(payload) || syncedAt;
+
         state.remote.writeInFlight = true;
         updateStorageStatus();
 
         try {
-          const payload = buildRecordsPayload({ syncedAt: new Date().toISOString() });
           const body = {
             message: "Update minimal notes records",
             content: encodeBase64Utf8(JSON.stringify(payload, null, 2)),
             branch: state.remote.branch || DEFAULT_REMOTE_BRANCH
           };
 
-          if (state.remote.sha) {
-            body.sha = state.remote.sha;
+          if (baseSha) {
+            body.sha = baseSha;
           }
 
           let response = await fetch(getRemoteContentsUrl(false), {
@@ -3069,7 +3105,9 @@
           const data = await response.json();
           state.remote.sha = data && data.content && typeof data.content.sha === "string" ? data.content.sha : state.remote.sha;
           state.remote.lastSyncAt = new Date().toISOString();
-          state.remote.pushLocalNext = false;
+          state.remote.lastPayloadAt = payloadAt;
+          state.remote.staleSha = baseSha || state.remote.staleSha;
+          state.remote.pushLocalNext = state.recordsRevision !== revisionAtWriteStart || state.remote.writeQueued;
           state.remote.error = "";
           saveRemoteSyncSettingsToLocal();
           updateStorageStatus();
@@ -3231,8 +3269,53 @@
         return JSON.stringify(left || []) === JSON.stringify(right || []);
       }
 
-      function getRecordsSnapshot() {
-        return JSON.stringify(state.records || []);
+      function getRecordsSnapshot(records) {
+        return JSON.stringify(Array.isArray(records) ? records : state.records || []);
+      }
+
+      function getRecordsPayloadSnapshot() {
+        return JSON.parse(getRecordsSnapshot());
+      }
+
+      function getPayloadTimestamp(payload) {
+        if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+          return "";
+        }
+
+        const times = [payload.syncedAt, payload.savedAt, payload.exportedAt]
+          .filter(isValidDate)
+          .map(function (value) {
+            return new Date(value).getTime();
+          });
+        if (!times.length) {
+          return "";
+        }
+
+        return new Date(Math.max.apply(null, times)).toISOString();
+      }
+
+      function isStaleRemoteResult(result) {
+        if (!result || result.missing) {
+          return false;
+        }
+
+        const lastPayloadTime = isValidDate(state.remote.lastPayloadAt)
+          ? new Date(state.remote.lastPayloadAt).getTime()
+          : 0;
+        const resultPayloadTime = isValidDate(result.payloadAt)
+          ? new Date(result.payloadAt).getTime()
+          : 0;
+        const matchesKnownStaleSha = Boolean(
+          state.remote.staleSha
+          && result.sha
+          && result.sha === state.remote.staleSha
+        );
+
+        if (matchesKnownStaleSha && (!lastPayloadTime || !resultPayloadTime || resultPayloadTime <= lastPayloadTime)) {
+          return true;
+        }
+
+        return Boolean(lastPayloadTime && resultPayloadTime && resultPayloadTime < lastPayloadTime);
       }
 
       function render() {
@@ -4654,6 +4737,7 @@
       }
 
       function persist() {
+        markRecordsChanged();
         saveLocalRecords();
         queueSyncFileWrite();
         queueRemoteWrite();
@@ -4663,22 +4747,35 @@
         localStorage.setItem(STORAGE_KEY, JSON.stringify(buildRecordsPayload()));
       }
 
-      function buildRecordsPayload(extra) {
+      function markRecordsChanged() {
+        state.recordsRevision += 1;
+      }
+
+      function buildRecordsPayload(extra, records) {
         return Object.assign({
           version: 2,
           savedAt: new Date().toISOString(),
-          records: state.records
+          records: Array.isArray(records) ? records : state.records
         }, extra || {});
       }
 
       function parseRecordsPayload(raw) {
+        return parseRecordsEnvelope(raw).records;
+      }
+
+      function parseRecordsEnvelope(raw) {
         const parsed = JSON.parse(raw);
         const records = Array.isArray(parsed) ? parsed : parsed.records;
         if (!Array.isArray(records)) {
           throw new Error("JSON 格式不正确");
         }
 
-        return records.map(normalizeImportedRecord).filter(Boolean).sort(sortRecords);
+        return {
+          records: records.map(normalizeImportedRecord).filter(Boolean).sort(sortRecords),
+          savedAt: !Array.isArray(parsed) && isValidDate(parsed.savedAt) ? new Date(parsed.savedAt).toISOString() : "",
+          syncedAt: !Array.isArray(parsed) && isValidDate(parsed.syncedAt) ? new Date(parsed.syncedAt).toISOString() : "",
+          payloadAt: getPayloadTimestamp(parsed)
+        };
       }
 
       function createHistorySnapshot(action, at, record) {

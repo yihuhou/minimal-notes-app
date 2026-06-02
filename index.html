@@ -430,13 +430,19 @@
     }
 
     input[type="datetime-local"] {
+      width: 100%;
       min-width: 0;
+      min-inline-size: 0;
       max-width: 100%;
+      max-inline-size: 100%;
     }
 
     .manual-datetime-input {
+      justify-self: stretch;
       min-width: 0;
+      min-inline-size: 0;
       max-width: 100%;
+      max-inline-size: 100%;
       text-align: left;
     }
 
@@ -1008,6 +1014,25 @@
         font-size: 16px;
       }
 
+      .composer-advanced {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      }
+
+      #quickEventAt {
+        grid-column: 1 / -1;
+        width: 100%;
+      }
+
+      .composer-advanced .ghost,
+      .composer-advanced .primary {
+        min-width: 0;
+        min-height: 36px;
+      }
+
+      .remote-sync-panel {
+        grid-template-columns: 1fr;
+      }
+
       .item {
         grid-template-columns: 24px minmax(0, 1fr) 32px;
         align-items: start;
@@ -1160,25 +1185,6 @@
       .meta-note {
         flex: 1 1 100%;
         font-size: 10px;
-      }
-
-      .composer-advanced {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      }
-
-      #quickEventAt {
-        grid-column: 1 / -1;
-        width: 100%;
-      }
-
-      .composer-advanced .ghost,
-      .composer-advanced .primary {
-        min-width: 0;
-        min-height: 36px;
-      }
-
-      .remote-sync-panel {
-        grid-template-columns: 1fr;
       }
 
       .search {
@@ -1433,7 +1439,7 @@
               <option value="idea">想法</option>
             </select>
             <label class="sr-only" for="quickEventAt">事件时间</label>
-            <input id="quickEventAt" class="manual-datetime-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="2026-06-02 19:08" title="事件时间">
+            <input id="quickEventAt" class="manual-datetime-input" type="datetime-local" autocomplete="off" title="事件时间">
             <button id="exportButton" class="ghost" type="button">导出 JSON</button>
             <button id="importButton" class="ghost" type="button">导入 JSON</button>
             <button id="createSyncButton" class="ghost" type="button">新建同步文件</button>

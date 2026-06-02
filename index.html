@@ -289,7 +289,8 @@
     .item-edit input,
     .item-edit select,
     .composer select,
-    .composer input[type="datetime-local"] {
+    .composer input[type="datetime-local"],
+    .manual-datetime-input {
       width: 100%;
       min-height: 40px;
       border: 1px solid var(--border);
@@ -332,7 +333,8 @@
     .item-edit input:focus,
     .item-edit select:focus,
     .composer select:focus,
-    .composer input[type="datetime-local"]:focus {
+    .composer input[type="datetime-local"]:focus,
+    .manual-datetime-input:focus {
       border-color: var(--border-strong);
       background: #fff;
       box-shadow: none;
@@ -430,6 +432,12 @@
     input[type="datetime-local"] {
       min-width: 0;
       max-width: 100%;
+    }
+
+    .manual-datetime-input {
+      min-width: 0;
+      max-width: 100%;
+      text-align: left;
     }
 
     .segmented {
@@ -995,6 +1003,7 @@
       .item-inline-input,
       .composer select,
       .composer input[type="datetime-local"],
+      .manual-datetime-input,
       .remote-sync-panel input {
         font-size: 16px;
       }
@@ -1424,7 +1433,7 @@
               <option value="idea">想法</option>
             </select>
             <label class="sr-only" for="quickEventAt">事件时间</label>
-            <input id="quickEventAt" type="datetime-local" title="事件时间">
+            <input id="quickEventAt" class="manual-datetime-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="2026-06-02 19:08" title="事件时间">
             <button id="exportButton" class="ghost" type="button">导出 JSON</button>
             <button id="importButton" class="ghost" type="button">导入 JSON</button>
             <button id="createSyncButton" class="ghost" type="button">新建同步文件</button>
@@ -5052,11 +5061,48 @@
           return "";
         }
 
-        const date = new Date(value);
+        const normalizedValue = normalizeManualDateTimeValue(value);
+        const date = new Date(normalizedValue);
         if (!isValidDate(date)) {
           return "";
         }
         return date.toISOString();
+      }
+
+      function normalizeManualDateTimeValue(value) {
+        const source = String(value || "").trim();
+        if (!source) {
+          return "";
+        }
+
+        const chineseMatch = source.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日?\s+(\d{1,2})[:：](\d{1,2})$/);
+        if (chineseMatch) {
+          return [
+            chineseMatch[1],
+            "-",
+            chineseMatch[2].padStart(2, "0"),
+            "-",
+            chineseMatch[3].padStart(2, "0"),
+            "T",
+            chineseMatch[4].padStart(2, "0"),
+            ":",
+            chineseMatch[5].padStart(2, "0")
+          ].join("");
+        }
+
+        const compactMatch = source.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T]+(\d{1,2})[:：](\d{1,2}))?$/);
+        if (compactMatch) {
+          return [
+            compactMatch[1],
+            "-",
+            compactMatch[2].padStart(2, "0"),
+            "-",
+            compactMatch[3].padStart(2, "0"),
+            compactMatch[4] ? "T" + compactMatch[4].padStart(2, "0") + ":" + compactMatch[5].padStart(2, "0") : ""
+          ].join("");
+        }
+
+        return source;
       }
 
       function toDateTimeLocalValue(value) {

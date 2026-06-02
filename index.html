@@ -62,6 +62,10 @@
       background: none;
     }
 
+    [hidden] {
+      display: none !important;
+    }
+
     .title-block h1,
     .counter,
     .composer textarea,
@@ -513,12 +517,29 @@
       align-items: center;
     }
 
+    .composer-advanced > * {
+      min-width: 0;
+      max-width: 100%;
+    }
+
     .composer-advanced[hidden] {
       display: none !important;
     }
 
     .composer-advanced .ghost {
       min-width: 96px;
+    }
+
+    .backup-restore-action {
+      color: #7a5b18;
+    }
+
+    .backup-auth-action.authorized,
+    .backup-auth-action:disabled {
+      color: var(--text-faint);
+      background: transparent;
+      border-color: var(--border);
+      cursor: default;
     }
 
     .remote-sync-panel {
@@ -648,11 +669,21 @@
     }
 
     .item-line {
-      display: flex;
+      width: 100%;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
       align-items: center;
       gap: 8px;
       min-width: 0;
       cursor: text;
+    }
+
+    .item-tags {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
     }
 
     .item-line:hover .item-text {
@@ -827,15 +858,16 @@
     }
 
     .item-inline-edit {
-      display: flex;
-      align-items: center;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: start;
       gap: 8px;
+      width: 100%;
       min-width: 0;
     }
 
     .item-inline-input {
-      width: auto;
-      flex: 1 1 auto;
+      width: 100%;
       min-width: 0;
       min-height: 30px;
       padding: 4px 8px;
@@ -843,6 +875,9 @@
       border-radius: 6px;
       background: #ffffff;
       outline: none;
+      line-height: 1.5;
+      resize: vertical;
+      overflow-y: hidden;
     }
 
     .empty {
@@ -976,14 +1011,17 @@
 
       .item-line {
         width: 100%;
-        flex-wrap: wrap;
-        align-items: baseline;
+        grid-template-columns: minmax(0, 1fr);
+        align-items: start;
         row-gap: 5px;
         column-gap: 6px;
       }
 
+      .item-tags {
+        gap: 6px;
+      }
+
       .item-text {
-        flex: 1 1 14rem;
         font-size: 15px;
         line-height: 1.45;
         white-space: normal;
@@ -1104,7 +1142,7 @@
       }
 
       .composer-advanced {
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       }
 
       .composer-advanced .ghost,
@@ -1166,13 +1204,13 @@
       }
 
       .item-text {
-        flex-basis: 12rem;
+        width: 100%;
       }
 
       .item-inline-edit {
         width: 100%;
-        align-items: center;
-        flex-wrap: nowrap;
+        grid-template-columns: minmax(0, 1fr);
+        align-items: stretch;
       }
 
       .item-inline-input {
@@ -1354,7 +1392,7 @@
             </div>
             <div class="composer-actions">
               <button id="syncActionButton" class="ghost sync-action" type="button">连接同步</button>
-              <button id="cloudRestoreButton" class="ghost sync-action" type="button" hidden>恢复备份</button>
+              <button id="backupAuthButton" class="ghost sync-action backup-auth-action" type="button" hidden>授权备份</button>
               <button id="quickMoreButton" class="ghost icon-only" type="button" aria-label="展开手动选项" aria-expanded="false" title="展开手动选项">⋯</button>
               <button id="addButton" class="primary icon-only" type="button" aria-label="新增记录" title="新增记录">+</button>
             </div>
@@ -1374,6 +1412,7 @@
             <button id="importButton" class="ghost" type="button">导入 JSON</button>
             <button id="createSyncButton" class="ghost" type="button">新建同步文件</button>
             <button id="connectSyncButton" class="ghost" type="button">连接同步文件</button>
+            <button id="cloudRestoreButton" class="ghost backup-restore-action" type="button" hidden>从备份恢复</button>
             <button id="remoteSyncButton" class="ghost" type="button">GitHub 同步</button>
             <div id="remoteSyncPanel" class="remote-sync-panel" hidden>
               <label class="sr-only" for="remoteRepoInput">GitHub 仓库</label>
@@ -1416,7 +1455,7 @@
       </section>
 
       <footer class="footer">
-        <span>数据会保留本地备份；连接同步文件后会同时写入 iCloud Drive 或其他云盘 JSON。</span>
+        <span>GitHub 用作主同步；云盘 JSON 仅作为电脑端备份。</span>
         <span id="summaryText">0 条记录</span>
       </footer>
     </section>
@@ -1503,6 +1542,7 @@
       const summaryText = document.getElementById("summaryText");
       const statusText = document.getElementById("statusText");
       const syncActionButton = document.getElementById("syncActionButton");
+      const backupAuthButton = document.getElementById("backupAuthButton");
       const cloudRestoreButton = document.getElementById("cloudRestoreButton");
       const exportButton = document.getElementById("exportButton");
       const importButton = document.getElementById("importButton");
@@ -1552,6 +1592,7 @@
 
         addButton.addEventListener("click", addRecord);
         syncActionButton.addEventListener("click", handleSyncAction);
+        backupAuthButton.addEventListener("click", handleBackupAuthAction);
         cloudRestoreButton.addEventListener("click", restoreRecordsFromCloudBackup);
         quickMoreButton.addEventListener("click", function () {
           toggleComposerAdvanced();
@@ -1574,6 +1615,7 @@
 
         recordList.addEventListener("click", handleListClick);
         recordList.addEventListener("keydown", handleListKeydown);
+        recordList.addEventListener("input", handleListInput);
         recordList.addEventListener("focusout", handleListFocusOut);
         ideaPane.addEventListener("focusin", handleIdeaPaneFocusIn);
         ideaPane.addEventListener("input", handleIdeaPaneInput);
@@ -1644,9 +1686,24 @@
         setStatus("已检查同步文件。");
       }
 
+      async function handleBackupAuthAction() {
+        if (!state.sync.handle) {
+          setStatus("还没有连接云盘备份文件。");
+          return;
+        }
+
+        await authorizeStoredSyncFile();
+      }
+
       async function restoreRecordsFromCloudBackup() {
         if (!state.sync.handle) {
           setStatus("还没有连接云盘备份文件。");
+          return;
+        }
+
+        const ok = window.confirm("从云盘备份恢复会用备份内容覆盖当前本地记录，并随后写回 GitHub。是否继续？");
+        if (!ok) {
+          setStatus("已取消恢复备份。");
           return;
         }
 
@@ -1781,6 +1838,15 @@
           event.preventDefault();
           saveEditedRecord(id);
         }
+      }
+
+      function handleListInput(event) {
+        const input = event.target.closest('[data-role="edit-inline-text"]');
+        if (!input) {
+          return;
+        }
+
+        autoSizeInlineEditInput(input);
       }
 
       function handleListFocusOut(event) {
@@ -3162,6 +3228,7 @@
         const displayText = getDisplayText(record);
         const parts = [];
         parts.push('<div class="item-line" data-action="open-edit" data-id="' + escapeHtml(record.id) + '" tabindex="0" title="' + escapeHtml(buildItemTitle(record)) + '">');
+        parts.push('<span class="item-tags">');
         parts.push('<span class="badge">' + TYPE_LABELS[record.type] + "</span>");
         if (upcoming) {
           parts.push('<span class="badge strong">' + escapeHtml(getUpcomingLabel(record)) + "</span>");
@@ -3185,6 +3252,7 @@
         if (record.completed) {
           parts.push('<span class="code-token token-muted">' + (record.type === "idea" ? "archived" : "done") + "</span>");
         }
+        parts.push("</span>");
         parts.push('<span class="item-text">' + highlightRecordText(displayText) + "</span>");
         parts.push("</div>");
         return parts.join("");
@@ -3323,7 +3391,7 @@
       function renderInlineEdit(record) {
         return [
           '<div class="item-inline-edit">',
-          '<input data-role="edit-inline-text" class="item-inline-input" type="text" value="' + escapeHtml(record.text) + '" aria-label="编辑记录">',
+          '<textarea data-role="edit-inline-text" class="item-inline-input" rows="1" spellcheck="false" aria-label="编辑记录">' + escapeHtml(record.text) + '</textarea>',
           '<span class="code-token token-muted">Enter 保存 / Esc 取消</span>',
           "</div>"
         ].join("");
@@ -4687,10 +4755,20 @@
         requestAnimationFrame(function () {
           const item = recordList.querySelector('.item[data-id="' + cssEscape(id) + '"] [data-role="edit-inline-text"]');
           if (item) {
+            autoSizeInlineEditInput(item);
             item.focus();
             item.setSelectionRange(item.value.length, item.value.length);
           }
         });
+      }
+
+      function autoSizeInlineEditInput(input) {
+        if (!input) {
+          return;
+        }
+
+        input.style.height = "auto";
+        input.style.height = Math.max(input.scrollHeight, input.clientHeight) + "px";
       }
 
       function setStatus(message) {
@@ -4719,12 +4797,24 @@
           ));
         }
 
+        if (backupAuthButton) {
+          const hasCloudBackup = Boolean(state.remote.enabled && state.sync.supported && state.sync.handle);
+          const needsBackupAuth = Boolean(hasCloudBackup && state.sync.permissionNeeded);
+          const needsBackupRetry = Boolean(hasCloudBackup && !state.sync.permissionNeeded && state.sync.error);
+          backupAuthButton.hidden = !hasCloudBackup;
+          backupAuthButton.disabled = (!needsBackupAuth && !needsBackupRetry) || busy;
+          backupAuthButton.textContent = needsBackupAuth ? "授权备份" : (needsBackupRetry ? "重试备份" : "已授权");
+          backupAuthButton.title = needsBackupAuth ? "授权云盘备份文件" : (needsBackupRetry ? "重试写入云盘备份文件" : "云盘备份已授权");
+          backupAuthButton.classList.toggle("attention", needsBackupAuth || needsBackupRetry);
+          backupAuthButton.classList.toggle("authorized", hasCloudBackup && !needsBackupAuth && !needsBackupRetry);
+        }
+
         if (cloudRestoreButton) {
-          const canRestoreBackup = Boolean(state.remote.enabled && state.remote.error && state.sync.handle);
+          const canRestoreBackup = Boolean(state.remote.enabled && state.remote.error && state.sync.handle && !state.sync.permissionNeeded);
           cloudRestoreButton.hidden = !canRestoreBackup;
           cloudRestoreButton.disabled = !canRestoreBackup || state.sync.writeInFlight || state.sync.writeQueued || state.remote.writeInFlight || state.remote.writeQueued;
-          cloudRestoreButton.textContent = state.sync.permissionNeeded ? "授权备份" : "恢复备份";
-          cloudRestoreButton.title = state.sync.permissionNeeded ? "授权云盘备份文件" : "从云盘备份文件恢复记录";
+          cloudRestoreButton.textContent = "从备份恢复";
+          cloudRestoreButton.title = "从云盘备份文件恢复记录";
         }
 
         if (connectSyncButton) {
@@ -4816,21 +4906,21 @@
       function getStorageStatusText() {
         if (state.remote.enabled) {
           const backupText = getCloudBackupStatusText();
-          const suffix = backupText ? "；备份：" + backupText : "";
+          const suffix = backupText ? "；" + backupText : "";
 
           if (state.remote.error) {
-            return "主同步：" + state.remote.error + suffix;
+            return state.remote.error + suffix;
           }
 
           if (state.remote.pushLocalNext) {
-            return "主同步：等待将本地恢复结果写回 GitHub" + suffix;
+            return "等待写回 GitHub" + suffix;
           }
 
           if (state.remote.writeInFlight || state.remote.writeQueued) {
-            return "主同步：正在写入 GitHub " + state.remote.repo + "/" + state.remote.path + suffix;
+            return "GitHub 同步中" + suffix;
           }
 
-          return "主同步：GitHub 已连接 " + state.remote.repo + "/" + state.remote.path + suffix;
+          return "GitHub 已同步" + suffix;
         }
 
         if (!state.sync.supported) {
@@ -4843,7 +4933,7 @@
 
         const fileName = state.sync.fileName || DEFAULT_SYNC_FILE_NAME;
         if (state.sync.permissionNeeded) {
-          return "同步文件需要授权：" + fileName;
+          return "云盘需要授权：" + fileName;
         }
 
         if (state.sync.error) {
@@ -4851,14 +4941,14 @@
         }
 
         if (state.sync.writeInFlight || state.sync.writeQueued) {
-          return "正在同步到 " + fileName + "。";
+          return "云盘同步中。";
         }
 
         if (state.sync.lastWriteAt || state.sync.lastModified) {
-          return "已连接同步文件：" + fileName;
+          return "云盘已同步：" + fileName;
         }
 
-        return "已连接同步文件：" + fileName;
+        return "云盘已同步：" + fileName;
       }
 
       function getCloudBackupStatusText() {
@@ -4867,23 +4957,22 @@
         }
 
         if (!state.sync.handle) {
-          return "未连接云盘文件";
+          return "云盘未备份";
         }
 
-        const fileName = state.sync.fileName || DEFAULT_SYNC_FILE_NAME;
         if (state.sync.permissionNeeded) {
-          return "云盘文件需要授权：" + fileName;
+          return "云盘需授权";
         }
 
         if (state.sync.error) {
-          return state.sync.error + "：" + fileName;
+          return "云盘备份异常";
         }
 
         if (state.sync.writeInFlight || state.sync.writeQueued) {
-          return "正在写入云盘文件 " + fileName;
+          return "云盘备份中";
         }
 
-        return "云盘文件已连接 " + fileName;
+        return "云盘已备份";
       }
 
       function formatDateTime(value) {

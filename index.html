@@ -1,0 +1,4547 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minimal Notes</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='8' y='6' width='48' height='52' rx='10' fill='%23ffffff' stroke='%23151515' stroke-width='4'/%3E%3Cpath d='M19 22l7 7-7 7' fill='none' stroke='%23151515' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M31 40h14' stroke='%23777777' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M31 24h14M31 32h10' stroke='%23c7c7c2' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f6f4;
+      --bg-deep: #f1f1ee;
+      --panel: #ffffff;
+      --panel-strong: #ffffff;
+      --panel-soft: #fafaf8;
+      --border: rgba(17, 17, 17, 0.08);
+      --border-strong: rgba(17, 17, 17, 0.14);
+      --text: #171717;
+      --text-soft: #696969;
+      --text-faint: #9a9a95;
+      --accent: #151515;
+      --accent-soft: #f1f1ed;
+      --shadow: 0 8px 24px rgba(17, 17, 17, 0.04);
+      --shadow-soft: 0 4px 12px rgba(17, 17, 17, 0.03);
+      --radius-lg: 18px;
+      --focus: #171717;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Aptos", "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button,
+    input,
+    textarea,
+    select {
+      font: inherit;
+      color: inherit;
+    }
+
+    button {
+      cursor: pointer;
+      border: 0;
+      background: none;
+    }
+
+    .title-block h1,
+    .counter,
+    .composer textarea,
+    .search input,
+    .item-text,
+    .item-meta,
+    .badge,
+    .segmented button,
+    .ghost,
+    .primary,
+    .icon-btn,
+    .item-edit textarea,
+    .item-edit input,
+    .item-edit select {
+      font-family: "Cascadia Mono", "SFMono-Regular", "Menlo", "Consolas", "Microsoft YaHei UI", monospace;
+    }
+
+    .app {
+      max-width: 1540px;
+      margin: 0 auto;
+      padding: 18px 18px 36px;
+    }
+
+    .workspace {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 18px;
+    }
+
+    .shell {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      min-width: 0;
+      flex: 1 1 980px;
+      max-width: 980px;
+    }
+
+    .idea-pane {
+      min-width: 0;
+      flex: 0 0 min(460px, 36vw);
+      width: min(460px, 36vw);
+      display: none;
+    }
+
+    .workspace.has-ideas .idea-pane {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .idea-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: var(--shadow-soft);
+      padding: 14px 14px 12px;
+    }
+
+    .idea-card-head,
+    .idea-card-meta,
+    .idea-card-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .idea-card-head {
+      margin-bottom: 10px;
+    }
+
+    .idea-card-label,
+    .idea-card-hint,
+    .idea-card-empty,
+    .idea-card textarea {
+      font-family: "Cascadia Mono", "SFMono-Regular", "Menlo", "Consolas", "Microsoft YaHei UI", monospace;
+    }
+
+    .idea-card-label {
+      font-size: 12px;
+      color: var(--text-soft);
+    }
+
+    .idea-card-hint,
+    .idea-card-foot {
+      color: var(--text-faint);
+      font-size: 11px;
+      line-height: 1.6;
+    }
+
+    .idea-card-foot {
+      justify-content: flex-end;
+    }
+
+    .idea-card-meta {
+      margin-bottom: 10px;
+    }
+
+    .idea-card textarea {
+      width: 100%;
+      min-height: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      outline: none;
+      resize: none;
+      overflow-y: hidden;
+      font-size: 14px;
+      line-height: 1.78;
+      color: var(--text);
+      display: block;
+    }
+
+    .idea-card-editor {
+      min-height: 0;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: #fbfbfa;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+
+    .idea-card-editor:focus-within {
+      background: #ffffff;
+      border-color: var(--border-strong);
+    }
+
+    .idea-card-empty {
+      padding: 18px 0 6px;
+      color: var(--text-faint);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .idea-card-note {
+      margin: 0;
+    }
+
+    .header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      padding: 22px 24px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .eyebrow {
+      display: none;
+    }
+
+    .title-block h1 {
+      margin: 0;
+      max-width: none;
+      font-family: "Cascadia Mono", "SFMono-Regular", "Menlo", "Consolas", "Microsoft YaHei UI", monospace;
+      font-size: clamp(26px, 4vw, 34px);
+      line-height: 1.12;
+      font-weight: 650;
+      letter-spacing: -0.03em;
+    }
+
+    .title-block p {
+      max-width: 36rem;
+      margin: 8px 0 0;
+      color: var(--text-soft);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .counter {
+      min-width: 150px;
+      align-self: start;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: var(--panel-soft);
+      border: 1px solid var(--border);
+      box-shadow: none;
+      text-align: right;
+      color: var(--text);
+    }
+
+    .counter strong {
+      display: block;
+      font-size: 24px;
+      line-height: 1;
+      font-weight: 650;
+      letter-spacing: -0.03em;
+    }
+
+    .counter span {
+      display: block;
+      margin-top: 4px;
+      color: var(--text-soft);
+      font-size: 11px;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+
+    .composer {
+      padding: 12px 24px 10px;
+      border-bottom: 1px solid var(--border);
+      background: transparent;
+    }
+
+    .composer-card {
+      padding: 14px;
+      background: var(--panel-strong);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: none;
+    }
+
+    .composer textarea,
+    .search input,
+    .item-inline-input,
+    .item-edit textarea,
+    .item-edit input,
+    .item-edit select,
+    .composer select,
+    .composer input[type="datetime-local"] {
+      width: 100%;
+      min-height: 40px;
+      border: 1px solid var(--border);
+      background: #fafaf8;
+      border-radius: 12px;
+      padding: 10px 12px;
+      outline: none;
+      transition:
+        border-color 0.15s ease,
+        background-color 0.15s ease;
+    }
+
+    .composer textarea,
+    .item-edit textarea {
+      min-height: 72px;
+      resize: vertical;
+      line-height: 1.58;
+    }
+
+    .composer textarea {
+      min-height: 88px;
+      background: #fbfbfa;
+      font-size: 14px;
+      padding: 12px 14px;
+      border-radius: 14px;
+    }
+
+    .composer textarea::placeholder,
+    .search input::placeholder,
+    .item-inline-input::placeholder,
+    .item-edit textarea::placeholder,
+    .item-edit input::placeholder {
+      color: #a1a19c;
+    }
+
+    .composer textarea:focus,
+    .search input:focus,
+    .item-inline-input:focus,
+    .item-edit textarea:focus,
+    .item-edit input:focus,
+    .item-edit select:focus,
+    .composer select:focus,
+    .composer input[type="datetime-local"]:focus {
+      border-color: var(--border-strong);
+      background: #fff;
+      box-shadow: none;
+    }
+
+    .composer-bar,
+    .composer-actions,
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .composer-bar,
+    .toolbar {
+      margin-top: 10px;
+    }
+
+    .composer-bar {
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .composer-actions {
+      flex: 0 0 auto;
+      gap: 6px;
+    }
+
+    .sync-action {
+      min-width: 82px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .sync-action.attention {
+      color: var(--text);
+      background: var(--accent-soft);
+      border-color: var(--border-strong);
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 24px 8px;
+      gap: 12px;
+    }
+
+    .toolbar-main,
+    .toolbar-side {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .toolbar-side {
+      justify-content: flex-end;
+    }
+
+    .search {
+      min-width: 220px;
+      flex: 1 1 240px;
+    }
+
+    .search input {
+      background: #fafaf8;
+      font-size: 13px;
+    }
+
+    select {
+      appearance: none;
+      padding-right: 44px;
+      background-image:
+        linear-gradient(45deg, transparent 50%, rgba(90, 90, 90, 0.9) 50%),
+        linear-gradient(135deg, rgba(90, 90, 90, 0.9) 50%, transparent 50%);
+      background-position:
+        calc(100% - 20px) calc(50% - 3px),
+        calc(100% - 14px) calc(50% - 3px);
+      background-size: 6px 6px;
+      background-repeat: no-repeat;
+    }
+
+    input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+      opacity: 0.55;
+    }
+
+    .segmented {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 0;
+      background: transparent;
+      border: 0;
+    }
+
+    .segmented button,
+    .ghost,
+    .primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 32px;
+      padding: 0 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      transition:
+        background-color 0.15s ease,
+        color 0.15s ease,
+        border-color 0.15s ease;
+    }
+
+    .segmented button {
+      color: var(--text-soft);
+      background: transparent;
+      font-size: 12px;
+      letter-spacing: 0;
+    }
+
+    .segmented button.active {
+      background: var(--accent-soft);
+      color: var(--text);
+      border-color: var(--border-strong);
+    }
+
+    .segmented button:not(.active):hover,
+    .ghost:hover {
+      background: #f7f7f4;
+    }
+
+    .ghost {
+      background: transparent;
+      color: var(--text-soft);
+    }
+
+    .primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+      box-shadow: none;
+    }
+
+    .primary:hover {
+      background: #222222;
+    }
+
+    .icon-only {
+      width: 32px;
+      min-width: 32px;
+      padding: 0;
+      justify-content: center;
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .icon-only.active {
+      background: var(--accent-soft);
+      color: var(--text);
+      border-color: var(--border-strong);
+    }
+
+    .meta-note {
+      font-size: 11px;
+      color: var(--text-faint);
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      line-height: 1.45;
+    }
+
+    .composer-advanced {
+      display: grid;
+      grid-template-columns: minmax(140px, 170px) minmax(0, 220px) repeat(5, auto);
+      gap: 8px;
+      margin-top: 8px;
+      align-items: center;
+    }
+
+    .composer-advanced[hidden] {
+      display: none !important;
+    }
+
+    .composer-advanced .ghost {
+      min-width: 96px;
+    }
+
+    .remote-sync-panel {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: minmax(150px, 1fr) minmax(90px, 130px) minmax(150px, 1fr) minmax(180px, 1.2fr) auto auto;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fbfbfa;
+    }
+
+    .remote-sync-panel[hidden] {
+      display: none !important;
+    }
+
+    .remote-sync-panel input {
+      min-width: 0;
+      width: 100%;
+      font-size: 12px;
+      background: #ffffff;
+    }
+
+    .list-wrap {
+      padding: 0 24px 14px;
+    }
+
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      min-height: 280px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      background: #ffffff;
+    }
+
+    .item {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 11px 12px;
+      background: #ffffff;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      position: relative;
+      transition: background-color 0.12s ease;
+    }
+
+    .item + .item {
+      border-top: 1px solid rgba(17, 17, 17, 0.06);
+    }
+
+    .item:hover,
+    .item:focus-within {
+      background: #fafaf8;
+    }
+
+    .item.completed {
+      background: #fafaf8;
+    }
+
+    .item.idea .toggle {
+      opacity: 0.42;
+    }
+
+    .item.idea:hover .toggle,
+    .item.idea:focus-within .toggle {
+      opacity: 0.82;
+    }
+
+    .item.upcoming {
+      background: #f7f7f4;
+      box-shadow: inset 2px 0 0 rgba(17, 17, 17, 0.16);
+      color: var(--text);
+    }
+
+    .toggle {
+      margin-top: 2px;
+      width: 20px;
+      height: 20px;
+      border-radius: 999px;
+      border: 1.4px solid var(--border-strong);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #ffffff;
+      flex-shrink: 0;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+
+    .toggle.done {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+
+    .toggle.partial {
+      border-color: #b7bcc8;
+      background: #ffffff;
+      color: #707784;
+      font-size: 14px;
+      line-height: 1;
+    }
+
+    .toggle:hover {
+      transform: none;
+    }
+
+    .toggle:focus-visible,
+    .icon-btn:focus-visible,
+    .segmented button:focus-visible,
+    .ghost:focus-visible,
+    .primary:focus-visible {
+      outline: 2px solid rgba(17, 17, 17, 0.18);
+      outline-offset: 2px;
+    }
+
+    .item-main {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+    }
+
+    .item-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      cursor: text;
+    }
+
+    .item-line:hover .item-text {
+      color: #111111;
+    }
+
+    .badge,
+    .code-token {
+      flex: 0 0 auto;
+    }
+
+    .code-token {
+      display: inline-flex;
+      align-items: center;
+      min-height: 18px;
+      padding: 0 6px;
+      border-radius: 6px;
+      font-size: 10px;
+      color: #5f6880;
+      background: #f4f6fa;
+      border: 1px solid #e3e8f0;
+      white-space: nowrap;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 18px;
+      padding: 0 6px;
+      border-radius: 6px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-soft);
+      font-size: 10px;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .token-time {
+      color: #47556f;
+      background: #f3f5f8;
+      border-color: #e1e6ee;
+    }
+
+    .token-muted {
+      color: #8a8a84;
+      background: #f7f7f4;
+      border-color: #ecece6;
+    }
+
+    .token-warning {
+      color: #8a5c16;
+      background: rgba(138, 92, 22, 0.08);
+      border-color: rgba(138, 92, 22, 0.14);
+    }
+
+    .token-prepared {
+      color: #5e6370;
+      background: #f5f5f2;
+      border-color: #e7e8e2;
+    }
+
+    .token-auto {
+      color: #6e727d;
+      background: #f4f4f1;
+      border-color: #e5e5de;
+    }
+
+    .token-action {
+      cursor: pointer;
+      background: #ffffff;
+    }
+
+    .token-action:hover,
+    .token-action:focus-visible {
+      background: #f5f5f2;
+      border-color: #d9dbd3;
+      outline: none;
+    }
+
+    .conflict-warning {
+      cursor: pointer;
+    }
+
+    .conflict-warning:hover,
+    .conflict-warning:focus-visible {
+      background: rgba(138, 92, 22, 0.12);
+      border-color: rgba(138, 92, 22, 0.22);
+      outline: none;
+    }
+
+    .code-inline-time,
+    .code-inline-date,
+    .code-inline-keyword,
+    .code-inline-location {
+      border-radius: 4px;
+      padding: 0 2px;
+    }
+
+    .code-inline-time,
+    .code-inline-date {
+      color: #415a7a;
+      background: rgba(65, 90, 122, 0.08);
+    }
+
+    .code-inline-keyword {
+      color: #795b18;
+      background: rgba(121, 91, 24, 0.08);
+    }
+
+    .code-inline-location {
+      color: #4f6253;
+      background: rgba(79, 98, 83, 0.08);
+    }
+
+    .badge.strong {
+      background: var(--accent-soft);
+      color: var(--text);
+      border-color: var(--border-strong);
+    }
+
+    .item-text {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.5;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    .completed .item-text {
+      text-decoration: line-through;
+      color: var(--text-soft);
+      text-decoration-thickness: 1px;
+      text-decoration-color: rgba(17, 17, 17, 0.22);
+    }
+
+    .item-actions {
+      display: flex;
+      gap: 2px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      opacity: 0.28;
+      transition: opacity 0.12s ease;
+    }
+
+    .item:hover .item-actions,
+    .item:focus-within .item-actions {
+      opacity: 1;
+    }
+
+    .icon-btn {
+      min-height: 26px;
+      padding: 0 8px;
+      border-radius: 6px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-soft);
+    }
+
+    .icon-btn:hover {
+      background: #f3f3f0;
+      color: var(--text);
+    }
+
+    .icon-btn.danger:hover {
+      background: #f3f3f0;
+      color: var(--text);
+    }
+
+    .item-inline-edit {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .item-inline-input {
+      width: auto;
+      flex: 1 1 auto;
+      min-width: 0;
+      min-height: 30px;
+      padding: 4px 8px;
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      background: #ffffff;
+      outline: none;
+    }
+
+    .empty {
+      padding: 42px 20px;
+      text-align: center;
+      color: var(--text-faint);
+      background: #fbfbfa;
+      border: 1px dashed var(--border);
+      border-radius: 14px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .footer {
+      padding: 0 24px 18px;
+      border-top: 0;
+      padding-top: 8px;
+      color: var(--text-faint);
+      font-size: 11px;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .item.upcoming .item-text,
+    .item.upcoming .icon-btn:hover,
+    .item.upcoming .icon-btn.danger:hover {
+      color: var(--text);
+    }
+
+    .item.upcoming .badge {
+      background: transparent;
+      border-color: var(--border);
+      color: var(--text-soft);
+    }
+
+    .item.upcoming .badge.strong {
+      background: var(--accent-soft);
+      border-color: var(--border-strong);
+      color: var(--text);
+    }
+
+    .item.upcoming .toggle {
+      background: #ffffff;
+      border-color: var(--border-strong);
+      color: var(--text);
+    }
+
+    .item.upcoming .toggle.done {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+
+    .item.upcoming .toggle.partial {
+      background: #ffffff;
+      border-color: #b7bcc8;
+      color: #707784;
+    }
+
+    .item.upcoming .icon-btn {
+      background: transparent;
+      border-color: transparent;
+      color: var(--text-soft);
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      border: 0;
+    }
+
+    @media (max-width: 920px) {
+      .workspace {
+        display: block;
+      }
+
+      .header {
+        grid-template-columns: 1fr;
+      }
+
+      .counter {
+        max-width: 220px;
+      }
+
+      .toolbar-side {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .app {
+        padding: 12px 10px 22px;
+      }
+
+      .header,
+      .composer,
+      .toolbar,
+      .footer {
+        padding-left: 14px;
+        padding-right: 14px;
+      }
+
+      .header {
+        padding-top: 18px;
+        gap: 12px;
+      }
+
+      .counter {
+        max-width: none;
+        padding: 10px 12px;
+      }
+
+      .counter strong {
+        font-size: 22px;
+      }
+
+      .composer,
+      .toolbar,
+      .list-wrap {
+        padding-bottom: 12px;
+      }
+
+      .composer-card,
+      .empty {
+        border-radius: 12px;
+      }
+
+      .composer-bar {
+        align-items: flex-start;
+      }
+
+      .meta-note {
+        flex: 1 1 100%;
+      }
+
+      .composer-advanced {
+        grid-template-columns: 1fr;
+      }
+
+      .remote-sync-panel {
+        grid-template-columns: 1fr;
+      }
+
+      .search {
+        min-width: 0;
+        flex-basis: 100%;
+      }
+
+      .toolbar-side .ghost {
+        flex: 1 1 calc(50% - 5px);
+        justify-content: center;
+      }
+
+      .segmented {
+        flex-wrap: nowrap;
+        width: 100%;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+
+      .segmented::-webkit-scrollbar {
+        display: none;
+      }
+
+      .item {
+        grid-template-columns: auto 1fr;
+        gap: 10px;
+        padding: 10px 10px;
+      }
+
+      .item-line,
+      .item-inline-edit {
+        gap: 6px;
+      }
+
+      .item-actions {
+        grid-column: 2 / 3;
+        justify-content: flex-start;
+        opacity: 1;
+      }
+
+      .footer {
+        padding-top: 4px;
+        padding-bottom: 16px;
+      }
+
+      .idea-pane {
+        width: auto;
+        margin-top: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <div id="workspace" class="workspace">
+    <section class="shell" aria-label="极简个人记录工具">
+      <header class="header">
+        <div class="title-block">
+          <h1>极简记录</h1>
+          <p>像记事本一样记下待办、日程、截止和想法。打开就能写。</p>
+        </div>
+        <div class="counter" aria-live="polite">
+          <strong id="openCount">0</strong>
+          <span>未完成事项 · 不含想法</span>
+        </div>
+      </header>
+
+      <section class="composer" aria-label="快速输入区">
+        <div class="composer-card">
+          <label class="sr-only" for="quickInput">记录内容</label>
+          <textarea id="quickInput" placeholder="写下一件事、一场会，或一个突然冒出来的想法。"></textarea>
+          <div class="composer-bar">
+            <div class="meta-note">
+              <span>Enter 保存。默认自动识别时间和类型；需要时再展开手动选项。</span>
+              <span id="statusText">仅保存在当前浏览器。</span>
+            </div>
+            <div class="composer-actions">
+              <button id="syncActionButton" class="ghost sync-action" type="button">连接同步</button>
+              <button id="quickMoreButton" class="ghost icon-only" type="button" aria-label="展开手动选项" aria-expanded="false" title="展开手动选项">⋯</button>
+              <button id="addButton" class="primary icon-only" type="button" aria-label="新增记录" title="新增记录">+</button>
+            </div>
+          </div>
+          <div id="composerAdvanced" class="composer-advanced" hidden>
+            <label class="sr-only" for="quickType">类型</label>
+            <select id="quickType" title="类型">
+              <option value="auto">自动判断</option>
+              <option value="todo">待办</option>
+              <option value="meeting">日程</option>
+              <option value="deadline">截止</option>
+              <option value="idea">想法</option>
+            </select>
+            <label class="sr-only" for="quickEventAt">事件时间</label>
+            <input id="quickEventAt" type="datetime-local" title="事件时间">
+            <button id="exportButton" class="ghost" type="button">导出 JSON</button>
+            <button id="importButton" class="ghost" type="button">导入 JSON</button>
+            <button id="createSyncButton" class="ghost" type="button">新建同步文件</button>
+            <button id="connectSyncButton" class="ghost" type="button">连接同步文件</button>
+            <button id="remoteSyncButton" class="ghost" type="button">GitHub 同步</button>
+            <div id="remoteSyncPanel" class="remote-sync-panel" hidden>
+              <label class="sr-only" for="remoteRepoInput">GitHub 仓库</label>
+              <input id="remoteRepoInput" type="text" autocomplete="off" spellcheck="false" placeholder="owner/repo">
+              <label class="sr-only" for="remoteBranchInput">GitHub 分支</label>
+              <input id="remoteBranchInput" type="text" autocomplete="off" spellcheck="false" placeholder="main">
+              <label class="sr-only" for="remotePathInput">数据文件路径</label>
+              <input id="remotePathInput" type="text" autocomplete="off" spellcheck="false" placeholder="minimal-notes-records.json">
+              <label class="sr-only" for="remoteTokenInput">GitHub Token</label>
+              <input id="remoteTokenInput" type="password" autocomplete="off" spellcheck="false" placeholder="GitHub token">
+              <button id="saveRemoteSyncButton" class="primary" type="button">保存同步</button>
+              <button id="clearRemoteSyncButton" class="ghost" type="button">关闭同步</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="toolbar" aria-label="筛选与搜索">
+        <div class="toolbar-main">
+          <div class="segmented" id="filters" role="tablist" aria-label="记录筛选">
+            <button type="button" data-filter="all" class="active" aria-pressed="true">全部</button>
+            <button type="button" data-filter="todo" aria-pressed="false">待办</button>
+            <button type="button" data-filter="meeting" aria-pressed="false">日程</button>
+            <button type="button" data-filter="deadline" aria-pressed="false">截止</button>
+            <button type="button" data-filter="idea" aria-pressed="false">想法</button>
+            <button type="button" data-filter="completed" aria-pressed="false">已完成</button>
+          </div>
+        </div>
+        <div class="toolbar-side">
+          <div class="search">
+            <label class="sr-only" for="searchInput">搜索</label>
+            <input id="searchInput" type="search" placeholder="搜索内容">
+          </div>
+          <input id="importFile" class="sr-only" type="file" accept="application/json,.json">
+        </div>
+      </section>
+
+      <section class="list-wrap">
+        <div id="recordList" class="list" aria-live="polite"></div>
+      </section>
+
+      <footer class="footer">
+        <span>数据会保留本地备份；连接同步文件后会同时写入 iCloud Drive 或其他云盘 JSON。</span>
+        <span id="summaryText">0 条记录</span>
+      </footer>
+    </section>
+    <aside id="ideaPane" class="idea-pane" aria-live="polite"></aside>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      const STORAGE_KEY = "minimal-record-tool-v1";
+      const SYNC_DB_NAME = "minimal-notes-sync-v1";
+      const SYNC_DB_STORE = "handles";
+      const SYNC_FILE_HANDLE_KEY = "records";
+      const DEFAULT_SYNC_FILE_NAME = "minimal-notes-records.json";
+      const SYNC_POLL_INTERVAL = 12000;
+      const REMOTE_SYNC_STORAGE_KEY = "minimal-notes-github-sync-v1";
+      const DEFAULT_REMOTE_REPO = "yihuhou/minimal-notes";
+      const DEFAULT_REMOTE_BRANCH = "main";
+      const DEFAULT_REMOTE_PATH = "minimal-notes-records.json";
+      const REMOTE_SYNC_INTERVAL = 15000;
+      const SUPPORTS_FILE_SYNC = Boolean(
+        window.isSecureContext
+        && window.indexedDB
+        && window.showOpenFilePicker
+        && window.showSaveFilePicker
+      );
+      const SUPPORTS_REMOTE_SYNC = Boolean(window.fetch && window.localStorage && window.TextEncoder && window.TextDecoder);
+      const TYPE_LABELS = {
+        todo: "待办",
+        meeting: "日程",
+        deadline: "截止",
+        idea: "想法"
+      };
+
+      const state = {
+        records: loadRecords(),
+        filter: "all",
+        search: "",
+        editingId: null,
+        composing: false,
+        composerExpanded: false,
+        sync: {
+          supported: SUPPORTS_FILE_SYNC,
+          handle: null,
+          fileName: "",
+          permissionNeeded: false,
+          lastModified: 0,
+          lastWriteAt: "",
+          writeInFlight: false,
+          writeQueued: false,
+          error: ""
+        },
+        remote: {
+          supported: SUPPORTS_REMOTE_SYNC,
+          enabled: false,
+          repo: DEFAULT_REMOTE_REPO,
+          branch: DEFAULT_REMOTE_BRANCH,
+          path: DEFAULT_REMOTE_PATH,
+          token: "",
+          sha: "",
+          lastSyncAt: "",
+          writeInFlight: false,
+          writeQueued: false,
+          panelOpen: false,
+          error: ""
+        }
+      };
+
+      const quickInput = document.getElementById("quickInput");
+      const quickType = document.getElementById("quickType");
+      const quickEventAt = document.getElementById("quickEventAt");
+      const addButton = document.getElementById("addButton");
+      const quickMoreButton = document.getElementById("quickMoreButton");
+      const composerAdvanced = document.getElementById("composerAdvanced");
+      const filters = document.getElementById("filters");
+      const searchInput = document.getElementById("searchInput");
+      const recordList = document.getElementById("recordList");
+      const ideaPane = document.getElementById("ideaPane");
+      const workspace = document.getElementById("workspace");
+      const openCount = document.getElementById("openCount");
+      const summaryText = document.getElementById("summaryText");
+      const statusText = document.getElementById("statusText");
+      const syncActionButton = document.getElementById("syncActionButton");
+      const exportButton = document.getElementById("exportButton");
+      const importButton = document.getElementById("importButton");
+      const createSyncButton = document.getElementById("createSyncButton");
+      const connectSyncButton = document.getElementById("connectSyncButton");
+      const remoteSyncButton = document.getElementById("remoteSyncButton");
+      const remoteSyncPanel = document.getElementById("remoteSyncPanel");
+      const remoteRepoInput = document.getElementById("remoteRepoInput");
+      const remoteBranchInput = document.getElementById("remoteBranchInput");
+      const remotePathInput = document.getElementById("remotePathInput");
+      const remoteTokenInput = document.getElementById("remoteTokenInput");
+      const saveRemoteSyncButton = document.getElementById("saveRemoteSyncButton");
+      const clearRemoteSyncButton = document.getElementById("clearRemoteSyncButton");
+      const importFile = document.getElementById("importFile");
+
+      let statusTimer = null;
+      let syncPollTimer = null;
+      let syncWriteTimer = null;
+      let remotePollTimer = null;
+      let remoteWriteTimer = null;
+
+      bindEvents();
+      loadRemoteSyncSettings();
+      populateRemoteSyncPanel();
+      render();
+      updateStorageStatus();
+      restoreStoredSyncFile().then(function () {
+        startRemoteSync(true);
+      });
+      focusQuickInput();
+
+      function bindEvents() {
+        quickInput.addEventListener("compositionstart", function () {
+          state.composing = true;
+        });
+
+        quickInput.addEventListener("compositionend", function () {
+          state.composing = false;
+        });
+
+        quickInput.addEventListener("keydown", function (event) {
+          if (event.key === "Enter" && !event.shiftKey && !event.isComposing && !state.composing) {
+            event.preventDefault();
+            addRecord();
+          }
+        });
+
+        addButton.addEventListener("click", addRecord);
+        syncActionButton.addEventListener("click", handleSyncAction);
+        quickMoreButton.addEventListener("click", function () {
+          toggleComposerAdvanced();
+        });
+
+        filters.addEventListener("click", function (event) {
+          const button = event.target.closest("button[data-filter]");
+          if (!button) {
+            return;
+          }
+
+          state.filter = button.dataset.filter;
+          render();
+        });
+
+        searchInput.addEventListener("input", function (event) {
+          state.search = event.target.value.trim();
+          render();
+        });
+
+        recordList.addEventListener("click", handleListClick);
+        recordList.addEventListener("keydown", handleListKeydown);
+        recordList.addEventListener("focusout", handleListFocusOut);
+        ideaPane.addEventListener("focusin", handleIdeaPaneFocusIn);
+        ideaPane.addEventListener("input", handleIdeaPaneInput);
+        ideaPane.addEventListener("keydown", handleIdeaPaneKeydown);
+        ideaPane.addEventListener("focusout", handleIdeaPaneFocusOut);
+
+        exportButton.addEventListener("click", exportRecords);
+        importButton.addEventListener("click", function () {
+          importFile.click();
+        });
+        createSyncButton.addEventListener("click", createSyncFile);
+        connectSyncButton.addEventListener("click", connectSyncFile);
+        remoteSyncButton.addEventListener("click", function () {
+          toggleRemoteSyncPanel();
+        });
+        saveRemoteSyncButton.addEventListener("click", saveRemoteSyncSettings);
+        clearRemoteSyncButton.addEventListener("click", clearRemoteSyncSettings);
+        importFile.addEventListener("change", importRecords);
+
+        document.addEventListener("keydown", function (event) {
+          const target = event.target;
+          const tagName = target && target.tagName ? target.tagName.toLowerCase() : "";
+          const isTypingTarget = tagName === "input" || tagName === "textarea" || tagName === "select" || target.isContentEditable;
+
+          if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+            event.preventDefault();
+            focusQuickInput();
+          }
+
+          if (!isTypingTarget && event.key === "/") {
+            event.preventDefault();
+            searchInput.focus();
+            searchInput.select();
+          }
+        });
+      }
+
+      function toggleComposerAdvanced(forceExpanded) {
+        state.composerExpanded = typeof forceExpanded === "boolean" ? forceExpanded : !state.composerExpanded;
+        composerAdvanced.hidden = !state.composerExpanded;
+        quickMoreButton.setAttribute("aria-expanded", String(state.composerExpanded));
+        quickMoreButton.classList.toggle("active", state.composerExpanded);
+      }
+
+      async function handleSyncAction() {
+        if (state.sync.handle && (state.sync.permissionNeeded || state.sync.error)) {
+          await authorizeStoredSyncFile();
+          return;
+        }
+
+        if (state.remote.enabled) {
+          await syncRemoteRecords();
+          return;
+        }
+
+        if (!state.sync.supported) {
+          toggleRemoteSyncPanel(true);
+          setStatus("请填写 GitHub 同步设置。");
+          return;
+        }
+
+        if (!state.sync.handle) {
+          await connectSyncFile();
+          return;
+        }
+
+        if (state.sync.permissionNeeded || state.sync.error) {
+          await authorizeStoredSyncFile();
+          return;
+        }
+
+        await checkForSyncFileChanges();
+        setStatus("已检查同步文件。");
+      }
+
+      function handleListClick(event) {
+        const actionTarget = event.target.closest("[data-action]");
+        if (!actionTarget) {
+          return;
+        }
+
+        const action = actionTarget.dataset.action;
+        const id = actionTarget.dataset.id;
+        if (!id) {
+          return;
+        }
+
+        if (action === "toggle") {
+          toggleRecord(id);
+          return;
+        }
+
+        if (action === "delete") {
+          deleteRecord(id);
+          return;
+        }
+
+        if (action === "ignore-conflict") {
+          ignoreConflict(id, actionTarget.dataset.conflictKey || "");
+          return;
+        }
+
+        if (action === "confirm-auto-complete") {
+          confirmAutoComplete(id);
+          return;
+        }
+
+        if (action === "revert-auto-complete") {
+          revertAutoComplete(id);
+          return;
+        }
+
+        if (action === "open-edit") {
+          state.editingId = id;
+          render();
+          focusEditField(id);
+          return;
+        }
+
+        if (action === "cancel") {
+          state.editingId = null;
+          render();
+          return;
+        }
+
+        if (action === "save") {
+          saveEditedRecord(id);
+        }
+      }
+
+      function handleListKeydown(event) {
+        const directActionTarget = event.target.closest("[data-action]");
+        if (directActionTarget && directActionTarget.dataset.action && directActionTarget.dataset.action !== "open-edit") {
+          return;
+        }
+
+        const openEditTarget = event.target.closest('[data-action="open-edit"]');
+        if (openEditTarget && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          const id = openEditTarget.dataset.id;
+          if (id) {
+            state.editingId = id;
+            render();
+            focusEditField(id);
+          }
+          return;
+        }
+
+        const editBox = event.target.closest(".item-inline-edit");
+        if (!editBox) {
+          return;
+        }
+
+        const item = event.target.closest(".item");
+        if (!item) {
+          return;
+        }
+
+        const id = item.dataset.id;
+        if (!id) {
+          return;
+        }
+
+        if (event.key === "Escape") {
+          event.preventDefault();
+          state.editingId = null;
+          render();
+          return;
+        }
+
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          saveEditedRecord(id);
+        }
+      }
+
+      function handleListFocusOut(event) {
+        if (event.target.getAttribute("data-role") !== "edit-inline-text") {
+          return;
+        }
+
+        const currentItem = event.target.closest(".item");
+        const nextItem = event.relatedTarget && event.relatedTarget.closest ? event.relatedTarget.closest(".item") : null;
+        if (currentItem && nextItem && currentItem === nextItem) {
+          return;
+        }
+
+        const id = currentItem ? currentItem.dataset.id : "";
+        if (id) {
+          saveEditedRecord(id);
+        }
+      }
+
+      function handleIdeaPaneFocusIn(event) {
+        const input = event.target.closest('[data-role="idea-pane-text"]');
+        if (!input) {
+          return;
+        }
+
+        input.dataset.originalValue = input.value;
+        autoSizeIdeaInput(input);
+      }
+
+      function handleIdeaPaneInput(event) {
+        const input = event.target.closest('[data-role="idea-pane-text"]');
+        if (!input) {
+          return;
+        }
+
+        const record = findIdeaRecord(input.dataset.id || "");
+        if (!record) {
+          return;
+        }
+
+        record.text = input.value;
+        autoSizeIdeaInput(input);
+        persist();
+        patchIdeaTextInList(record);
+      }
+
+      function handleIdeaPaneKeydown(event) {
+        const input = event.target.closest('[data-role="idea-pane-text"]');
+        if (!input) {
+          return;
+        }
+
+        if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+          event.preventDefault();
+          input.blur();
+        }
+
+        if (event.key === "Escape") {
+          event.preventDefault();
+          const originalValue = input.dataset.originalValue;
+          if (typeof originalValue === "string") {
+            input.value = originalValue;
+          }
+          input.blur();
+        }
+      }
+
+      function handleIdeaPaneFocusOut(event) {
+        const input = event.target.closest('[data-role="idea-pane-text"]');
+        if (!input) {
+          return;
+        }
+
+        saveIdeaPaneRecord(input);
+      }
+
+      function findIdeaRecord(id) {
+        return state.records.find(function (record) {
+          return record.id === id && record.type === "idea";
+        }) || null;
+      }
+
+      function patchIdeaTextInList(record) {
+        if (!record) {
+          return;
+        }
+
+        const item = recordList.querySelector('.item[data-id="' + cssEscape(record.id) + '"]');
+        if (!item) {
+          return;
+        }
+
+        const textNode = item.querySelector(".item-text");
+        if (textNode) {
+          textNode.innerHTML = highlightRecordText(getDisplayText(record));
+        }
+
+        const lineNode = item.querySelector(".item-line");
+        if (lineNode) {
+          lineNode.title = buildItemTitle(record);
+        }
+      }
+
+      function saveIdeaPaneRecord(input) {
+        const record = findIdeaRecord(input.dataset.id || "");
+        if (!record) {
+          return;
+        }
+
+        const previousText = typeof input.dataset.originalValue === "string"
+          ? input.dataset.originalValue
+          : record.text;
+        const nextText = String(input.value || "");
+        const trimmedNext = nextText.trim();
+
+        if (!trimmedNext) {
+          record.text = previousText;
+          input.value = previousText;
+          persist();
+          patchIdeaTextInList(record);
+          setStatus("想法内容不能为空。");
+          return;
+        }
+
+        record.text = nextText;
+        const changed = trimmedNext !== String(previousText || "").trim();
+        if (changed) {
+          const now = new Date().toISOString();
+          record.updatedAt = now;
+          pushHistory(record, "edited", now);
+          input.dataset.originalValue = nextText;
+          persist();
+          render();
+          setStatus("想法已更新。");
+          return;
+        }
+
+        input.dataset.originalValue = nextText;
+        persist();
+        patchIdeaTextInList(record);
+      }
+
+      function addRecord() {
+        const rawText = quickInput.value || "";
+        const text = rawText.trim();
+        const explicitEventAt = normalizeDateTime(quickEventAt.value);
+        const manualType = quickType.value;
+        const now = new Date().toISOString();
+
+        if (!text) {
+          setStatus("先写一点内容。");
+          focusQuickInput();
+          return;
+        }
+
+        const parsed = inferTypeAndText(text, explicitEventAt, manualType);
+        const record = {
+          id: createId(),
+          text: parsed.text,
+          type: parsed.type,
+          createdAt: now,
+          eventAt: parsed.eventAt,
+          ignoredConflictKeys: [],
+          history: [],
+          autoCompleteState: "",
+          autoCompleteRef: "",
+          autoCompletedAt: "",
+          prepared: false,
+          completed: false,
+          updatedAt: now
+        };
+        pushHistory(record, "created", now);
+
+        state.records.unshift(record);
+        state.editingId = null;
+        persist();
+        quickInput.value = "";
+        quickEventAt.value = "";
+        quickType.value = "auto";
+        toggleComposerAdvanced(false);
+        render();
+        focusQuickInput();
+        setStatus("已保存。");
+      }
+
+      function toggleRecord(id) {
+        const record = state.records.find(function (item) {
+          return item.id === id;
+        });
+        if (!record) {
+          return;
+        }
+
+        if (isAutoCompletionPending(record)) {
+          confirmAutoComplete(id);
+          return;
+        }
+
+        const now = new Date().toISOString();
+        let historyAction = "";
+
+        if (supportsPreparedState(record)) {
+          if (!record.prepared && !record.completed) {
+            record.prepared = true;
+            historyAction = "prepared";
+          } else if (record.prepared && !record.completed) {
+            record.prepared = false;
+            record.completed = true;
+            clearAutoCompleteState(record);
+            historyAction = "completed";
+          } else {
+            record.prepared = false;
+            record.completed = false;
+            clearAutoCompleteState(record);
+            historyAction = "reopened";
+          }
+        } else {
+          record.completed = !record.completed;
+          clearAutoCompleteState(record);
+          historyAction = record.completed ? "completed" : "reopened";
+        }
+        record.updatedAt = now;
+        pushHistory(record, historyAction, now);
+        persist();
+        render();
+      }
+
+      function deleteRecord(id) {
+        const record = state.records.find(function (item) {
+          return item.id === id;
+        });
+        if (!record) {
+          return;
+        }
+
+        const ok = window.confirm("确定删除这条记录吗？");
+        if (!ok) {
+          return;
+        }
+
+        state.records = state.records.filter(function (item) {
+          return item.id !== id;
+        });
+        if (state.editingId === id) {
+          state.editingId = null;
+        }
+        persist();
+        render();
+        setStatus("已删除。");
+      }
+
+      function confirmAutoComplete(id) {
+        const record = state.records.find(function (item) {
+          return item.id === id;
+        });
+        if (!record) {
+          return;
+        }
+
+        const now = new Date().toISOString();
+        record.prepared = false;
+        record.completed = true;
+        clearAutoCompleteState(record);
+        record.updatedAt = now;
+        pushHistory(record, "completed", now);
+        persist();
+        render();
+        setStatus("已确认自动完成。");
+      }
+
+      function revertAutoComplete(id) {
+        const record = state.records.find(function (item) {
+          return item.id === id;
+        });
+        if (!record) {
+          return;
+        }
+
+        const now = new Date().toISOString();
+        record.autoCompleteState = "reverted";
+        record.autoCompleteRef = getAutoCompleteRef(record);
+        record.updatedAt = now;
+        pushHistory(record, "auto_reverted", now);
+        persist();
+        render();
+        setStatus("已恢复为未完成。");
+      }
+
+      function saveEditedRecord(id) {
+        const item = recordList.querySelector('.item[data-id="' + cssEscape(id) + '"]');
+        if (!item) {
+          return;
+        }
+
+        const textField = item.querySelector('[data-role="edit-inline-text"]');
+
+        if (!textField) {
+          return;
+        }
+
+        const text = (textField.value || "").trim();
+        if (!text) {
+          state.editingId = null;
+          render();
+          setStatus("内容不能为空，已取消修改。");
+          return;
+        }
+
+        const record = state.records.find(function (entry) {
+          return entry.id === id;
+        });
+        if (!record) {
+          return;
+        }
+
+        const updated = inferUpdateFromText(text, record);
+        const changed = record.text !== updated.text
+          || record.type !== updated.type
+          || record.eventAt !== updated.eventAt;
+        record.text = updated.text;
+        record.type = updated.type;
+        record.eventAt = updated.eventAt;
+        record.ignoredConflictKeys = [];
+        clearAutoCompleteState(record);
+        if (!supportsPreparedState(updated)) {
+          record.prepared = false;
+        }
+        record.updatedAt = new Date().toISOString();
+        if (changed) {
+          pushHistory(record, "edited", record.updatedAt);
+        }
+
+        state.editingId = null;
+        persist();
+        render();
+        setStatus("已更新。");
+      }
+
+      function exportRecords() {
+        const payload = buildRecordsPayload({ exportedAt: new Date().toISOString() });
+
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        const stamp = formatFileStamp(new Date());
+        link.href = url;
+        link.download = "minimal-records-" + stamp + ".json";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        setStatus("已导出 JSON。");
+      }
+
+      function importRecords(event) {
+        const file = event.target.files && event.target.files[0];
+        if (!file) {
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function (loadEvent) {
+          try {
+            const raw = String(loadEvent.target.result || "");
+            const normalized = parseRecordsPayload(raw);
+            const ok = window.confirm("导入会覆盖当前本地数据，是否继续？");
+            if (!ok) {
+              importFile.value = "";
+              return;
+            }
+
+            state.records = normalized.sort(sortRecords);
+            state.editingId = null;
+            persist();
+            render();
+            setStatus("已导入 " + normalized.length + " 条记录。");
+          } catch (error) {
+            console.error(error);
+            setStatus("导入失败，请检查 JSON 文件。");
+          } finally {
+            importFile.value = "";
+          }
+        };
+
+        reader.readAsText(file, "utf-8");
+      }
+
+      async function createSyncFile() {
+        if (!ensureFileSyncSupported()) {
+          return;
+        }
+
+        try {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: DEFAULT_SYNC_FILE_NAME,
+            types: getJsonFilePickerTypes(),
+            excludeAcceptAllOption: false
+          });
+
+          await setSyncHandle(handle, false);
+          const permissionGranted = await requestSyncPermission("readwrite");
+          if (!permissionGranted) {
+            setStatus("同步文件需要授权。");
+            return;
+          }
+
+          const ok = await writeCurrentRecordsToSyncFile();
+          if (!ok) {
+            setStatus("同步文件写入失败，已保存在当前浏览器。");
+            return;
+          }
+
+          await storeSyncHandle(handle);
+          startSyncPolling();
+          setStatus("已新建并连接同步文件。");
+        } catch (error) {
+          if (error && error.name === "AbortError") {
+            return;
+          }
+
+          console.error(error);
+          state.sync.error = "新建同步文件失败";
+          updateStorageStatus();
+          setStatus("新建同步文件失败。");
+        }
+      }
+
+      async function connectSyncFile() {
+        if (!ensureFileSyncSupported()) {
+          return;
+        }
+
+        try {
+          if (state.sync.handle && state.sync.permissionNeeded) {
+            await authorizeStoredSyncFile();
+            return;
+          }
+
+          const handles = await window.showOpenFilePicker({
+            multiple: false,
+            types: getJsonFilePickerTypes(),
+            excludeAcceptAllOption: false
+          });
+          const handle = handles && handles[0];
+          if (!handle) {
+            return;
+          }
+
+          await setSyncHandle(handle, false);
+          const permissionGranted = await requestSyncPermission("readwrite");
+          if (!permissionGranted) {
+            setStatus("同步文件需要授权。");
+            return;
+          }
+
+          const result = await loadRecordsFromSyncFile();
+          if (result === "empty") {
+            const ok = await writeCurrentRecordsToSyncFile();
+            if (!ok) {
+              setStatus("同步文件写入失败，已保存在当前浏览器。");
+              return;
+            }
+            setStatus("同步文件为空，已写入当前记录。");
+          } else if (result === "loaded") {
+            setStatus("已读取同步文件。");
+          }
+          await storeSyncHandle(handle);
+          startSyncPolling();
+        } catch (error) {
+          if (error && error.name === "AbortError") {
+            return;
+          }
+
+          console.error(error);
+          state.sync.error = "连接同步文件失败";
+          state.sync.handle = null;
+          state.sync.fileName = "";
+          state.sync.permissionNeeded = false;
+          updateStorageStatus();
+          setStatus("连接同步文件失败。");
+        }
+      }
+
+      async function authorizeStoredSyncFile() {
+        if (!state.sync.handle) {
+          await connectSyncFile();
+          return;
+        }
+
+        try {
+          setStatus("请在浏览器提示里选择每次访问都允许。");
+          const permissionGranted = await requestSyncPermission("readwrite");
+          if (!permissionGranted) {
+            setStatus("未获得同步文件授权。");
+            return;
+          }
+
+          const result = await loadRecordsFromSyncFile();
+          if (result === "empty") {
+            const ok = await writeCurrentRecordsToSyncFile();
+            if (!ok) {
+              setStatus("同步文件写入失败，已保存在当前浏览器。");
+              return;
+            }
+            setStatus("同步文件为空，已写入当前记录。");
+          } else if (result === "loaded") {
+            setStatus("已读取同步文件。");
+          } else {
+            setStatus("同步文件已授权。");
+          }
+          startSyncPolling();
+        } catch (error) {
+          console.error(error);
+          state.sync.error = "同步文件授权失败";
+          updateStorageStatus();
+          setStatus("同步文件授权失败。");
+        }
+      }
+
+      async function restoreStoredSyncFile() {
+        if (!state.sync.supported) {
+          updateStorageStatus();
+          return;
+        }
+
+        try {
+          const handle = await readStoredSyncHandle();
+          if (!handle) {
+            updateStorageStatus();
+            return;
+          }
+
+          await setSyncHandle(handle, false);
+          const hasPermission = await querySyncPermission("readwrite");
+          if (!hasPermission) {
+            state.sync.permissionNeeded = true;
+            updateStorageStatus();
+            return;
+          }
+
+          const result = await loadRecordsFromSyncFile();
+          if (result === "empty") {
+            await writeCurrentRecordsToSyncFile();
+            setStatus("同步文件为空，已写入当前记录。");
+          } else if (result === "loaded") {
+            setStatus("已读取同步文件。");
+          }
+          startSyncPolling();
+        } catch (error) {
+          console.error(error);
+          state.sync.error = "同步文件恢复失败";
+          state.sync.handle = null;
+          state.sync.fileName = "";
+          state.sync.permissionNeeded = false;
+          updateStorageStatus();
+        }
+      }
+
+      async function setSyncHandle(handle, shouldStore) {
+        state.sync.handle = handle;
+        state.sync.fileName = handle && handle.name ? handle.name : DEFAULT_SYNC_FILE_NAME;
+        state.sync.permissionNeeded = false;
+        state.sync.error = "";
+        state.sync.lastModified = 0;
+
+        if (shouldStore) {
+          await storeSyncHandle(handle);
+        }
+
+        updateStorageStatus();
+      }
+
+      async function loadRecordsFromSyncFile() {
+        if (!state.sync.handle) {
+          return "missing";
+        }
+
+        const hasPermission = await querySyncPermission("read");
+        if (!hasPermission) {
+          state.sync.permissionNeeded = true;
+          updateStorageStatus();
+          return "permission";
+        }
+
+        const file = await state.sync.handle.getFile();
+        const raw = await file.text();
+        state.sync.lastModified = file.lastModified || 0;
+
+        if (!raw.trim()) {
+          state.sync.error = "";
+          updateStorageStatus();
+          return "empty";
+        }
+
+        const records = parseRecordsPayload(raw);
+        state.records = records;
+        state.editingId = null;
+        state.sync.permissionNeeded = false;
+        state.sync.error = "";
+        saveLocalRecords();
+        render();
+        updateStorageStatus();
+        return "loaded";
+      }
+
+      async function writeCurrentRecordsToSyncFile() {
+        if (!state.sync.handle) {
+          return false;
+        }
+
+        const hasPermission = await querySyncPermission("readwrite");
+        if (!hasPermission) {
+          state.sync.permissionNeeded = true;
+          updateStorageStatus();
+          return false;
+        }
+
+        state.sync.writeInFlight = true;
+        updateStorageStatus();
+
+        try {
+          const writable = await state.sync.handle.createWritable();
+          await writable.write(JSON.stringify(buildRecordsPayload(), null, 2));
+          await writable.close();
+
+          const file = await state.sync.handle.getFile();
+          state.sync.lastModified = file.lastModified || Date.now();
+          state.sync.lastWriteAt = new Date().toISOString();
+          state.sync.permissionNeeded = false;
+          state.sync.error = "";
+          updateStorageStatus();
+          return true;
+        } catch (error) {
+          console.error(error);
+          state.sync.error = "同步文件写入失败";
+          updateStorageStatus();
+          return false;
+        } finally {
+          state.sync.writeInFlight = false;
+          updateStorageStatus();
+        }
+      }
+
+      function queueSyncFileWrite() {
+        if (!state.sync.handle) {
+          return;
+        }
+
+        state.sync.writeQueued = true;
+        window.clearTimeout(syncWriteTimer);
+        syncWriteTimer = window.setTimeout(function () {
+          syncWriteTimer = null;
+          writeQueuedSyncFile();
+        }, 500);
+        updateStorageStatus();
+      }
+
+      async function writeQueuedSyncFile() {
+        if (!state.sync.handle || state.sync.writeInFlight) {
+          return;
+        }
+
+        while (state.sync.writeQueued) {
+          state.sync.writeQueued = false;
+          const ok = await writeCurrentRecordsToSyncFile();
+          if (!ok) {
+            setStatus("同步文件写入失败，已保存在当前浏览器。");
+            return;
+          }
+        }
+      }
+
+      function startSyncPolling() {
+        window.clearInterval(syncPollTimer);
+        if (!state.sync.handle) {
+          return;
+        }
+
+        syncPollTimer = window.setInterval(checkForSyncFileChanges, SYNC_POLL_INTERVAL);
+      }
+
+      async function checkForSyncFileChanges() {
+        if (!state.sync.handle || state.sync.writeInFlight || state.sync.writeQueued) {
+          return;
+        }
+
+        try {
+          const hasPermission = await querySyncPermission("read");
+          if (!hasPermission) {
+            state.sync.permissionNeeded = true;
+            updateStorageStatus();
+            return;
+          }
+
+          const file = await state.sync.handle.getFile();
+          const latestModified = file.lastModified || 0;
+          if (!latestModified) {
+            return;
+          }
+
+          if (!state.sync.lastModified) {
+            state.sync.lastModified = latestModified;
+            updateStorageStatus();
+            return;
+          }
+
+          if (latestModified !== state.sync.lastModified) {
+            await loadRecordsFromSyncFile();
+            setStatus("已从同步文件更新。");
+          }
+        } catch (error) {
+          console.error(error);
+          state.sync.error = "同步文件读取失败";
+          updateStorageStatus();
+        }
+      }
+
+      function ensureFileSyncSupported() {
+        if (state.sync.supported) {
+          return true;
+        }
+
+        setStatus("当前浏览器不支持同步文件，请用 Chrome 或 Edge 打开。");
+        return false;
+      }
+
+      function getJsonFilePickerTypes() {
+        return [{
+          description: "Minimal Notes JSON",
+          accept: {
+            "application/json": [".json"]
+          }
+        }];
+      }
+
+      async function querySyncPermission(mode) {
+        if (!state.sync.handle || typeof state.sync.handle.queryPermission !== "function") {
+          return true;
+        }
+
+        try {
+          return await state.sync.handle.queryPermission({ mode: mode }) === "granted";
+        } catch (error) {
+          console.error(error);
+          return false;
+        }
+      }
+
+      async function requestSyncPermission(mode) {
+        if (!state.sync.handle) {
+          return false;
+        }
+
+        if (await querySyncPermission(mode)) {
+          state.sync.permissionNeeded = false;
+          updateStorageStatus();
+          return true;
+        }
+
+        if (typeof state.sync.handle.requestPermission !== "function") {
+          state.sync.permissionNeeded = true;
+          updateStorageStatus();
+          return false;
+        }
+
+        try {
+          const status = await state.sync.handle.requestPermission({ mode: mode });
+          const granted = status === "granted";
+          state.sync.permissionNeeded = !granted;
+          updateStorageStatus();
+          return granted;
+        } catch (error) {
+          console.error(error);
+          state.sync.permissionNeeded = true;
+          updateStorageStatus();
+          return false;
+        }
+      }
+
+      async function openSyncDb() {
+        return new Promise(function (resolve, reject) {
+          const request = window.indexedDB.open(SYNC_DB_NAME, 1);
+
+          request.onupgradeneeded = function () {
+            const db = request.result;
+            if (!db.objectStoreNames.contains(SYNC_DB_STORE)) {
+              db.createObjectStore(SYNC_DB_STORE);
+            }
+          };
+
+          request.onsuccess = function () {
+            resolve(request.result);
+          };
+
+          request.onerror = function () {
+            reject(request.error);
+          };
+        });
+      }
+
+      async function storeSyncHandle(handle) {
+        const db = await openSyncDb();
+        return new Promise(function (resolve, reject) {
+          const transaction = db.transaction(SYNC_DB_STORE, "readwrite");
+          transaction.objectStore(SYNC_DB_STORE).put(handle, SYNC_FILE_HANDLE_KEY);
+
+          transaction.oncomplete = function () {
+            db.close();
+            resolve();
+          };
+
+          transaction.onerror = function () {
+            db.close();
+            reject(transaction.error);
+          };
+        });
+      }
+
+      async function readStoredSyncHandle() {
+        const db = await openSyncDb();
+        return new Promise(function (resolve, reject) {
+          const transaction = db.transaction(SYNC_DB_STORE, "readonly");
+          const request = transaction.objectStore(SYNC_DB_STORE).get(SYNC_FILE_HANDLE_KEY);
+          let handle = null;
+
+          request.onsuccess = function () {
+            handle = request.result || null;
+          };
+
+          transaction.oncomplete = function () {
+            db.close();
+            resolve(handle);
+          };
+
+          transaction.onerror = function () {
+            db.close();
+            reject(transaction.error);
+          };
+        });
+      }
+
+      function toggleRemoteSyncPanel(forceOpen) {
+        state.remote.panelOpen = typeof forceOpen === "boolean" ? forceOpen : !state.remote.panelOpen;
+        remoteSyncPanel.hidden = !state.remote.panelOpen;
+        populateRemoteSyncPanel();
+      }
+
+      function populateRemoteSyncPanel() {
+        remoteRepoInput.value = state.remote.repo || DEFAULT_REMOTE_REPO;
+        remoteBranchInput.value = state.remote.branch || DEFAULT_REMOTE_BRANCH;
+        remotePathInput.value = state.remote.path || DEFAULT_REMOTE_PATH;
+        remoteTokenInput.value = "";
+        remoteTokenInput.placeholder = state.remote.token ? "token 已保存，留空不变" : "GitHub token";
+      }
+
+      function loadRemoteSyncSettings() {
+        try {
+          const raw = localStorage.getItem(REMOTE_SYNC_STORAGE_KEY);
+          if (!raw) {
+            return;
+          }
+
+          const saved = JSON.parse(raw);
+          const repo = normalizeRemoteRepo(saved.repo || "");
+          const branch = normalizeRemoteBranch(saved.branch || "");
+          const path = normalizeRemotePath(saved.path || "");
+          const token = typeof saved.token === "string" ? saved.token.trim() : "";
+          if (!repo || !path || !token) {
+            return;
+          }
+
+          state.remote.enabled = true;
+          state.remote.repo = repo;
+          state.remote.branch = branch || DEFAULT_REMOTE_BRANCH;
+          state.remote.path = path;
+          state.remote.token = token;
+          state.remote.sha = typeof saved.sha === "string" ? saved.sha : "";
+          state.remote.lastSyncAt = typeof saved.lastSyncAt === "string" ? saved.lastSyncAt : "";
+        } catch (error) {
+          console.error(error);
+        }
+      }
+
+      function saveRemoteSyncSettingsToLocal() {
+        if (!state.remote.enabled) {
+          localStorage.removeItem(REMOTE_SYNC_STORAGE_KEY);
+          return;
+        }
+
+        localStorage.setItem(REMOTE_SYNC_STORAGE_KEY, JSON.stringify({
+          repo: state.remote.repo,
+          branch: state.remote.branch,
+          path: state.remote.path,
+          token: state.remote.token,
+          sha: state.remote.sha,
+          lastSyncAt: state.remote.lastSyncAt
+        }));
+      }
+
+      async function saveRemoteSyncSettings() {
+        const repo = normalizeRemoteRepo(remoteRepoInput.value);
+        const branch = normalizeRemoteBranch(remoteBranchInput.value);
+        const path = normalizeRemotePath(remotePathInput.value);
+        const token = (remoteTokenInput.value || "").trim() || state.remote.token;
+
+        if (!repo || !path || !token) {
+          setStatus("请填写 GitHub 仓库、路径和 token。");
+          return;
+        }
+
+        state.remote.enabled = true;
+        state.remote.repo = repo;
+        state.remote.branch = branch || DEFAULT_REMOTE_BRANCH;
+        state.remote.path = path;
+        state.remote.token = token;
+        state.remote.sha = "";
+        state.remote.lastSyncAt = "";
+        state.remote.error = "";
+        state.remote.panelOpen = false;
+        remoteSyncPanel.hidden = true;
+        saveRemoteSyncSettingsToLocal();
+        populateRemoteSyncPanel();
+        updateStorageStatus();
+        await startRemoteSync(true);
+      }
+
+      function clearRemoteSyncSettings() {
+        const ok = window.confirm("关闭 GitHub 同步只会清除本浏览器保存的 token，不会删除 GitHub 上的数据文件。是否继续？");
+        if (!ok) {
+          return;
+        }
+
+        state.remote.enabled = false;
+        state.remote.token = "";
+        state.remote.sha = "";
+        state.remote.lastSyncAt = "";
+        state.remote.error = "";
+        state.remote.writeQueued = false;
+        window.clearTimeout(remoteWriteTimer);
+        window.clearInterval(remotePollTimer);
+        remoteWriteTimer = null;
+        remotePollTimer = null;
+        saveRemoteSyncSettingsToLocal();
+        populateRemoteSyncPanel();
+        updateStorageStatus();
+        setStatus("已关闭 GitHub 同步。");
+      }
+
+      async function startRemoteSync(runNow) {
+        window.clearInterval(remotePollTimer);
+        if (!state.remote.enabled) {
+          return;
+        }
+
+        if (runNow) {
+          await syncRemoteRecords({ createIfMissing: true });
+        }
+
+        remotePollTimer = window.setInterval(function () {
+          syncRemoteRecords({ silent: true });
+        }, REMOTE_SYNC_INTERVAL);
+      }
+
+      async function syncRemoteRecords(options) {
+        if (!state.remote.enabled) {
+          toggleRemoteSyncPanel(true);
+          setStatus("请先设置 GitHub 同步。");
+          return;
+        }
+
+        if (state.remote.writeInFlight || state.remote.writeQueued) {
+          setStatus("GitHub 同步正在进行。");
+          return;
+        }
+
+        const opts = options || {};
+
+        try {
+          state.remote.error = "";
+          updateStorageStatus();
+
+          const result = await fetchRemoteRecords();
+          if (result.missing) {
+            if (opts.createIfMissing || state.records.length) {
+              const ok = await writeCurrentRecordsToRemote();
+              if (ok && !opts.silent) {
+                setStatus("已创建 GitHub 数据文件。");
+              } else if (!ok && !opts.silent) {
+                setStatus(state.remote.error + "。");
+              }
+              return;
+            }
+
+            if (!opts.silent) {
+              setStatus("GitHub 数据文件不存在。");
+            }
+            return;
+          }
+
+          const recordsChanged = !recordsEqual(state.records, result.records);
+          if (recordsChanged
+            && !state.remote.lastSyncAt
+            && state.records.length
+            && result.records.length
+            && !window.confirm("GitHub 数据会覆盖当前本地内容，是否继续？")) {
+            setStatus("已取消 GitHub 同步。");
+            return;
+          }
+
+          state.remote.sha = result.sha;
+          state.remote.lastSyncAt = new Date().toISOString();
+          state.remote.error = "";
+          state.records = result.records;
+          state.editingId = null;
+          saveLocalRecords();
+          saveRemoteSyncSettingsToLocal();
+          render();
+          updateStorageStatus();
+
+          if (!opts.silent) {
+            setStatus("已从 GitHub 同步。");
+          }
+        } catch (error) {
+          console.error(error);
+          state.remote.error = formatRemoteError("GitHub 同步失败", error);
+          updateStorageStatus();
+          if (!opts.silent) {
+            setStatus(state.remote.error + "。");
+          }
+        }
+      }
+
+      async function fetchRemoteRecords() {
+        const response = await fetch(getRemoteContentsUrl(true), {
+          headers: getRemoteHeaders(false)
+        });
+
+        if (response.status === 404) {
+          return {
+            missing: true,
+            records: [],
+            sha: ""
+          };
+        }
+
+        if (!response.ok) {
+          throw await createRemoteHttpError(response, "GitHub 读取失败");
+        }
+
+        const data = await response.json();
+        const text = decodeBase64Utf8(String(data.content || ""));
+        return {
+          missing: false,
+          records: parseRecordsPayload(text),
+          sha: typeof data.sha === "string" ? data.sha : ""
+        };
+      }
+
+      async function writeCurrentRecordsToRemote() {
+        if (!state.remote.enabled) {
+          return false;
+        }
+
+        state.remote.writeInFlight = true;
+        updateStorageStatus();
+
+        try {
+          const payload = buildRecordsPayload({ syncedAt: new Date().toISOString() });
+          const body = {
+            message: "Update minimal notes records",
+            content: encodeBase64Utf8(JSON.stringify(payload, null, 2)),
+            branch: state.remote.branch || DEFAULT_REMOTE_BRANCH
+          };
+
+          if (state.remote.sha) {
+            body.sha = state.remote.sha;
+          }
+
+          let response = await fetch(getRemoteContentsUrl(false), {
+            method: "PUT",
+            headers: getRemoteHeaders(true),
+            body: JSON.stringify(body)
+          });
+
+          if (response.status === 409) {
+            const latest = await fetchRemoteRecords();
+            state.remote.sha = latest.sha || "";
+            body.sha = state.remote.sha;
+            response = await fetch(getRemoteContentsUrl(false), {
+              method: "PUT",
+              headers: getRemoteHeaders(true),
+              body: JSON.stringify(body)
+            });
+          }
+
+          if (!response.ok) {
+            throw await createRemoteHttpError(response, "GitHub 写入失败");
+          }
+
+          const data = await response.json();
+          state.remote.sha = data && data.content && typeof data.content.sha === "string" ? data.content.sha : state.remote.sha;
+          state.remote.lastSyncAt = new Date().toISOString();
+          state.remote.error = "";
+          saveRemoteSyncSettingsToLocal();
+          updateStorageStatus();
+          return true;
+        } catch (error) {
+          console.error(error);
+          state.remote.error = formatRemoteError("GitHub 写入失败", error);
+          updateStorageStatus();
+          return false;
+        } finally {
+          state.remote.writeInFlight = false;
+          updateStorageStatus();
+        }
+      }
+
+      function queueRemoteWrite() {
+        if (!state.remote.enabled) {
+          return;
+        }
+
+        state.remote.writeQueued = true;
+        window.clearTimeout(remoteWriteTimer);
+        remoteWriteTimer = window.setTimeout(function () {
+          remoteWriteTimer = null;
+          writeQueuedRemote();
+        }, 700);
+        updateStorageStatus();
+      }
+
+      async function writeQueuedRemote() {
+        if (!state.remote.enabled || state.remote.writeInFlight) {
+          return;
+        }
+
+        while (state.remote.writeQueued) {
+          state.remote.writeQueued = false;
+          const ok = await writeCurrentRecordsToRemote();
+          if (!ok) {
+            setStatus(state.remote.error + "；已保存在当前浏览器。");
+            return;
+          }
+        }
+      }
+
+      function getRemoteContentsUrl(withRef) {
+        const parts = state.remote.repo.split("/");
+        const owner = encodeURIComponent(parts[0]);
+        const repo = encodeURIComponent(parts[1]);
+        const path = encodeRemotePath(state.remote.path);
+        const base = "https://api.github.com/repos/" + owner + "/" + repo + "/contents/" + path;
+        if (!withRef) {
+          return base;
+        }
+
+        return base + "?ref=" + encodeURIComponent(state.remote.branch || DEFAULT_REMOTE_BRANCH);
+      }
+
+      function getRemoteHeaders(includeJsonContentType) {
+        const headers = {
+          "Accept": "application/vnd.github+json",
+          "Authorization": "Bearer " + state.remote.token
+        };
+
+        if (includeJsonContentType) {
+          headers["Content-Type"] = "application/json";
+        }
+
+        return headers;
+      }
+
+      async function createRemoteHttpError(response, fallback) {
+        let message = "";
+        try {
+          const data = await response.json();
+          message = data && typeof data.message === "string" ? data.message : "";
+        } catch (error) {
+          try {
+            message = await response.text();
+          } catch (innerError) {
+            message = "";
+          }
+        }
+
+        const error = new Error(fallback + "：" + response.status + (message ? " " + message : ""));
+        error.status = response.status;
+        error.githubMessage = message;
+        return error;
+      }
+
+      function formatRemoteError(fallback, error) {
+        const message = error && error.message ? String(error.message) : "";
+        if (/load failed|failed to fetch|networkerror|cancelled|internet connection/i.test(message)) {
+          return fallback + "：网络请求失败。请用 https 页面打开，不要从手机本地文件直接打开 HTML。";
+        }
+
+        if (message) {
+          return message;
+        }
+
+        return fallback;
+      }
+
+      function normalizeRemoteRepo(value) {
+        let text = String(value || "").trim();
+        text = text.replace(/^https:\/\/github\.com\//i, "");
+        text = text.replace(/\.git$/i, "");
+        text = text.replace(/^\/+|\/+$/g, "");
+        const parts = text.split("/").filter(Boolean);
+        if (parts.length < 2) {
+          return "";
+        }
+
+        return parts[0] + "/" + parts[1];
+      }
+
+      function normalizeRemoteBranch(value) {
+        return String(value || "").trim() || DEFAULT_REMOTE_BRANCH;
+      }
+
+      function normalizeRemotePath(value) {
+        return String(value || "").trim().replace(/^\/+/, "") || DEFAULT_REMOTE_PATH;
+      }
+
+      function encodeRemotePath(path) {
+        return normalizeRemotePath(path).split("/").map(encodeURIComponent).join("/");
+      }
+
+      function encodeBase64Utf8(text) {
+        const bytes = new TextEncoder().encode(text);
+        let binary = "";
+        bytes.forEach(function (byte) {
+          binary += String.fromCharCode(byte);
+        });
+        return window.btoa(binary);
+      }
+
+      function decodeBase64Utf8(value) {
+        const binary = window.atob(String(value || "").replace(/\s/g, ""));
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) {
+          bytes[index] = binary.charCodeAt(index);
+        }
+        return new TextDecoder().decode(bytes);
+      }
+
+      function recordsEqual(left, right) {
+        return JSON.stringify(left || []) === JSON.stringify(right || []);
+      }
+
+      function render() {
+        syncAutoCompletionState();
+        const visible = getVisibleRecords();
+        renderFilters();
+        renderSummary(visible);
+        renderList(visible);
+        renderIdeaPane();
+      }
+
+      function renderFilters() {
+        const buttons = filters.querySelectorAll("button[data-filter]");
+        buttons.forEach(function (button) {
+          const active = button.dataset.filter === state.filter;
+          button.classList.toggle("active", active);
+          button.setAttribute("aria-pressed", String(active));
+        });
+      }
+
+      function renderSummary(visible) {
+        const unfinishedCount = state.records.filter(function (record) {
+          return !isVisuallyCompleted(record) && record.type !== "idea";
+        }).length;
+        openCount.textContent = String(unfinishedCount);
+        summaryText.textContent = "共 " + state.records.length + " 条，当前显示 " + visible.length + " 条";
+      }
+
+      function renderList(visible) {
+        const conflictMap = buildConflictMap(state.records);
+
+        if (!visible.length) {
+          recordList.innerHTML = '<div class="empty">没有匹配的记录。可以直接在上方写下第一条。</div>';
+          return;
+        }
+
+        recordList.innerHTML = visible.map(function (record) {
+          return renderItem(record, conflictMap[record.id] || []);
+        }).join("");
+      }
+
+      function renderItem(record, conflicts) {
+        const editing = state.editingId === record.id;
+        const upcoming = isUpcomingMeeting(record);
+        const classes = [
+          "item",
+          record.type,
+          isPrepared(record) ? "prepared" : "",
+          isVisuallyCompleted(record) ? "completed" : "",
+          isAutoCompletionPending(record) ? "auto-completed" : "",
+          upcoming ? "upcoming" : ""
+        ].filter(Boolean).join(" ");
+        const toggleMeta = getToggleMeta(record);
+
+        return [
+          '<article class="' + classes + '" data-id="' + escapeHtml(record.id) + '">',
+          '<button type="button" class="toggle ' + escapeHtml(toggleMeta.className) + '" data-action="toggle" data-id="' + escapeHtml(record.id) + '" aria-label="' + escapeHtml(toggleMeta.ariaLabel) + '" title="' + escapeHtml(toggleMeta.title) + '">',
+          toggleMeta.symbol,
+          "</button>",
+          '<div class="item-main">',
+          editing ? renderInlineEdit(record) : renderDisplay(record, upcoming, conflicts),
+          "</div>",
+          '<div class="item-actions">',
+          '<button type="button" class="icon-btn danger" data-action="delete" data-id="' + escapeHtml(record.id) + '" aria-label="删除" title="删除">×</button>',
+          "</div>",
+          "</article>"
+        ].join("");
+      }
+
+      function renderDisplay(record, upcoming, conflicts) {
+        const displayText = getDisplayText(record);
+        const parts = [];
+        parts.push('<div class="item-line" data-action="open-edit" data-id="' + escapeHtml(record.id) + '" tabindex="0" title="' + escapeHtml(buildItemTitle(record)) + '">');
+        parts.push('<span class="badge">' + TYPE_LABELS[record.type] + "</span>");
+        if (upcoming) {
+          parts.push('<span class="badge strong">' + escapeHtml(getUpcomingLabel(record)) + "</span>");
+        }
+        if (record.eventAt) {
+          parts.push('<span class="code-token token-time">' + escapeHtml(formatRecordTimeToken(record)) + "</span>");
+        }
+        if (conflicts && conflicts.length) {
+          conflicts.forEach(function (conflict) {
+            parts.push(renderConflictWarning(record.id, conflict));
+          });
+        }
+        if (isPrepared(record) && !isAutoCompletionPending(record)) {
+          parts.push('<span class="code-token token-prepared">已准备</span>');
+        }
+        if (isAutoCompletionPending(record)) {
+          parts.push('<span class="code-token token-auto">已结束</span>');
+          parts.push('<button type="button" class="code-token token-action" data-action="confirm-auto-complete" data-id="' + escapeHtml(record.id) + '" title="确认自动完成">确认</button>');
+          parts.push('<button type="button" class="code-token token-action" data-action="revert-auto-complete" data-id="' + escapeHtml(record.id) + '" title="恢复为未完成">revert</button>');
+        }
+        if (record.completed) {
+          parts.push('<span class="code-token token-muted">' + (record.type === "idea" ? "archived" : "done") + "</span>");
+        }
+        parts.push('<span class="item-text">' + highlightRecordText(displayText) + "</span>");
+        parts.push("</div>");
+        return parts.join("");
+      }
+
+      function renderIdeaPane() {
+        if (!ideaPane) {
+          return;
+        }
+
+        const ideas = getOpenIdeas();
+        const hasIdeas = ideas.length > 0;
+        workspace.classList.toggle("has-ideas", hasIdeas);
+
+        if (!hasIdeas) {
+          ideaPane.innerHTML = "";
+          return;
+        }
+
+        ideaPane.innerHTML = ideas.map(renderIdeaCard).join("");
+        syncIdeaPaneHeights();
+      }
+
+      function renderIdeaCard(record) {
+        const editedAt = getLatestHistoryAt(record, "edited");
+        const meta = [
+          '<span class="idea-card-hint">创建于 ' + escapeHtml(formatDateTime(record.createdAt)) + "</span>"
+        ];
+        if (editedAt) {
+          meta.push('<span class="idea-card-hint">编辑于 ' + escapeHtml(formatDateTime(editedAt)) + "</span>");
+        }
+
+        return [
+          '<article class="idea-card" data-id="' + escapeHtml(record.id) + '">',
+          '<div class="idea-card-head">',
+          '<span class="idea-card-label">想法</span>',
+          '<span class="idea-card-hint">' + escapeHtml(summarizeIdeaLength(record.text)) + '</span>',
+          '</div>',
+          '<div class="idea-card-meta">' + meta.join("") + "</div>",
+          '<div class="idea-card-editor">',
+          '<textarea data-role="idea-pane-text" data-id="' + escapeHtml(record.id) + '" spellcheck="false" aria-label="编辑想法">' + escapeHtml(record.text) + '</textarea>',
+          '</div>',
+          '<div class="idea-card-foot">',
+          '<span>Ctrl/Cmd + Enter 收起焦点</span>',
+          '</div>',
+          '</article>'
+        ].join("");
+      }
+
+      function getOpenIdeas() {
+        return state.records
+          .filter(function (record) {
+            return record.type === "idea" && !record.completed;
+          })
+          .sort(sortRecords);
+      }
+
+      function syncIdeaPaneHeights() {
+        const inputs = ideaPane.querySelectorAll('[data-role="idea-pane-text"]');
+        inputs.forEach(autoSizeIdeaInput);
+      }
+
+      function autoSizeIdeaInput(input) {
+        if (!input) {
+          return;
+        }
+
+        const lineHeight = parseFloat(window.getComputedStyle(input).lineHeight) || 25;
+        const minHeight = Math.ceil(lineHeight + 2);
+        input.style.height = "auto";
+        const nextHeight = Math.max(input.scrollHeight, minHeight);
+        input.style.height = nextHeight + "px";
+        input.style.overflowY = "hidden";
+      }
+
+      function summarizeIdeaLength(text) {
+        const source = String(text || "");
+        const lines = source ? source.split(/\r?\n/).length : 0;
+        const chars = source.length;
+        if (lines > 1) {
+          return lines + " 行 / " + chars + " 字";
+        }
+        return chars + " 字";
+      }
+
+      function getToggleMeta(record) {
+        if (isAutoCompletionPending(record)) {
+          return {
+            className: "done",
+            symbol: "✓",
+            ariaLabel: "确认自动完成",
+            title: "已自动完成，点击确认"
+          };
+        }
+
+        if (supportsPreparedState(record)) {
+          if (record.completed) {
+            return {
+              className: "done",
+              symbol: "✓",
+              ariaLabel: "重置日程状态",
+              title: "已完成，点击重置为未开始"
+            };
+          }
+
+          if (isPrepared(record)) {
+            return {
+              className: "partial",
+              symbol: "•",
+              ariaLabel: "标记日程已完成",
+              title: "已准备，点击标记为已完成"
+            };
+          }
+
+          return {
+            className: "",
+            symbol: "",
+            ariaLabel: "标记日程已准备",
+            title: "未开始，点击标记为已准备"
+          };
+        }
+
+        const completionLabel = record.type === "idea" ? "归档" : "完成";
+        return {
+          className: record.completed ? "done" : "",
+          symbol: record.completed ? "✓" : "",
+          ariaLabel: record.completed ? "取消" + completionLabel : completionLabel,
+          title: record.completed ? "取消" + completionLabel : completionLabel
+        };
+      }
+
+      function renderConflictWarning(id, conflict) {
+        return '<button type="button" class="code-token token-warning conflict-warning" data-action="ignore-conflict" data-id="' + escapeHtml(id) + '" data-conflict-key="' + escapeHtml(conflict.key) + '" title="' + escapeHtml(conflict.title) + '">warning</button>';
+      }
+
+      function renderInlineEdit(record) {
+        return [
+          '<div class="item-inline-edit">',
+          '<input data-role="edit-inline-text" class="item-inline-input" type="text" value="' + escapeHtml(record.text) + '" aria-label="编辑记录">',
+          '<span class="code-token token-muted">Enter 保存 / Esc 取消</span>',
+          "</div>"
+        ].join("");
+      }
+
+      function buildItemTitle(record) {
+        const parts = ["创建于 " + formatDateTime(record.createdAt)];
+        const preparedAt = getLatestHistoryAt(record, "prepared");
+        const completedAt = getLatestHistoryAt(record, "completed");
+        const editedAt = getLatestHistoryAt(record, "edited");
+        const reopenedAt = getLatestHistoryAt(record, "reopened");
+
+        if (preparedAt) {
+          parts.push("准备于 " + formatDateTime(preparedAt));
+        }
+        if (completedAt) {
+          parts.push("完成于 " + formatDateTime(completedAt));
+        }
+        if (editedAt) {
+          parts.push("编辑于 " + formatDateTime(editedAt));
+        }
+        if (reopenedAt) {
+          parts.push("重新打开于 " + formatDateTime(reopenedAt));
+        }
+
+        return parts.join(" | ");
+      }
+
+      function formatRecordTimeToken(record) {
+        if (!record.eventAt) {
+          return "";
+        }
+
+        if (record.type === "deadline" && !hasExplicitTimeToken(record.text)) {
+          return formatCompactDateOnly(record.eventAt) + " 前";
+        }
+
+        if (!hasExplicitTimeToken(record.text) && isMidnightDateTime(record.eventAt)) {
+          return formatCompactDateOnly(record.eventAt);
+        }
+
+        return formatCompactDateTime(record.eventAt);
+      }
+
+      function formatCompactDateTime(value) {
+        if (!value || !isValidDate(value)) {
+          return "";
+        }
+
+        const date = new Date(value);
+        const pad = function (num) {
+          return String(num).padStart(2, "0");
+        };
+
+        return [
+          date.getMonth() + 1,
+          "/",
+          date.getDate(),
+          " ",
+          pad(date.getHours()),
+          ":",
+          pad(date.getMinutes())
+        ].join("");
+      }
+
+      function formatCompactDateOnly(value) {
+        if (!value || !isValidDate(value)) {
+          return "";
+        }
+
+        const date = new Date(value);
+        return [date.getMonth() + 1, "/", date.getDate()].join("");
+      }
+
+      function formatWeekdayToken(value) {
+        if (!value || !isValidDate(value)) {
+          return "";
+        }
+
+        const labels = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+        return labels[new Date(value).getDay()];
+      }
+
+      function isMidnightDateTime(value) {
+        if (!value || !isValidDate(value)) {
+          return false;
+        }
+
+        const date = new Date(value);
+        return date.getHours() === 0 && date.getMinutes() === 0;
+      }
+
+      function hasExplicitWeekdayToken(text) {
+        return /(?:周|星期)[一二三四五六日天]/.test(String(text || ""));
+      }
+
+      function supportsPreparedState(record) {
+        return Boolean(record) && record.type === "meeting";
+      }
+
+      function isPrepared(record) {
+        return supportsPreparedState(record) && Boolean(record.prepared) && !record.completed;
+      }
+
+      function getDisplayText(record) {
+        const source = record && typeof record.text === "string" ? record.text.trim() : "";
+        if (!source || !record || !isValidDate(record.eventAt) || hasExplicitWeekdayToken(source)) {
+          return source;
+        }
+
+        const rangeText = injectWeekdayRangeIntoText(source, record.eventAt);
+        if (rangeText !== source) {
+          return rangeText;
+        }
+
+        const weekday = formatWeekdayToken(record.eventAt);
+        if (!weekday) {
+          return source;
+        }
+
+        return injectWeekdayIntoText(source, weekday);
+      }
+
+      function injectWeekdayIntoText(source, weekday) {
+        const fullDateText = insertWeekdayAfterPattern(
+          source,
+          /(\d{4}\s*(?:年|[\/.-])\s*\d{1,2}\s*(?:月|[\/.-])\s*\d{1,2}\s*(?:日|号)?)/,
+          " " + weekday
+        );
+        if (fullDateText !== source) {
+          return fullDateText;
+        }
+
+        const monthDayText = insertWeekdayAfterPattern(
+          source,
+          /(\d{1,2}\s*(?:月|[\/.-])\s*\d{1,2}\s*(?:日|号)?)/,
+          " " + weekday
+        );
+        if (monthDayText !== source) {
+          return monthDayText;
+        }
+
+        return insertWeekdayAfterPattern(source, /(大后天|后天|明天|今天|今日)/, weekday);
+      }
+
+      function injectWeekdayRangeIntoText(source, startValue) {
+        const rangeInfo = extractDateRangeInfo(source, startValue);
+        if (!rangeInfo) {
+          return source;
+        }
+
+        const weekdayRange = formatWeekdayToken(rangeInfo.startDate) + "至" + formatWeekdayToken(rangeInfo.endDate);
+        const insertAt = rangeInfo.index + rangeInfo.length;
+        return source.slice(0, insertAt) + " " + weekdayRange + source.slice(insertAt);
+      }
+
+      function extractDateRangeInfo(source, startValue) {
+        if (!source || !isValidDate(startValue)) {
+          return null;
+        }
+
+        const startDate = new Date(startValue);
+
+        let match = source.match(/(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?\s*(?:到|至|-|~|～)\s*(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?/);
+        if (match && match.index != null) {
+          const year = startDate.getFullYear();
+          const rangeStart = new Date(year, Number(match[1]) - 1, Number(match[2]));
+          const rangeEnd = new Date(year, Number(match[3]) - 1, Number(match[4]));
+          if (rangeEnd.getTime() < rangeStart.getTime()) {
+            rangeEnd.setFullYear(rangeEnd.getFullYear() + 1);
+          }
+          return {
+            index: match.index,
+            length: match[0].length,
+            startDate: rangeStart,
+            endDate: rangeEnd
+          };
+        }
+
+        match = source.match(/(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?\s*(?:到|至|-|~|～)\s*(\d{1,2})\s*(?:日|号)?(?!\s*(?:月|[\/.-]))/);
+        if (match && match.index != null) {
+          const year = startDate.getFullYear();
+          const rangeStart = new Date(year, Number(match[1]) - 1, Number(match[2]));
+          const rangeEnd = new Date(year, Number(match[1]) - 1, Number(match[3]));
+          if (rangeEnd.getTime() < rangeStart.getTime()) {
+            rangeEnd.setMonth(rangeEnd.getMonth() + 1);
+          }
+          return {
+            index: match.index,
+            length: match[0].length,
+            startDate: rangeStart,
+            endDate: rangeEnd
+          };
+        }
+
+        return null;
+      }
+
+      function insertWeekdayAfterPattern(source, pattern, suffix) {
+        const match = String(source || "").match(pattern);
+        if (!match || match.index == null) {
+          return source;
+        }
+
+        const insertAt = match.index + match[0].length;
+        return source.slice(0, insertAt) + suffix + source.slice(insertAt);
+      }
+
+      function highlightRecordText(text) {
+        const source = String(text || "");
+        const tokenPattern = /(想法[:：]?|今天|明天|后天|大后天|今晚|今早|明早|明晚|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]|截止|DDL|ddl|deadline|之前|[\u4e00-\u9fa5]{2,3}\s*[A-Za-z]?\d{3,4}|\d{1,2}[:：]\d{2}|\d{1,2}\s*点(?:半|[0-5]?\d\s*分?)?|\d{4}(?:年|[\/.-])\d{1,2}(?:月|[\/.-])\d{1,2}|\d{1,2}(?:月|[\/.-])\d{1,2}(?:日|号)?|\d{1,2}(?:日|号))/g;
+        let lastIndex = 0;
+        let html = "";
+        let match;
+
+        while ((match = tokenPattern.exec(source)) !== null) {
+          const token = match[0];
+          const index = match.index;
+          html += escapeHtml(source.slice(lastIndex, index));
+          html += wrapHighlightedToken(token);
+          lastIndex = index + token.length;
+        }
+
+        html += escapeHtml(source.slice(lastIndex));
+        return html;
+      }
+
+      function wrapHighlightedToken(token) {
+        if (/^想法/.test(token) || /^(截止|DDL|ddl|deadline|之前)$/i.test(token)) {
+          return '<span class="code-inline-keyword">' + escapeHtml(token) + "</span>";
+        }
+
+        const locationWithPrefix = splitLocationPrefix(token);
+        if (locationWithPrefix) {
+          return escapeHtml(locationWithPrefix.prefix)
+            + '<span class="code-inline-location">' + escapeHtml(locationWithPrefix.location) + "</span>";
+        }
+
+        if (isLocationToken(token)) {
+          return '<span class="code-inline-location">' + escapeHtml(token) + "</span>";
+        }
+
+        if (/^\d{1,2}[:：]\d{2}$/.test(token) || /点/.test(token)) {
+          return '<span class="code-inline-time">' + escapeHtml(token) + "</span>";
+        }
+
+        return '<span class="code-inline-date">' + escapeHtml(token) + "</span>";
+      }
+
+      function isLocationToken(token) {
+        return /^[\u4e00-\u9fa5]{2,3}\s*[A-Za-z]?\d{3,4}$/.test(String(token || "").trim());
+      }
+
+      function splitLocationPrefix(token) {
+        const source = String(token || "");
+        if (!/^在/.test(source)) {
+          return null;
+        }
+
+        const location = source.slice(1).trim();
+        if (!isLocationToken(location)) {
+          return null;
+        }
+
+        return {
+          prefix: source.slice(0, source.indexOf(location)),
+          location: location
+        };
+      }
+
+      function inferUpdateFromText(text, record) {
+        const source = String(text || "").trim();
+        const ideaMatch = source.match(/^\s*(?:想法|idea)\s*(?:[:：]\s*)?(.*)$/i);
+        if (ideaMatch) {
+          return {
+            text: (ideaMatch[1] || "").trim() || source,
+            type: "idea",
+            eventAt: ""
+          };
+        }
+
+        const naturalInfo = extractNaturalDateInfo(source);
+        if (naturalInfo.hasTemporalHint) {
+          const inferredType = inferTimedTypeFromText(source);
+          return {
+            text: source,
+            type: inferredType,
+            eventAt: resolveTimedEventAt(inferredType, "", naturalInfo) || record.eventAt || ""
+          };
+        }
+
+        return {
+          text: source,
+          type: record.type,
+          eventAt: isTimedType(record.type) ? record.eventAt || "" : ""
+        };
+      }
+
+      function getVisibleRecords() {
+        const keyword = state.search.toLowerCase();
+        return state.records
+          .slice()
+          .sort(sortRecords)
+          .filter(function (record) {
+            if (state.filter === "completed") {
+              if (!isVisuallyCompleted(record)) {
+                return false;
+              }
+            } else if (state.filter !== "all") {
+              if (record.completed || record.type !== state.filter) {
+                return false;
+              }
+            }
+
+            if (!keyword) {
+              return true;
+            }
+
+            const haystack = [
+              getDisplayText(record),
+              TYPE_LABELS[record.type],
+              getStatusSearchText(record),
+              record.eventAt ? formatDateTime(record.eventAt) : ""
+            ].join(" ").toLowerCase();
+
+            return haystack.includes(keyword);
+          });
+      }
+
+      function sortRecords(a, b) {
+        const aAutoPending = isAutoCompletionPending(a);
+        const bAutoPending = isAutoCompletionPending(b);
+        const nowTime = Date.now();
+        if (aAutoPending !== bAutoPending) {
+          return aAutoPending ? -1 : 1;
+        }
+
+        if (aAutoPending && bAutoPending) {
+          return getAutoCompletionSortScore(a) - getAutoCompletionSortScore(b);
+        }
+
+        if (a.completed !== b.completed) {
+          return a.completed ? 1 : -1;
+        }
+
+        if (a.completed && b.completed) {
+          return getCompletedSortTimestamp(b) - getCompletedSortTimestamp(a);
+        }
+
+        const timedPriorityComparison = compareTimedPriority(a, b, nowTime);
+        if (timedPriorityComparison !== 0) {
+          return timedPriorityComparison;
+        }
+
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+
+      function getCompletedSortTimestamp(record) {
+        const completedAt = getLatestHistoryAt(record, "completed");
+        if (isValidDate(completedAt)) {
+          return new Date(completedAt).getTime();
+        }
+
+        if (isValidDate(record && record.updatedAt)) {
+          return new Date(record.updatedAt).getTime();
+        }
+
+        if (isValidDate(record && record.createdAt)) {
+          return new Date(record.createdAt).getTime();
+        }
+
+        return 0;
+      }
+
+      function compareTimedPriority(left, right, nowTime) {
+        const leftMeta = getTimedPriorityMeta(left, nowTime);
+        const rightMeta = getTimedPriorityMeta(right, nowTime);
+        if (leftMeta.bucket !== rightMeta.bucket) {
+          return leftMeta.bucket - rightMeta.bucket;
+        }
+        if (leftMeta.value !== rightMeta.value) {
+          return leftMeta.value - rightMeta.value;
+        }
+        return 0;
+      }
+
+      function getTimedPriorityMeta(record, nowTime) {
+        if (!isTimedType(record.type) || !record.eventAt || record.completed) {
+          return { bucket: 3, value: 0 };
+        }
+
+        if (isAutoCompletionPending(record)) {
+          return { bucket: 2, value: Number.MAX_SAFE_INTEGER };
+        }
+
+        const startAt = new Date(record.eventAt).getTime();
+        const endAt = getTimedSortEndAt(record);
+        if (endAt != null && startAt <= nowTime && nowTime < endAt) {
+          return { bucket: 0, value: endAt - nowTime };
+        }
+
+        if (startAt >= nowTime) {
+          return { bucket: 1, value: startAt - nowTime };
+        }
+
+        const sortAnchor = endAt != null && endAt > startAt ? endAt : startAt;
+        return { bucket: 2, value: nowTime - sortAnchor };
+      }
+
+      function getTimedSortEndAt(record) {
+        if (!record || !record.eventAt) {
+          return null;
+        }
+
+        if (record.type === "meeting") {
+          const endAt = getMeetingEndAt(record);
+          return endAt ? endAt.getTime() : null;
+        }
+
+        return null;
+      }
+
+      function getStatusSearchText(record) {
+        if (isAutoCompletionPending(record)) {
+          return "已结束 待确认";
+        }
+        if (isPrepared(record)) {
+          return "已准备";
+        }
+        if (record.completed) {
+          return "已完成";
+        }
+        return "";
+      }
+
+      function isVisuallyCompleted(record) {
+        return Boolean(record && (record.completed || isAutoCompletionPending(record)));
+      }
+
+      function getAutoCompleteRef(record) {
+        if (!record) {
+          return "";
+        }
+        return [record.eventAt || "", record.text || ""].join("|");
+      }
+
+      function clearAutoCompleteState(record) {
+        if (!record) {
+          return false;
+        }
+
+        const changed = Boolean(record.autoCompleteState || record.autoCompleteRef || record.autoCompletedAt);
+        record.autoCompleteState = "";
+        record.autoCompleteRef = "";
+        record.autoCompletedAt = "";
+        return changed;
+      }
+
+      function syncAutoCompletionState() {
+        const now = new Date().toISOString();
+        let changed = false;
+
+        state.records.forEach(function (record) {
+          if (!supportsPreparedState(record) || !record.eventAt) {
+            if (clearAutoCompleteState(record)) {
+              changed = true;
+            }
+            return;
+          }
+
+          const currentRef = getAutoCompleteRef(record);
+          if (record.autoCompleteRef && record.autoCompleteRef !== currentRef) {
+            clearAutoCompleteState(record);
+            changed = true;
+          }
+
+          if (record.completed) {
+            if (clearAutoCompleteState(record)) {
+              changed = true;
+            }
+            return;
+          }
+
+          if (!shouldAutoCompleteMeeting(record)) {
+            if (record.autoCompleteState === "pending") {
+              clearAutoCompleteState(record);
+              changed = true;
+            }
+            return;
+          }
+
+          if (record.autoCompleteState === "reverted" && record.autoCompleteRef === currentRef) {
+            return;
+          }
+
+          if (record.autoCompleteState !== "pending") {
+            record.autoCompleteState = "pending";
+            record.autoCompleteRef = currentRef;
+            record.autoCompletedAt = now;
+            pushHistory(record, "auto_completed", now);
+            changed = true;
+          }
+        });
+
+        if (changed) {
+          persist();
+        }
+      }
+
+      function isAutoCompletionPending(record) {
+        return supportsPreparedState(record)
+          && !record.completed
+          && record.autoCompleteState === "pending"
+          && record.autoCompleteRef === getAutoCompleteRef(record);
+      }
+
+      function shouldAutoCompleteMeeting(record) {
+        const endAt = getMeetingEndAt(record);
+        return Boolean(endAt) && endAt.getTime() <= Date.now();
+      }
+
+      function getAutoCompletionSortScore(record) {
+        const endAt = getMeetingEndAt(record);
+        if (!endAt) {
+          return Number.MAX_SAFE_INTEGER;
+        }
+        return Date.now() - endAt.getTime();
+      }
+
+      function getMeetingEndAt(record) {
+        if (!record || record.type !== "meeting" || !isValidDate(record.eventAt)) {
+          return null;
+        }
+
+        const start = new Date(record.eventAt);
+        const rangeInfo = extractDateRangeInfo(record.text, record.eventAt);
+        if (rangeInfo) {
+          const end = new Date(rangeInfo.endDate);
+          end.setHours(23, 59, 0, 0);
+          return end;
+        }
+
+        const end = new Date(start.getTime());
+        const range = extractTimeRangeFromText(record.text);
+        if (range) {
+          end.setHours(range.hours, range.minutes, 0, 0);
+          if (end.getTime() <= start.getTime()) {
+            end.setTime(start.getTime() + 60 * 60 * 1000);
+          }
+          return end;
+        }
+
+        if (isMidnightDateTime(record.eventAt)) {
+          end.setHours(23, 59, 0, 0);
+          return end;
+        }
+
+        end.setTime(start.getTime() + 60 * 60 * 1000);
+        return end;
+      }
+
+      function buildConflictMap(records) {
+        const map = {};
+        records.forEach(function (record) {
+          map[record.id] = [];
+        });
+
+        const candidates = records
+          .filter(isConflictCandidate)
+          .map(buildConflictWindow)
+          .filter(Boolean)
+          .sort(function (a, b) {
+            return a.start.getTime() - b.start.getTime();
+          });
+
+        for (let i = 0; i < candidates.length; i += 1) {
+          for (let j = i + 1; j < candidates.length; j += 1) {
+            const left = candidates[i];
+            const right = candidates[j];
+
+            if (!isSameLocalCalendarDay(left.start, right.start)) {
+              if (right.start.getTime() - left.start.getTime() > 24 * 60 * 60 * 1000) {
+                break;
+              }
+              continue;
+            }
+
+            if (right.start.getTime() >= left.end.getTime()) {
+              break;
+            }
+
+            const key = createConflictKey(left.record.id, right.record.id);
+            if (isConflictIgnored(left.record, right.record, key)) {
+              continue;
+            }
+
+            map[left.record.id].push({
+              key: key,
+              title: buildConflictTitle(right.record)
+            });
+            map[right.record.id].push({
+              key: key,
+              title: buildConflictTitle(left.record)
+            });
+          }
+        }
+
+        return map;
+      }
+
+      function isConflictCandidate(record) {
+        return record
+          && record.type === "meeting"
+          && !isVisuallyCompleted(record)
+          && isValidDate(record.eventAt)
+          && hasConflictTimeInfo(record);
+      }
+
+      function hasConflictTimeInfo(record) {
+        if (!record || !record.eventAt) {
+          return false;
+        }
+
+        if (hasExplicitTimeToken(record.text)) {
+          return true;
+        }
+
+        if (!isMidnightDateTime(record.eventAt)) {
+          return true;
+        }
+
+        const naturalInfo = extractNaturalDateInfo(record.text);
+        return Boolean(naturalInfo.eventAt);
+      }
+
+      function buildConflictWindow(record) {
+        if (!isConflictCandidate(record)) {
+          return null;
+        }
+
+        const start = new Date(record.eventAt);
+        const range = extractTimeRangeFromText(record.text);
+        const end = new Date(start.getTime());
+
+        if (range) {
+          end.setHours(range.hours, range.minutes, 0, 0);
+          if (end.getTime() <= start.getTime()) {
+            end.setTime(start.getTime() + 60 * 60 * 1000);
+          }
+        } else {
+          end.setTime(start.getTime() + 60 * 60 * 1000);
+        }
+
+        return {
+          record: record,
+          start: start,
+          end: end
+        };
+      }
+
+      function extractTimeRangeFromText(text) {
+        const source = String(text || "");
+        const rangeMatch = source.match(/((?:凌晨|今早|明早|早上|今晨|上午|中午|今午|下午|傍晚|晚上|今晚|明晚)?\s*(?:\d{1,2}\s*[:：]\s*\d{1,2}|\d{1,2}\s*点\s*(?:半|[0-5]?\d\s*分?)?))\s*(?:到|至|-|~|～)\s*((?:凌晨|今早|明早|早上|今晨|上午|中午|今午|下午|傍晚|晚上|今晚|明晚)?\s*(?:\d{1,2}\s*[:：]\s*\d{1,2}|\d{1,2}\s*点\s*(?:半|[0-5]?\d\s*分?)?))/);
+        if (!rangeMatch) {
+          return null;
+        }
+
+        const fallbackLabel = extractTimePeriodLabel(rangeMatch[1]) || extractTimePeriodLabel(source);
+        return parseTimeFragment(rangeMatch[2], fallbackLabel);
+      }
+
+      function parseTimeFragment(text, fallbackPeriodLabel) {
+        const source = String(text || "");
+        const periodLabel = extractTimePeriodLabel(source) || fallbackPeriodLabel || "";
+        const hmMatch = source.match(/(\d{1,2})\s*[:：]\s*(\d{1,2})/);
+        if (hmMatch) {
+          return {
+            hours: clampHour(applyTimePeriod(Number(hmMatch[1]), periodLabel)),
+            minutes: clampMinute(Number(hmMatch[2]))
+          };
+        }
+
+        const pointMatch = source.match(/(凌晨|今早|明早|早上|今晨|上午|中午|今午|下午|傍晚|晚上|今晚|明晚)?\s*(\d{1,2})\s*点\s*(半|[0-5]?\d\s*分?)?/);
+        if (!pointMatch) {
+          return null;
+        }
+
+        const minutes = pointMatch[3]
+          ? (pointMatch[3].indexOf("半") >= 0 ? 30 : clampMinute(parseInt(pointMatch[3], 10) || 0))
+          : 0;
+
+        return {
+          hours: clampHour(applyTimePeriod(Number(pointMatch[2]), pointMatch[1] || periodLabel)),
+          minutes: minutes
+        };
+      }
+
+      function buildConflictTitle(otherRecord) {
+        const timeLabel = formatRecordTimeToken(otherRecord);
+        return '与「' + summarizeConflictText(getDisplayText(otherRecord)) + '」'
+          + (timeLabel ? "（" + timeLabel + "）" : "")
+          + "可能时间冲突，点击忽略这组提醒。";
+      }
+
+      function summarizeConflictText(text) {
+        const source = String(text || "").trim();
+        if (source.length <= 18) {
+          return source;
+        }
+        return source.slice(0, 18) + "…";
+      }
+
+      function createConflictKey(leftId, rightId) {
+        return [leftId, rightId].sort().join("::");
+      }
+
+      function isConflictIgnored(leftRecord, rightRecord, key) {
+        const leftKeys = normalizeConflictKeys(leftRecord && leftRecord.ignoredConflictKeys);
+        const rightKeys = normalizeConflictKeys(rightRecord && rightRecord.ignoredConflictKeys);
+        return leftKeys.indexOf(key) >= 0 || rightKeys.indexOf(key) >= 0;
+      }
+
+      function ignoreConflict(id, key) {
+        if (!id || !key) {
+          return;
+        }
+
+        const ids = key.split("::");
+        if (ids.length !== 2) {
+          return;
+        }
+
+        let changed = false;
+        state.records.forEach(function (record) {
+          if (ids.indexOf(record.id) === -1) {
+            return;
+          }
+
+          const keys = normalizeConflictKeys(record.ignoredConflictKeys);
+          if (keys.indexOf(key) === -1) {
+            keys.push(key);
+            record.ignoredConflictKeys = keys;
+            record.updatedAt = new Date().toISOString();
+            changed = true;
+          }
+        });
+
+        if (!changed) {
+          return;
+        }
+
+        persist();
+        render();
+        setStatus("已忽略这组时间冲突提醒。");
+      }
+
+      function isUpcomingMeeting(record) {
+        if (!isTimedType(record.type) || !record.eventAt || record.completed) {
+          return false;
+        }
+
+        const diff = new Date(record.eventAt).getTime() - Date.now();
+        return diff >= 0 && diff <= 24 * 60 * 60 * 1000;
+      }
+
+      function getUpcomingLabel(record) {
+        const diff = new Date(record.eventAt).getTime() - Date.now();
+        const hours = diff / (60 * 60 * 1000);
+        const baseLabel = record.type === "deadline" ? "截止" : "日程";
+        if (hours <= 2) {
+          return record.type === "deadline" ? "即将截止" : "即将开始";
+        }
+        if (hours <= 24) {
+          return record.type === "deadline" ? "24h内截止" : "24 小时内";
+        }
+        return baseLabel;
+      }
+
+      function inferTypeAndText(text, explicitEventAt, manualType) {
+        const naturalInfo = extractNaturalDateInfo(text);
+        const autoTimedType = inferTimedTypeFromText(text);
+
+        if (manualType && manualType !== "auto") {
+          const resolvedManualEventAt = resolveTimedEventAt(manualType, explicitEventAt, naturalInfo);
+          return {
+            text: text,
+            type: manualType,
+            eventAt: resolvedManualEventAt
+          };
+        }
+
+        const ideaMatch = text.match(/^\s*(?:想法|idea)\s*(?:[:：]\s*)?(.*)$/i);
+        if (ideaMatch) {
+          return {
+            text: (ideaMatch[1] || "").trim() || text.trim(),
+            type: "idea",
+            eventAt: ""
+          };
+        }
+
+        if (explicitEventAt || naturalInfo.hasTemporalHint) {
+          return {
+            text: text,
+            type: autoTimedType,
+            eventAt: resolveTimedEventAt(autoTimedType, explicitEventAt, naturalInfo)
+          };
+        }
+
+        return {
+          text: text,
+          type: "todo",
+          eventAt: explicitEventAt
+        };
+      }
+
+      function isTimedType(type) {
+        return type === "meeting" || type === "deadline";
+      }
+
+      function isDeadlineHintText(text) {
+        const source = String(text || "");
+        if (/(?:\bddl\b|deadline|截止)/i.test(source)) {
+          return true;
+        }
+
+        return /(?:今天|明天|后天|大后天|今晚|今早|明早|明晚|周[一二三四五六日天]|星期[一二三四五六日天]|\d{4}(?:年|[\/.-])\d{1,2}(?:月|[\/.-])\d{1,2}|\d{1,2}(?:月|[\/.-])\d{1,2}(?:日|号)?|\d{1,2}\s*点(?:半|[0-5]?\d\s*分?)?|\d{1,2}[:：]\d{2})\s*(?:前|之前)/.test(source);
+      }
+
+      function inferTimedTypeFromText(text) {
+        return isDeadlineHintText(text) ? "deadline" : "meeting";
+      }
+
+      function resolveTimedEventAt(type, explicitEventAt, naturalInfo) {
+        if (!isTimedType(type)) {
+          return "";
+        }
+
+        if (explicitEventAt) {
+          return explicitEventAt;
+        }
+
+        if (naturalInfo.eventAt) {
+          return naturalInfo.eventAt;
+        }
+
+        if (naturalInfo.date) {
+          return type === "deadline"
+            ? toEndOfDayIso(naturalInfo.date)
+            : toStartOfDayIso(naturalInfo.date);
+        }
+
+        return "";
+      }
+
+      function extractNaturalDateInfo(text, referenceNow) {
+        const source = String(text || "").trim();
+        if (!source) {
+          return { hasTemporalHint: false, eventAt: "", date: null };
+        }
+
+        const dateInfo = parseDateFromText(source, referenceNow);
+        const timeInfo = parseTimeFromText(source);
+        const hasTemporalHint = dateInfo.matched || timeInfo.matched || /(?:今天|明天|后天|大后天|今晚|今早|明早|明晚|周[一二三四五六日天]|星期[一二三四五六日天]|\d{4}(?:年|[\/.-])\d{1,2}(?:月|[\/.-])\d{1,2}|\d{1,2}(?:月|[\/.-])\d{1,2})/.test(source);
+
+        if (!hasTemporalHint) {
+          return { hasTemporalHint: false, eventAt: "", date: null };
+        }
+
+        if (!dateInfo.matched) {
+          return { hasTemporalHint: true, eventAt: "", date: null };
+        }
+
+        const date = new Date(dateInfo.date.getTime());
+        if (timeInfo.matched) {
+          date.setHours(timeInfo.hours, timeInfo.minutes, 0, 0);
+          return { hasTemporalHint: true, eventAt: date.toISOString(), date: dateInfo.date };
+        }
+
+        if (timeInfo.defaultHours != null) {
+          date.setHours(timeInfo.defaultHours, timeInfo.defaultMinutes || 0, 0, 0);
+          return { hasTemporalHint: true, eventAt: date.toISOString(), date: dateInfo.date };
+        }
+
+        return { hasTemporalHint: true, eventAt: "", date: dateInfo.date };
+      }
+
+      function parseExplicitCalendarDate(text, referenceNow) {
+        const now = isValidDate(referenceNow) ? new Date(referenceNow) : new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        const fullDateMatch = text.match(/(\d{4})\s*(?:年|[\/.-])\s*(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?/);
+        if (fullDateMatch) {
+          return {
+            matched: true,
+            date: new Date(Number(fullDateMatch[1]), Number(fullDateMatch[2]) - 1, Number(fullDateMatch[3]))
+          };
+        }
+
+        const monthDayMatch = text.match(/(?:^|[^\d])(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?/);
+        if (monthDayMatch) {
+          const year = now.getFullYear();
+          const date = new Date(year, Number(monthDayMatch[1]) - 1, Number(monthDayMatch[2]));
+          if (date.getTime() < today.getTime() - 24 * 60 * 60 * 1000) {
+            date.setFullYear(year + 1);
+          }
+          return { matched: true, date: date };
+        }
+
+        return { matched: false, date: null };
+      }
+
+      function parseDateFromText(text, referenceNow) {
+        const now = isValidDate(referenceNow) ? new Date(referenceNow) : new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const explicitDateInfo = parseExplicitCalendarDate(text, now);
+        if (explicitDateInfo.matched) {
+          return explicitDateInfo;
+        }
+
+        const relativeMap = [
+          { pattern: /大后天/, offset: 3 },
+          { pattern: /后天/, offset: 2 },
+          { pattern: /明天|明早|明晚/, offset: 1 },
+          { pattern: /今天|今日|今晚|今早|今晨|今午/, offset: 0 }
+        ];
+
+        for (let i = 0; i < relativeMap.length; i += 1) {
+          if (relativeMap[i].pattern.test(text)) {
+            const date = new Date(today);
+            date.setDate(date.getDate() + relativeMap[i].offset);
+            return { matched: true, date: date };
+          }
+        }
+
+        const weekdayMatch = text.match(/(下周|本周|这周)\s*([一二三四五六日天])/)
+          || text.match(/(下周|本周|这周)?\s*(?:周|星期)\s*([一二三四五六日天])/);
+        if (weekdayMatch) {
+          const target = weekdayToIndex(weekdayMatch[2]);
+          const current = (now.getDay() + 6) % 7;
+          let diff;
+
+          if (weekdayMatch[1] === "下周") {
+            diff = (7 - current) + target;
+          } else {
+            diff = target - current;
+            if (diff < 0) {
+              diff += 7;
+            }
+          }
+
+          const date = new Date(today);
+          date.setDate(date.getDate() + diff);
+          return { matched: true, date: date };
+        }
+
+        return { matched: false, date: null };
+      }
+
+      function parseTimeFromText(text) {
+        const defaultTime = inferDefaultTimeByWords(text);
+        const periodLabel = extractTimePeriodLabel(text);
+        const hmMatch = text.match(/(\d{1,2})\s*[:：]\s*(\d{1,2})/);
+        if (hmMatch) {
+          return {
+            matched: true,
+            hours: clampHour(applyTimePeriod(Number(hmMatch[1]), periodLabel)),
+            minutes: clampMinute(Number(hmMatch[2]))
+          };
+        }
+
+        const pointMatch = text.match(/(凌晨|今早|明早|早上|今晨|上午|中午|今午|下午|傍晚|晚上|今晚|明晚)?\s*(\d{1,2})\s*点\s*(半|[0-5]?\d\s*分?)?/);
+        if (pointMatch) {
+          let hours = Number(pointMatch[2]);
+          let minutes = 0;
+
+          if (pointMatch[3]) {
+            minutes = pointMatch[3].indexOf("半") >= 0 ? 30 : clampMinute(parseInt(pointMatch[3], 10) || 0);
+          }
+
+          hours = applyTimePeriod(hours, pointMatch[1] || periodLabel || "");
+          return {
+            matched: true,
+            hours: clampHour(hours),
+            minutes: minutes
+          };
+        }
+
+        return {
+          matched: false,
+          hours: 0,
+          minutes: 0,
+          defaultHours: defaultTime ? defaultTime.hours : null,
+          defaultMinutes: defaultTime ? defaultTime.minutes : null
+        };
+      }
+
+      function extractTimePeriodLabel(text) {
+        const match = text.match(/凌晨|今早|明早|早上|今晨|上午|中午|今午|下午|傍晚|晚上|今晚|明晚/);
+        return match ? match[0] : "";
+      }
+
+      function inferDefaultTimeByWords(text) {
+        if (/凌晨/.test(text)) {
+          return { hours: 1, minutes: 0 };
+        }
+        if (/早上|今早|明早|今晨|上午/.test(text)) {
+          return { hours: 9, minutes: 0 };
+        }
+        if (/中午|今午/.test(text)) {
+          return { hours: 12, minutes: 0 };
+        }
+        if (/下午/.test(text)) {
+          return { hours: 15, minutes: 0 };
+        }
+        if (/傍晚/.test(text)) {
+          return { hours: 18, minutes: 0 };
+        }
+        if (/晚上|今晚|明晚/.test(text)) {
+          return { hours: 19, minutes: 0 };
+        }
+        return null;
+      }
+
+      function applyTimePeriod(hours, label) {
+        if (!label) {
+          return hours;
+        }
+
+        if (/凌晨/.test(label)) {
+          return hours === 12 ? 0 : hours;
+        }
+
+        if (/今早|明早|早上|今晨|上午/.test(label)) {
+          return hours === 12 ? 0 : hours;
+        }
+
+        if (/中午|今午/.test(label)) {
+          if (hours < 11) {
+            return hours + 12;
+          }
+          return hours;
+        }
+
+        if (/下午|傍晚|晚上|今晚|明晚/.test(label)) {
+          if (hours < 12) {
+            return hours + 12;
+          }
+        }
+
+        return hours;
+      }
+
+      function weekdayToIndex(label) {
+        const map = {
+          "一": 0,
+          "二": 1,
+          "三": 2,
+          "四": 3,
+          "五": 4,
+          "六": 5,
+          "日": 6,
+          "天": 6
+        };
+        return map[label];
+      }
+
+      function clampHour(value) {
+        return Math.max(0, Math.min(23, value));
+      }
+
+      function clampMinute(value) {
+        return Math.max(0, Math.min(59, value));
+      }
+
+      function hasExplicitTimeToken(text) {
+        return /(\d{1,2}[:：]\d{2}|\d{1,2}\s*点(?:半|[0-5]?\d\s*分?)?)/.test(String(text || ""));
+      }
+
+      function toEndOfDayIso(value) {
+        if (!value || !isValidDate(value)) {
+          return "";
+        }
+
+        const date = new Date(value);
+        date.setHours(23, 59, 0, 0);
+        return date.toISOString();
+      }
+
+      function toStartOfDayIso(value) {
+        if (!value || !isValidDate(value)) {
+          return "";
+        }
+
+        const date = new Date(value);
+        date.setHours(0, 0, 0, 0);
+        return date.toISOString();
+      }
+
+      function isSameLocalCalendarDay(left, right) {
+        if (!isValidDate(left) || !isValidDate(right)) {
+          return false;
+        }
+
+        const a = new Date(left);
+        const b = new Date(right);
+        return a.getFullYear() === b.getFullYear()
+          && a.getMonth() === b.getMonth()
+          && a.getDate() === b.getDate();
+      }
+
+      function shouldRepairStoredEventAt(text, currentEventAt, inferredEventAt, referenceNow) {
+        if (!inferredEventAt) {
+          return false;
+        }
+
+        if (!currentEventAt) {
+          return true;
+        }
+
+        const explicitDateInfo = parseExplicitCalendarDate(String(text || ""), referenceNow);
+        if (!explicitDateInfo.matched) {
+          return false;
+        }
+
+        return !isSameLocalCalendarDay(currentEventAt, inferredEventAt);
+      }
+
+      function getTextResolutionReferenceAt(record, text, type) {
+        const history = Array.isArray(record && record.history)
+          ? normalizeHistoryEntries(record.history)
+          : [];
+
+        for (let index = history.length - 1; index >= 0; index -= 1) {
+          const entry = history[index];
+          if ((entry.action === "created" || entry.action === "edited")
+            && entry.text === text
+            && entry.type === type
+            && isValidDate(entry.at)) {
+            return entry.at;
+          }
+        }
+
+        if (isValidDate(record && record.createdAt)) {
+          return record.createdAt;
+        }
+
+        if (isValidDate(record && record.updatedAt)) {
+          return record.updatedAt;
+        }
+
+        return "";
+      }
+
+      function loadRecords() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) {
+            return [];
+          }
+
+          return parseRecordsPayload(raw);
+        } catch (error) {
+          console.error(error);
+          return [];
+        }
+      }
+
+      function persist() {
+        saveLocalRecords();
+        queueSyncFileWrite();
+        queueRemoteWrite();
+      }
+
+      function saveLocalRecords() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(buildRecordsPayload()));
+      }
+
+      function buildRecordsPayload(extra) {
+        return Object.assign({
+          version: 2,
+          savedAt: new Date().toISOString(),
+          records: state.records
+        }, extra || {});
+      }
+
+      function parseRecordsPayload(raw) {
+        const parsed = JSON.parse(raw);
+        const records = Array.isArray(parsed) ? parsed : parsed.records;
+        if (!Array.isArray(records)) {
+          throw new Error("JSON 格式不正确");
+        }
+
+        return records.map(normalizeImportedRecord).filter(Boolean).sort(sortRecords);
+      }
+
+      function createHistorySnapshot(action, at, record) {
+        return {
+          action: action,
+          at: isValidDate(at) ? new Date(at).toISOString() : new Date().toISOString(),
+          text: record && typeof record.text === "string" ? record.text : "",
+          type: record && typeof record.type === "string" ? record.type : "",
+          eventAt: normalizeDateTime(record && record.eventAt),
+          prepared: Boolean(record && record.prepared),
+          completed: Boolean(record && record.completed)
+        };
+      }
+
+      function normalizeHistoryEntries(value, fallbackRecord) {
+        const normalized = Array.isArray(value)
+          ? value.map(function (entry) {
+            if (!entry || typeof entry !== "object" || !isValidDate(entry.at)) {
+              return null;
+            }
+
+            return {
+              action: typeof entry.action === "string" && entry.action ? entry.action : "updated",
+              at: new Date(entry.at).toISOString(),
+              text: typeof entry.text === "string" ? entry.text : "",
+              type: typeof entry.type === "string" ? entry.type : "",
+              eventAt: normalizeDateTime(entry.eventAt),
+              prepared: Boolean(entry.prepared),
+              completed: Boolean(entry.completed)
+            };
+          }).filter(Boolean)
+          : [];
+
+        if (normalized.length) {
+          return normalized.sort(function (a, b) {
+            return new Date(a.at).getTime() - new Date(b.at).getTime();
+          });
+        }
+
+        if (!fallbackRecord) {
+          return [];
+        }
+
+        const entries = [];
+        const createdAt = isValidDate(fallbackRecord.createdAt) ? new Date(fallbackRecord.createdAt).toISOString() : new Date().toISOString();
+        const updatedAt = isValidDate(fallbackRecord.updatedAt) ? new Date(fallbackRecord.updatedAt).toISOString() : createdAt;
+
+        entries.push(createHistorySnapshot("created", createdAt, fallbackRecord));
+        if (Boolean(fallbackRecord.completed)) {
+          entries.push(createHistorySnapshot("completed", updatedAt, fallbackRecord));
+        } else if (Boolean(fallbackRecord.prepared)) {
+          entries.push(createHistorySnapshot("prepared", updatedAt, fallbackRecord));
+        } else if (hasVisibleTimeDifference(createdAt, updatedAt)) {
+          entries.push(createHistorySnapshot("edited", updatedAt, fallbackRecord));
+        }
+
+        return entries;
+      }
+
+      function pushHistory(record, action, at) {
+        if (!record || !action) {
+          return;
+        }
+
+        const history = Array.isArray(record.history)
+          ? normalizeHistoryEntries(record.history)
+          : normalizeHistoryEntries(record.history, record);
+        history.push(createHistorySnapshot(action, at, record));
+        record.history = history;
+      }
+
+      function getLatestHistoryAt(record, action) {
+        const history = normalizeHistoryEntries(record && record.history, record);
+        for (let index = history.length - 1; index >= 0; index -= 1) {
+          if (history[index].action === action) {
+            return history[index].at;
+          }
+        }
+        return "";
+      }
+
+      function hasVisibleTimeDifference(left, right) {
+        if (!isValidDate(left) || !isValidDate(right)) {
+          return false;
+        }
+
+        return formatDateTime(left) !== formatDateTime(right);
+      }
+
+      function normalizeConflictKeys(value) {
+        if (!Array.isArray(value)) {
+          return [];
+        }
+
+        const unique = [];
+        value.forEach(function (item) {
+          if (typeof item !== "string" || !item) {
+            return;
+          }
+          if (unique.indexOf(item) === -1) {
+            unique.push(item);
+          }
+        });
+        return unique;
+      }
+
+      function normalizeImportedRecord(record) {
+        if (!record || typeof record !== "object") {
+          return null;
+        }
+
+        const text = typeof record.text === "string" ? record.text.trim() : "";
+        if (!text) {
+          return null;
+        }
+
+        let type = ["todo", "meeting", "deadline", "idea"].includes(record.type) ? record.type : "todo";
+        if (type === "meeting" && isDeadlineHintText(text)) {
+          type = "deadline";
+        }
+        const createdAt = isValidDate(record.createdAt) ? new Date(record.createdAt).toISOString() : new Date().toISOString();
+        const updatedAt = isValidDate(record.updatedAt) ? new Date(record.updatedAt).toISOString() : createdAt;
+        let eventAt = normalizeDateTime(record.eventAt);
+        if (isTimedType(type)) {
+          const repairReferenceAt = getTextResolutionReferenceAt(record, text, type);
+          const naturalInfo = extractNaturalDateInfo(text, repairReferenceAt);
+          const inferredEventAt = resolveTimedEventAt(type, "", naturalInfo);
+          if (shouldRepairStoredEventAt(text, eventAt, inferredEventAt, repairReferenceAt)) {
+            eventAt = inferredEventAt;
+          }
+        }
+
+        return {
+          id: typeof record.id === "string" && record.id ? record.id : createId(),
+          text: text,
+          type: type,
+          createdAt: createdAt,
+          eventAt: eventAt,
+          ignoredConflictKeys: normalizeConflictKeys(record.ignoredConflictKeys),
+          history: normalizeHistoryEntries(record.history, {
+            text: text,
+            type: type,
+            createdAt: createdAt,
+            eventAt: eventAt,
+            prepared: type === "meeting" ? Boolean(record.prepared) && !Boolean(record.completed) : false,
+            completed: Boolean(record.completed),
+            updatedAt: updatedAt
+          }),
+          autoCompleteState: typeof record.autoCompleteState === "string" ? record.autoCompleteState : "",
+          autoCompleteRef: typeof record.autoCompleteRef === "string" ? record.autoCompleteRef : "",
+          autoCompletedAt: normalizeDateTime(record.autoCompletedAt),
+          prepared: type === "meeting" ? Boolean(record.prepared) && !Boolean(record.completed) : false,
+          completed: Boolean(record.completed),
+          updatedAt: updatedAt
+        };
+      }
+
+      function focusQuickInput() {
+        quickInput.focus();
+        quickInput.setSelectionRange(quickInput.value.length, quickInput.value.length);
+      }
+
+      function focusEditField(id) {
+        requestAnimationFrame(function () {
+          const item = recordList.querySelector('.item[data-id="' + cssEscape(id) + '"] [data-role="edit-inline-text"]');
+          if (item) {
+            item.focus();
+            item.setSelectionRange(item.value.length, item.value.length);
+          }
+        });
+      }
+
+      function setStatus(message) {
+        statusText.textContent = message;
+        window.clearTimeout(statusTimer);
+        statusTimer = window.setTimeout(function () {
+          statusTimer = null;
+          updateStorageStatus();
+        }, 2200);
+      }
+
+      function updateStorageStatus() {
+        const busy = state.sync.writeInFlight
+          || state.sync.writeQueued
+          || state.remote.writeInFlight
+          || state.remote.writeQueued;
+
+        if (syncActionButton) {
+          syncActionButton.disabled = (!state.sync.supported && !state.remote.supported) || busy;
+          syncActionButton.textContent = getSyncActionText();
+          syncActionButton.title = getSyncActionTitle();
+          syncActionButton.classList.toggle("attention", Boolean(
+            (state.sync.handle && (state.sync.permissionNeeded || state.sync.error))
+            || state.remote.error
+            || (!state.sync.supported && !state.remote.enabled)
+          ));
+        }
+
+        if (connectSyncButton) {
+          connectSyncButton.textContent = state.sync.handle && state.sync.permissionNeeded ? "授权同步文件" : "连接同步文件";
+        }
+
+        if (createSyncButton) {
+          createSyncButton.disabled = !state.sync.supported;
+        }
+
+        if (remoteSyncButton) {
+          remoteSyncButton.textContent = state.remote.enabled ? "GitHub 已开" : "GitHub 同步";
+          remoteSyncButton.disabled = !state.remote.supported;
+        }
+
+        if (saveRemoteSyncButton) {
+          saveRemoteSyncButton.disabled = !state.remote.supported || state.remote.writeInFlight;
+        }
+
+        if (!statusTimer) {
+          statusText.textContent = getStorageStatusText();
+        }
+      }
+
+      function getSyncActionText() {
+        if (state.sync.handle && state.sync.permissionNeeded) {
+          return "授权同步";
+        }
+
+        if (state.sync.handle && state.sync.error) {
+          return "重试同步";
+        }
+
+        if (state.remote.enabled && (state.remote.writeInFlight || state.remote.writeQueued)) {
+          return "同步中";
+        }
+
+        if (state.remote.enabled && state.remote.error) {
+          return "重试GitHub";
+        }
+
+        if (state.sync.writeInFlight || state.sync.writeQueued) {
+          return "同步中";
+        }
+
+        if (state.remote.enabled) {
+          return "已同步";
+        }
+
+        if (!state.sync.supported) {
+          return "GitHub同步";
+        }
+
+        if (!state.sync.handle) {
+          return "连接同步";
+        }
+
+        return "已同步";
+      }
+
+      function getSyncActionTitle() {
+        if (state.sync.permissionNeeded) {
+          return "重新授权已选择的同步文件";
+        }
+
+        if (state.sync.error) {
+          return "重试读取或写入同步文件";
+        }
+
+        if (state.remote.enabled) {
+          return "手动从 GitHub 同步";
+        }
+
+        if (!state.sync.supported) {
+          return "设置 GitHub 同步，适用于 iOS 浏览器";
+        }
+
+        if (!state.sync.handle) {
+          return "选择 iCloud Drive 里的 JSON 同步文件";
+        }
+
+        return "手动检查同步文件更新";
+      }
+
+      function getStorageStatusText() {
+        if (state.remote.enabled) {
+          if (state.remote.error) {
+            return state.remote.error + "；本地有备份。";
+          }
+
+          if (state.remote.writeInFlight || state.remote.writeQueued) {
+            return "正在同步到 GitHub：" + state.remote.repo + "/" + state.remote.path;
+          }
+
+          return "已连接 GitHub 同步：" + state.remote.repo + "/" + state.remote.path;
+        }
+
+        if (!state.sync.supported) {
+          return "仅保存在当前浏览器；iOS 浏览器需设置 GitHub 同步。";
+        }
+
+        if (!state.sync.handle) {
+          return "仅保存在当前浏览器。";
+        }
+
+        const fileName = state.sync.fileName || DEFAULT_SYNC_FILE_NAME;
+        if (state.sync.permissionNeeded) {
+          return "同步文件需要授权：" + fileName;
+        }
+
+        if (state.sync.error) {
+          return state.sync.error + "；本地有备份。";
+        }
+
+        if (state.sync.writeInFlight || state.sync.writeQueued) {
+          return "正在同步到 " + fileName + "。";
+        }
+
+        if (state.sync.lastWriteAt || state.sync.lastModified) {
+          return "已连接同步文件：" + fileName;
+        }
+
+        return "已连接同步文件：" + fileName;
+      }
+
+      function formatDateTime(value) {
+        if (!value || !isValidDate(value)) {
+          return "无";
+        }
+
+        return new Intl.DateTimeFormat("zh-CN", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit"
+        }).format(new Date(value));
+      }
+
+      function formatFileStamp(date) {
+        const pad = function (value) {
+          return String(value).padStart(2, "0");
+        };
+        return [
+          date.getFullYear(),
+          pad(date.getMonth() + 1),
+          pad(date.getDate()),
+          "-",
+          pad(date.getHours()),
+          pad(date.getMinutes())
+        ].join("");
+      }
+
+      function normalizeDateTime(value) {
+        if (!value) {
+          return "";
+        }
+
+        const date = new Date(value);
+        if (!isValidDate(date)) {
+          return "";
+        }
+        return date.toISOString();
+      }
+
+      function toDateTimeLocalValue(value) {
+        if (!value || !isValidDate(value)) {
+          return "";
+        }
+
+        const date = new Date(value);
+        const pad = function (num) {
+          return String(num).padStart(2, "0");
+        };
+        return [
+          date.getFullYear(),
+          "-",
+          pad(date.getMonth() + 1),
+          "-",
+          pad(date.getDate()),
+          "T",
+          pad(date.getHours()),
+          ":",
+          pad(date.getMinutes())
+        ].join("");
+      }
+
+      function isValidDate(value) {
+        const date = value instanceof Date ? value : new Date(value);
+        return !Number.isNaN(date.getTime());
+      }
+
+      function createId() {
+        if (window.crypto && typeof window.crypto.randomUUID === "function") {
+          return window.crypto.randomUUID();
+        }
+        return "r-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function cssEscape(value) {
+        if (window.CSS && typeof window.CSS.escape === "function") {
+          return window.CSS.escape(value);
+        }
+        return String(value).replace(/["\\]/g, "\\$&");
+      }
+    })();
+  </script>
+</body>
+</html>

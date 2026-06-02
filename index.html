@@ -35,6 +35,11 @@
       height: 100%;
     }
 
+    html {
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+
     body {
       margin: 0;
       font-family: "Aptos", "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
@@ -216,10 +221,10 @@
       margin: 0;
       max-width: none;
       font-family: "Cascadia Mono", "SFMono-Regular", "Menlo", "Consolas", "Microsoft YaHei UI", monospace;
-      font-size: clamp(26px, 4vw, 34px);
+      font-size: 32px;
       line-height: 1.12;
       font-weight: 650;
-      letter-spacing: -0.03em;
+      letter-spacing: 0;
     }
 
     .title-block p {
@@ -247,7 +252,7 @@
       font-size: 24px;
       line-height: 1;
       font-weight: 650;
-      letter-spacing: -0.03em;
+      letter-spacing: 0;
     }
 
     .counter span {
@@ -916,9 +921,14 @@
       border: 0;
     }
 
-    @media (max-width: 920px) {
+    @media (max-width: 980px) {
       .workspace {
         display: block;
+      }
+
+      .shell {
+        width: 100%;
+        max-width: none;
       }
 
       .header {
@@ -932,33 +942,130 @@
       .toolbar-side {
         justify-content: flex-start;
       }
+
+      .toolbar-main,
+      .toolbar-side {
+        width: 100%;
+      }
+
+      .composer textarea,
+      .search input,
+      .item-inline-input,
+      .composer select,
+      .composer input[type="datetime-local"],
+      .remote-sync-panel input {
+        font-size: 16px;
+      }
+
+      .item {
+        grid-template-columns: 24px minmax(0, 1fr) 32px;
+        align-items: start;
+        gap: 8px;
+      }
+
+      .toggle {
+        width: 22px;
+        height: 22px;
+        margin-top: 2px;
+      }
+
+      .item-main {
+        width: 100%;
+        align-items: flex-start;
+      }
+
+      .item-line {
+        width: 100%;
+        flex-wrap: wrap;
+        align-items: baseline;
+        row-gap: 5px;
+        column-gap: 6px;
+      }
+
+      .item-text {
+        flex: 1 1 14rem;
+        font-size: 15px;
+        line-height: 1.45;
+        white-space: normal;
+        overflow: hidden;
+        text-overflow: clip;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+
+      .badge,
+      .code-token {
+        min-height: 20px;
+        font-size: 11px;
+        line-height: 18px;
+      }
+
+      .item-actions {
+        grid-column: auto;
+        align-self: start;
+        justify-content: flex-end;
+        flex-wrap: nowrap;
+        opacity: 1;
+      }
+
+      .icon-btn {
+        width: 30px;
+        min-width: 30px;
+        min-height: 30px;
+        padding: 0;
+        border-radius: 8px;
+        font-size: 20px;
+        line-height: 1;
+      }
     }
 
     @media (max-width: 760px) {
       .app {
-        padding: 12px 10px 22px;
+        padding: 0 0 calc(18px + env(safe-area-inset-bottom));
+      }
+
+      .shell {
+        border-left: 0;
+        border-right: 0;
+        border-radius: 0;
+        box-shadow: none;
       }
 
       .header,
       .composer,
       .toolbar,
+      .list-wrap,
       .footer {
-        padding-left: 14px;
-        padding-right: 14px;
+        padding-left: 12px;
+        padding-right: 12px;
       }
 
       .header {
-        padding-top: 18px;
-        gap: 12px;
+        padding-top: 14px;
+        padding-bottom: 10px;
+        gap: 10px;
+      }
+
+      .title-block h1 {
+        font-size: 24px;
+        line-height: 1.15;
+      }
+
+      .title-block p {
+        margin-top: 6px;
+        font-size: 12px;
       }
 
       .counter {
         max-width: none;
-        padding: 10px 12px;
+        padding: 9px 11px;
       }
 
       .counter strong {
-        font-size: 22px;
+        font-size: 21px;
       }
 
       .composer,
@@ -967,21 +1074,43 @@
         padding-bottom: 12px;
       }
 
+      .composer {
+        padding-top: 10px;
+      }
+
       .composer-card,
       .empty {
         border-radius: 12px;
       }
 
+      .composer-card {
+        padding: 10px;
+      }
+
+      .composer textarea {
+        min-height: 66px;
+        padding: 10px 12px;
+        font-size: 16px;
+        line-height: 1.45;
+      }
+
       .composer-bar {
-        align-items: flex-start;
+        align-items: center;
       }
 
       .meta-note {
         flex: 1 1 100%;
+        font-size: 10px;
       }
 
       .composer-advanced {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .composer-advanced .ghost,
+      .composer-advanced .primary {
+        min-width: 0;
+        min-height: 36px;
       }
 
       .remote-sync-panel {
@@ -993,26 +1122,38 @@
         flex-basis: 100%;
       }
 
+      .search input {
+        min-height: 42px;
+      }
+
       .toolbar-side .ghost {
         flex: 1 1 calc(50% - 5px);
         justify-content: center;
       }
 
       .segmented {
+        gap: 3px;
         flex-wrap: nowrap;
         width: 100%;
         overflow-x: auto;
         scrollbar-width: none;
       }
 
+      .segmented button {
+        flex: 0 0 auto;
+        min-height: 40px;
+        padding: 0 10px;
+        border-radius: 10px;
+        font-size: 13px;
+      }
+
       .segmented::-webkit-scrollbar {
         display: none;
       }
 
-      .item {
-        grid-template-columns: auto 1fr;
-        gap: 10px;
-        padding: 10px 10px;
+      .list {
+        min-height: 220px;
+        border-radius: 12px;
       }
 
       .item-line,
@@ -1020,10 +1161,22 @@
         gap: 6px;
       }
 
-      .item-actions {
-        grid-column: 2 / 3;
-        justify-content: flex-start;
-        opacity: 1;
+      .item {
+        padding: 10px 8px 9px;
+      }
+
+      .item-text {
+        flex-basis: 12rem;
+      }
+
+      .item-inline-edit {
+        width: 100%;
+        align-items: center;
+        flex-wrap: nowrap;
+      }
+
+      .item-inline-input {
+        min-height: 34px;
       }
 
       .footer {
@@ -1034,6 +1187,143 @@
       .idea-pane {
         width: auto;
         margin-top: 12px;
+      }
+    }
+
+    @media (max-width: 980px) and (orientation: landscape) {
+      .app {
+        padding: 8px 8px calc(12px + env(safe-area-inset-bottom));
+      }
+
+      .shell {
+        border-radius: 18px;
+      }
+
+      .header,
+      .composer,
+      .toolbar,
+      .list-wrap,
+      .footer {
+        padding-left: 12px;
+        padding-right: 12px;
+      }
+
+      .header {
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        padding-top: 10px;
+        padding-bottom: 8px;
+      }
+
+      .title-block h1 {
+        font-size: 22px;
+      }
+
+      .title-block p {
+        display: none;
+      }
+
+      .counter {
+        min-width: 118px;
+        max-width: none;
+        padding: 8px 10px;
+      }
+
+      .counter strong {
+        font-size: 20px;
+      }
+
+      .counter span {
+        margin-top: 2px;
+        font-size: 10px;
+        white-space: nowrap;
+      }
+
+      .composer {
+        padding-top: 8px;
+        padding-bottom: 8px;
+      }
+
+      .composer-card {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: stretch;
+        padding: 10px;
+      }
+
+      .composer textarea {
+        height: 52px;
+        min-height: 52px;
+        resize: none;
+      }
+
+      .composer-bar {
+        margin-top: 0;
+        align-items: flex-end;
+      }
+
+      .meta-note {
+        display: none;
+      }
+
+      .composer-actions {
+        align-self: flex-end;
+      }
+
+      .composer-advanced {
+        grid-column: 1 / -1;
+      }
+
+      .toolbar {
+        flex-wrap: nowrap;
+        align-items: center;
+        padding-top: 8px;
+        padding-bottom: 8px;
+      }
+
+      .toolbar-main {
+        width: auto;
+        flex: 0 0 auto;
+      }
+
+      .toolbar-side {
+        width: auto;
+        flex: 1 1 220px;
+        justify-content: flex-end;
+      }
+
+      .segmented {
+        width: auto;
+      }
+
+      .segmented button {
+        min-height: 34px;
+        padding: 0 9px;
+        border-radius: 8px;
+        font-size: 12px;
+      }
+
+      .search {
+        flex: 1 1 220px;
+        min-width: 180px;
+      }
+
+      .search input {
+        min-height: 36px;
+      }
+
+      .list-wrap {
+        padding-bottom: 10px;
+      }
+
+      .item {
+        padding-top: 8px;
+        padding-bottom: 8px;
+      }
+
+      .item-text {
+        -webkit-line-clamp: 1;
       }
     }
   </style>

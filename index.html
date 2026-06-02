@@ -1394,7 +1394,7 @@
       <section class="toolbar" aria-label="筛选与搜索">
         <div class="toolbar-main">
           <div class="segmented" id="filters" role="tablist" aria-label="记录筛选">
-            <button type="button" data-filter="all" class="active" aria-pressed="true">全部</button>
+            <button type="button" data-filter="all" class="active" aria-pressed="true">事项</button>
             <button type="button" data-filter="todo" aria-pressed="false">待办</button>
             <button type="button" data-filter="meeting" aria-pressed="false">日程</button>
             <button type="button" data-filter="deadline" aria-pressed="false">截止</button>
@@ -3629,7 +3629,11 @@
           .sort(sortRecords)
           .filter(function (record) {
             if (state.filter === "completed") {
-              if (!isVisuallyCompleted(record)) {
+              if (!isVisuallyCompleted(record) || record.type === "idea") {
+                return false;
+              }
+            } else if (state.filter === "all") {
+              if (record.type === "idea") {
                 return false;
               }
             } else if (state.filter !== "all") {

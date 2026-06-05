@@ -1523,10 +1523,12 @@
         deadline: "截止",
         idea: "想法"
       };
+      const initialLocalPayload = loadLocalRecordsEnvelope();
 
       const state = {
-        records: loadRecords(),
+        records: initialLocalPayload.records,
         recordsRevision: 0,
+        localPayloadAt: initialLocalPayload.payloadAt,
         filter: "all",
         search: "",
         editingId: null,
@@ -2533,12 +2535,16 @@
           return "empty";
         }
 
-        const records = parseRecordsPayload(raw);
-        state.records = records;
+        const payload = parseRecordsEnvelope(raw);
+        state.records = payload.records;
+        state.localPayloadAt = payload.payloadAt || state.localPayloadAt;
         state.editingId = null;
         state.sync.permissionNeeded = false;
         state.sync.error = "";
-        saveLocalRecords();
+        saveLocalRecords({
+          payloadSavedAt: payload.savedAt,
+          payloadSyncedAt: payload.syncedAt
+        });
         render();
         updateStorageStatus();
         return "loaded";
@@ -2986,6 +2992,22 @@
           }
 
           const recordsChanged = !recordsEqual(state.records, result.records);
+          if (recordsChanged && isRemoteOlderThanLocal(result)) {
+            state.remote.sha = result.sha || state.remote.sha;
+            state.remote.lastSyncAt = new Date().toISOString();
+            state.remote.lastPayloadAt = state.localPayloadAt || state.remote.lastPayloadAt;
+            state.remote.staleSha = result.sha || state.remote.staleSha;
+            state.remote.error = "";
+            state.remote.pushLocalNext = true;
+            saveRemoteSyncSettingsToLocal();
+            updateStorageStatus();
+            queueRemoteWrite();
+            if (!opts.silent) {
+              setStatus("GitHub 数据比本地旧，已保留本地并准备写回。");
+            }
+            return;
+          }
+
           if (recordsChanged
             && !state.remote.lastSyncAt
             && state.records.length
@@ -3002,7 +3024,10 @@
           state.remote.error = "";
           state.records = result.records;
           state.editingId = null;
-          saveLocalRecords();
+          saveLocalRecords({
+            payloadSavedAt: result.savedAt,
+            payloadSyncedAt: result.syncedAt
+          });
           queueSyncFileWrite();
           saveRemoteSyncSettingsToLocal();
           render();
@@ -3106,6 +3131,7 @@
           state.remote.sha = data && data.content && typeof data.content.sha === "string" ? data.content.sha : state.remote.sha;
           state.remote.lastSyncAt = new Date().toISOString();
           state.remote.lastPayloadAt = payloadAt;
+          state.localPayloadAt = payloadAt;
           state.remote.staleSha = baseSha || state.remote.staleSha;
           state.remote.pushLocalNext = state.recordsRevision !== revisionAtWriteStart || state.remote.writeQueued;
           state.remote.error = "";
@@ -3316,6 +3342,21 @@
         }
 
         return Boolean(lastPayloadTime && resultPayloadTime && resultPayloadTime < lastPayloadTime);
+      }
+
+      function isRemoteOlderThanLocal(result) {
+        if (!result || result.missing || !state.records.length || !result.records.length) {
+          return false;
+        }
+
+        const localPayloadTime = isValidDate(state.localPayloadAt)
+          ? new Date(state.localPayloadAt).getTime()
+          : 0;
+        const resultPayloadTime = isValidDate(result.payloadAt)
+          ? new Date(result.payloadAt).getTime()
+          : 0;
+
+        return Boolean(localPayloadTime && resultPayloadTime && resultPayloadTime < localPayloadTime);
       }
 
       function render() {
@@ -4066,7 +4107,11 @@
         });
 
         if (changed) {
-          persist();
+          persist({
+            preservePayloadTime: true,
+            skipSyncFile: true,
+            skipRemote: true
+          });
         }
       }
 
@@ -4714,29 +4759,59 @@
         return "";
       }
 
-      function loadRecords() {
+      function loadLocalRecordsEnvelope() {
         try {
           const raw = localStorage.getItem(STORAGE_KEY);
           if (!raw) {
-            return [];
+            return {
+              records: [],
+              savedAt: "",
+              syncedAt: "",
+              payloadAt: ""
+            };
           }
 
-          return parseRecordsPayload(raw);
+          return parseRecordsEnvelope(raw);
         } catch (error) {
           console.error(error);
-          return [];
+          return {
+            records: [],
+            savedAt: "",
+            syncedAt: "",
+            payloadAt: ""
+          };
         }
       }
 
-      function persist() {
+      function persist(options) {
+        const opts = options || {};
         markRecordsChanged();
-        saveLocalRecords();
-        queueSyncFileWrite();
-        queueRemoteWrite();
+        saveLocalRecords({
+          preservePayloadTime: Boolean(opts.preservePayloadTime)
+        });
+        if (!opts.skipSyncFile) {
+          queueSyncFileWrite();
+        }
+        if (!opts.skipRemote) {
+          queueRemoteWrite();
+        }
       }
 
-      function saveLocalRecords() {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(buildRecordsPayload()));
+      function saveLocalRecords(options) {
+        const opts = options || {};
+        const extra = {};
+        if (isValidDate(opts.payloadSavedAt)) {
+          extra.savedAt = new Date(opts.payloadSavedAt).toISOString();
+        } else if (opts.preservePayloadTime && isValidDate(state.localPayloadAt)) {
+          extra.savedAt = new Date(state.localPayloadAt).toISOString();
+        }
+        if (isValidDate(opts.payloadSyncedAt)) {
+          extra.syncedAt = new Date(opts.payloadSyncedAt).toISOString();
+        }
+
+        const payload = buildRecordsPayload(extra);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        state.localPayloadAt = getPayloadTimestamp(payload) || state.localPayloadAt;
       }
 
       function markRecordsChanged() {

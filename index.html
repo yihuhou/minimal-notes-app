@@ -3887,14 +3887,6 @@
       }
 
       function sortVisibleRecords(a, b) {
-        if (state.filter === "completed") {
-          const aIdea = a.type === "idea";
-          const bIdea = b.type === "idea";
-          if (aIdea !== bIdea) {
-            return aIdea ? 1 : -1;
-          }
-        }
-
         return sortRecords(a, b);
       }
 

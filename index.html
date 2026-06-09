@@ -3756,6 +3756,10 @@
         }
 
         const startDate = new Date(startValue);
+        const weekdayRange = extractWeekdayRangeInfo(source, startDate);
+        if (weekdayRange) {
+          return weekdayRange;
+        }
 
         let match = source.match(/(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?\s*(?:到|至|-|~|～)\s*(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?/);
         if (match && match.index != null) {
@@ -3790,6 +3794,42 @@
         }
 
         return null;
+      }
+
+      function extractWeekdayRangeInfo(source, startDate) {
+        const match = String(source || "").match(/(?:(下周|本周|这周)\s*)?(?:(周|星期)\s*)?([一二三四五六日天])\s*(?:到|至|-|~|～)\s*(?:(周|星期)\s*)?([一二三四五六日天])/);
+        if (!match || match.index == null || !(match[1] || match[2] || match[4])) {
+          return null;
+        }
+
+        const startIndex = weekdayToIndex(match[3]);
+        const endIndex = weekdayToIndex(match[5]);
+        if (startIndex == null || endIndex == null) {
+          return null;
+        }
+
+        const rangeStart = getSameWeekDate(startDate, startIndex);
+        const rangeEnd = new Date(rangeStart.getTime());
+        let endOffset = endIndex - startIndex;
+        if (endOffset < 0) {
+          endOffset += 7;
+        }
+        rangeEnd.setDate(rangeStart.getDate() + endOffset);
+
+        return {
+          index: match.index,
+          length: match[0].length,
+          startDate: rangeStart,
+          endDate: rangeEnd
+        };
+      }
+
+      function getSameWeekDate(anchorDate, weekdayIndex) {
+        const date = new Date(anchorDate);
+        const currentIndex = (date.getDay() + 6) % 7;
+        date.setHours(0, 0, 0, 0);
+        date.setDate(date.getDate() + weekdayIndex - currentIndex);
+        return date;
       }
 
       function insertWeekdayAfterPattern(source, pattern, suffix) {

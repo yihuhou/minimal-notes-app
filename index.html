@@ -3844,7 +3844,7 @@
 
       function highlightRecordText(text) {
         const source = String(text || "");
-        const tokenPattern = /(想法[:：]?|今天|明天|后天|大后天|今晚|今早|明早|明晚|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]|截止|DDL|ddl|deadline|之前|[\u4e00-\u9fa5]{2,3}\s*[A-Za-z]?\d{3,4}|\d{1,2}[:：]\d{2}|\d{1,2}\s*点(?:半|[0-5]?\d\s*分?)?|\d{4}(?:年|[\/.-])\d{1,2}(?:月|[\/.-])\d{1,2}|\d{1,2}(?:月|[\/.-])\d{1,2}(?:日|号)?|\d{1,2}(?:日|号))/g;
+        const tokenPattern = /(想法[:：]?|今天|明天|后天|大后天|今晚|今早|明早|明晚|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]|截止|DDL|ddl|deadline|之前|(?:[在去到]\s*)?(?:[\u4e00-\u9fa5]{2,3}\s*[A-Za-z]?\d{3,4}|[A-Za-z]?\d{2,4}\s*(?:会议室|教室|报告厅|办公室|实验室|研讨室|活动室|房间|室|厅)|[\u4e00-\u9fa5]{1,8}(?:食堂|餐厅|饭店|咖啡馆|图书馆|办公室|实验室|会议室|教室|报告厅|礼堂|体育馆|活动室|研讨室|中心|校区|广场|大厦|酒店|宾馆))(?!\d|\s*(?:字|词|页|元|块|个|人|次|篇|本|分钟|小时|天|周|月|年|%))|\d{1,2}[:：]\d{2}|\d{1,2}\s*点(?:半|[0-5]?\d\s*分?)?|\d{4}(?:年|[\/.-])\d{1,2}(?:月|[\/.-])\d{1,2}|\d{1,2}(?:月|[\/.-])\d{1,2}(?:日|号)?|\d{1,2}(?:日|号))/g;
         let lastIndex = 0;
         let html = "";
         let match;
@@ -3876,6 +3876,10 @@
           return '<span class="code-inline-location">' + escapeHtml(token) + "</span>";
         }
 
+        if (isRejectedLocationLikeToken(token)) {
+          return escapeHtml(token);
+        }
+
         if (/^\d{1,2}[:：]\d{2}$/.test(token) || /点/.test(token)) {
           return '<span class="code-inline-time">' + escapeHtml(token) + "</span>";
         }
@@ -3884,12 +3888,23 @@
       }
 
       function isLocationToken(token) {
-        return /^[\u4e00-\u9fa5]{2,3}\s*[A-Za-z]?\d{3,4}$/.test(String(token || "").trim());
+        const source = String(token || "").trim();
+        if (isRejectedLocationLikeToken(source)) {
+          return false;
+        }
+
+        return /^[\u4e00-\u9fa5]{2,3}\s*[A-Za-z]?\d{3,4}$/.test(source)
+          || /^(?:[\u4e00-\u9fa5]{1,8}\s*)?[A-Za-z]?\d{2,4}\s*(?:会议室|教室|报告厅|办公室|实验室|研讨室|活动室|房间|室|厅)$/.test(source)
+          || /^[\u4e00-\u9fa5]{1,8}(?:食堂|餐厅|饭店|咖啡馆|图书馆|办公室|实验室|会议室|教室|报告厅|礼堂|体育馆|活动室|研讨室|中心|校区|广场|大厦|酒店|宾馆)$/.test(source);
+      }
+
+      function isRejectedLocationLikeToken(token) {
+        return /^(?:加到|写到|改到|做到|达到|减到|补到|扩到|增至|加至)\s*[A-Za-z]?\d{3,4}$/.test(String(token || "").trim());
       }
 
       function splitLocationPrefix(token) {
         const source = String(token || "");
-        if (!/^在/.test(source)) {
+        if (!/^[在去到]/.test(source)) {
           return null;
         }
 

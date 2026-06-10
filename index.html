@@ -4648,23 +4648,27 @@
       }
 
       function inferDefaultTimeByWords(text) {
+        const isMealText = /吃饭|用餐|聚餐|饭局|午饭|午餐|晚饭|晚餐/.test(text);
         if (/凌晨/.test(text)) {
           return { hours: 1, minutes: 0 };
         }
         if (/早上|今早|明早|今晨|上午/.test(text)) {
           return { hours: 9, minutes: 0 };
         }
-        if (/中午|今午/.test(text)) {
+        if (/午饭|午餐/.test(text) || (isMealText && /中午|今午/.test(text))) {
           return { hours: 12, minutes: 0 };
         }
+        if (/晚饭|晚餐/.test(text) || (isMealText && /傍晚|晚上|今晚|明晚/.test(text))) {
+          return { hours: 18, minutes: 0 };
+        }
         if (/下午/.test(text)) {
-          return { hours: 15, minutes: 0 };
+          return { hours: 14, minutes: 0 };
         }
         if (/傍晚/.test(text)) {
           return { hours: 18, minutes: 0 };
         }
         if (/晚上|今晚|明晚/.test(text)) {
-          return { hours: 19, minutes: 0 };
+          return { hours: 20, minutes: 0 };
         }
         return null;
       }

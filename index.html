@@ -4054,6 +4054,10 @@
 
         const startAt = new Date(record.eventAt).getTime();
         const endAt = getTimedSortEndAt(record);
+        if (record.type === "deadline") {
+          return { bucket: 1, value: startAt - nowTime };
+        }
+
         if (endAt != null && startAt <= nowTime && nowTime < endAt) {
           return { bucket: 0, value: endAt - nowTime };
         }

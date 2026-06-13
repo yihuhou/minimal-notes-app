@@ -3854,7 +3854,7 @@
 
       function highlightRecordText(text) {
         const source = String(text || "");
-        const tokenPattern = /(想法[:：]?|今天|明天|后天|大后天|今晚|今早|明早|明晚|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]|截止|截至|过期|到期|失效|期满|有效期|DDL|ddl|deadline|之前|(?:[在去到]\s*)?(?:[\u4e00-\u9fa5]{2,3}\s*[A-Za-z]?\d{3,4}|[A-Za-z]?\d{2,4}\s*(?:会议室|教室|报告厅|办公室|实验室|研讨室|活动室|房间|室|厅)|[\u4e00-\u9fa5]{1,8}(?:食堂|餐厅|饭店|咖啡馆|图书馆|办公室|实验室|会议室|教室|报告厅|礼堂|体育馆|活动室|研讨室|中心|校区|广场|大厦|酒店|宾馆))(?!\d|\s*(?:字|词|页|元|块|个|人|次|篇|本|分钟|小时|天|周|月|年|%))|\d{1,2}[:：]\d{2}|\d{1,2}\s*点(?:半|[0-5]?\d\s*分?)?|\d{4}(?:年|[\/.-])\d{1,2}(?:月|[\/.-])\d{1,2}|\d{1,2}(?:月|[\/.-])\d{1,2}(?:日|号)?|\d{1,2}(?:日|号))/g;
+        const tokenPattern = /(想法[:：]?|今天|明天|后天|大后天|今晚|今早|明早|明晚|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]|截止|截至|过期|到期|失效|期满|有效期|DDL|ddl|deadline|之前|前|(?:[在去到]\s*)?(?:[\u4e00-\u9fa5]{2,3}\s*[A-Za-z]?\d{3,4}|[A-Za-z]?\d{2,4}\s*(?:会议室|教室|报告厅|办公室|实验室|研讨室|活动室|房间|室|厅)|[\u4e00-\u9fa5]{1,8}(?:食堂|餐厅|饭店|咖啡馆|图书馆|办公室|实验室|会议室|教室|报告厅|礼堂|体育馆|活动室|研讨室|中心|校区|广场|大厦|酒店|宾馆))(?!\d|\s*(?:字|词|页|元|块|个|人|次|篇|本|分钟|小时|天|周|月|年|%))|\d{1,2}[:：]\d{2}|\d{1,2}\s*点(?:半|[0-5]?\d\s*分?)?|\d{4}(?:年|[\/.-])\d{1,2}(?:月|[\/.-])\d{1,2}|\d{1,2}(?:月|[\/.-])\d{1,2}(?:日|号)?|\d{1,2}(?:日|号))/g;
         let lastIndex = 0;
         let html = "";
         let match;
@@ -3863,7 +3863,7 @@
           const token = match[0];
           const index = match.index;
           html += escapeHtml(source.slice(lastIndex, index));
-          html += wrapHighlightedToken(token);
+          html += wrapHighlightedToken(token, source, index);
           lastIndex = index + token.length;
         }
 
@@ -3871,8 +3871,8 @@
         return html;
       }
 
-      function wrapHighlightedToken(token) {
-        if (/^想法/.test(token) || isDeadlineKeywordToken(token)) {
+      function wrapHighlightedToken(token, source, index) {
+        if (/^想法/.test(token) || isDeadlineKeywordToken(token, source, index)) {
           return '<span class="code-inline-keyword">' + escapeHtml(token) + "</span>";
         }
 
@@ -3929,8 +3929,21 @@
         };
       }
 
-      function isDeadlineKeywordToken(token) {
-        return /^(截止|截至|过期|到期|失效|期满|有效期|DDL|ddl|deadline|之前)$/i.test(String(token || "").trim());
+      function isDeadlineKeywordToken(token, source, index) {
+        const normalized = String(token || "").trim();
+        if (/^(截止|截至|过期|到期|失效|期满|有效期|DDL|ddl|deadline|之前)$/i.test(normalized)) {
+          return true;
+        }
+
+        return normalized === "前" && isDeadlineBeforeMarker(source, index);
+      }
+
+      function isDeadlineBeforeMarker(source, index) {
+        if (typeof index !== "number") {
+          return false;
+        }
+
+        return /(?:今天|明天|后天|大后天|今晚|今早|明早|明晚|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]|\d{4}(?:年|[\/.-])\d{1,2}(?:月|[\/.-])\d{1,2}|\d{1,2}(?:月|[\/.-])\d{1,2}(?:日|号)?|\d{1,2}\s*点(?:半|[0-5]?\d\s*分?)?|\d{1,2}[:：]\d{2})\s*$/.test(String(source || "").slice(0, index));
       }
 
       function inferUpdateFromText(text, record) {

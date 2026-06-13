@@ -755,6 +755,12 @@
       border-color: #ecece6;
     }
 
+    .token-repeat {
+      color: #4c6657;
+      background: rgba(76, 102, 87, 0.08);
+      border-color: rgba(76, 102, 87, 0.16);
+    }
+
     .token-warning {
       color: #8a5c16;
       background: rgba(138, 92, 22, 0.08);
@@ -813,6 +819,11 @@
     .code-inline-keyword {
       color: #795b18;
       background: rgba(121, 91, 24, 0.08);
+    }
+
+    .code-inline-repeat {
+      color: #4c6657;
+      background: rgba(76, 102, 87, 0.08);
     }
 
     .code-inline-location {
@@ -2046,6 +2057,7 @@
           type: parsed.type,
           createdAt: now,
           eventAt: parsed.eventAt,
+          recurrence: parsed.recurrence,
           ignoredConflictKeys: [],
           history: [],
           autoCompleteState: "",
@@ -2084,6 +2096,24 @@
 
         const now = new Date().toISOString();
         let historyAction = "";
+
+        if (isRecurringRecord(record) && !record.completed) {
+          if (supportsPreparedState(record) && !record.prepared) {
+            record.prepared = true;
+            record.updatedAt = now;
+            pushHistory(record, "prepared", now);
+            persist();
+            render();
+            return;
+          }
+
+          if (completeAndAdvanceRecurringRecord(record, now)) {
+            persist();
+            render();
+            setStatus("已完成本次，已显示下一次。");
+            return;
+          }
+        }
 
         if (supportsPreparedState(record)) {
           if (!record.prepared && !record.completed) {
@@ -2144,6 +2174,13 @@
         }
 
         const now = new Date().toISOString();
+        if (completeAndAdvanceRecurringRecord(record, now)) {
+          persist();
+          render();
+          setStatus("已确认本次，已显示下一次。");
+          return;
+        }
+
         record.prepared = false;
         record.completed = true;
         clearAutoCompleteState(record);
@@ -2202,10 +2239,12 @@
         const updated = inferUpdateFromText(text, record);
         const changed = record.text !== updated.text
           || record.type !== updated.type
-          || record.eventAt !== updated.eventAt;
+          || record.eventAt !== updated.eventAt
+          || !recurrencesEqual(record.recurrence, updated.recurrence);
         record.text = updated.text;
         record.type = updated.type;
         record.eventAt = updated.eventAt;
+        record.recurrence = updated.recurrence;
         record.ignoredConflictKeys = [];
         clearAutoCompleteState(record);
         if (!supportsPreparedState(updated)) {
@@ -3445,6 +3484,9 @@
         if (upcoming) {
           parts.push('<span class="badge strong">' + escapeHtml(getUpcomingLabel(record)) + "</span>");
         }
+        if (isRecurringRecord(record)) {
+          parts.push('<span class="code-token token-repeat">' + escapeHtml(formatRecurrenceLabel(record.recurrence)) + "</span>");
+        }
         if (record.eventAt) {
           parts.push('<span class="code-token token-time">' + escapeHtml(formatRecordTimeToken(record)) + "</span>");
         }
@@ -3616,6 +3658,9 @@
         const editedAt = getLatestHistoryAt(record, "edited");
         const reopenedAt = getLatestHistoryAt(record, "reopened");
 
+        if (isRecurringRecord(record)) {
+          parts.push("周期 " + formatRecurrenceLabel(record.recurrence));
+        }
         if (preparedAt) {
           parts.push("准备于 " + formatDateTime(preparedAt));
         }
@@ -3964,7 +4009,28 @@
           return {
             text: (ideaMatch[1] || "").trim() || source,
             type: "idea",
-            eventAt: ""
+            eventAt: "",
+            recurrence: null
+          };
+        }
+
+        const recurrenceInfo = extractRecurrenceInfo(source);
+        if (recurrenceInfo) {
+          const recurrenceChanged = !recurrencesEqual(record && record.recurrence, recurrenceInfo);
+          const naturalInfo = extractNaturalDateInfo(source);
+          const inferredType = isDeadlineHintText(source)
+            ? "deadline"
+            : (record && record.type === "meeting" ? "meeting" : "todo");
+          const resolvedEventAt = recurrenceChanged
+            ? resolveRecurringEventAt(inferredType, "", naturalInfo, recurrenceInfo, source)
+            : normalizeDateTime(record && record.eventAt)
+              || resolveRecurringEventAt(inferredType, "", naturalInfo, recurrenceInfo, source);
+
+          return {
+            text: source,
+            type: inferredType,
+            eventAt: resolvedEventAt,
+            recurrence: recurrenceInfo
           };
         }
 
@@ -3974,14 +4040,16 @@
           return {
             text: source,
             type: inferredType,
-            eventAt: resolveTimedEventAt(inferredType, "", naturalInfo) || record.eventAt || ""
+            eventAt: resolveTimedEventAt(inferredType, "", naturalInfo) || record.eventAt || "",
+            recurrence: null
           };
         }
 
         return {
           text: source,
           type: record.type,
-          eventAt: isTimedType(record.type) ? record.eventAt || "" : ""
+          eventAt: isTimedType(record.type) ? record.eventAt || "" : "",
+          recurrence: null
         };
       }
 
@@ -4122,16 +4190,17 @@
       }
 
       function getStatusSearchText(record) {
+        const recurringLabel = isRecurringRecord(record) ? "循环 " + formatRecurrenceLabel(record.recurrence) : "";
         if (isAutoCompletionPending(record)) {
-          return "已结束 待确认";
+          return ["已结束 待确认", recurringLabel].filter(Boolean).join(" ");
         }
         if (isPrepared(record)) {
-          return "已准备";
+          return ["已准备", recurringLabel].filter(Boolean).join(" ");
         }
         if (record.completed) {
-          return "已完成";
+          return ["已完成", recurringLabel].filter(Boolean).join(" ");
         }
-        return "";
+        return recurringLabel;
       }
 
       function isVisuallyCompleted(record) {
@@ -4483,14 +4552,27 @@
 
       function inferTypeAndText(text, explicitEventAt, manualType) {
         const naturalInfo = extractNaturalDateInfo(text);
+        const recurrenceInfo = extractRecurrenceInfo(text);
         const autoTimedType = inferTimedTypeFromText(text);
 
         if (manualType && manualType !== "auto") {
-          const resolvedManualEventAt = resolveTimedEventAt(manualType, explicitEventAt, naturalInfo);
+          if (manualType === "idea") {
+            return {
+              text: text,
+              type: "idea",
+              eventAt: "",
+              recurrence: null
+            };
+          }
+
+          const resolvedManualEventAt = recurrenceInfo
+            ? resolveRecurringEventAt(manualType, explicitEventAt, naturalInfo, recurrenceInfo, text)
+            : resolveTimedEventAt(manualType, explicitEventAt, naturalInfo);
           return {
             text: text,
             type: manualType,
-            eventAt: resolvedManualEventAt
+            eventAt: resolvedManualEventAt,
+            recurrence: recurrenceInfo
           };
         }
 
@@ -4499,7 +4581,18 @@
           return {
             text: (ideaMatch[1] || "").trim() || text.trim(),
             type: "idea",
-            eventAt: ""
+            eventAt: "",
+            recurrence: null
+          };
+        }
+
+        if (recurrenceInfo) {
+          const recurringType = isDeadlineHintText(text) ? "deadline" : "todo";
+          return {
+            text: text,
+            type: recurringType,
+            eventAt: resolveRecurringEventAt(recurringType, explicitEventAt, naturalInfo, recurrenceInfo, text),
+            recurrence: recurrenceInfo
           };
         }
 
@@ -4507,14 +4600,16 @@
           return {
             text: text,
             type: autoTimedType,
-            eventAt: resolveTimedEventAt(autoTimedType, explicitEventAt, naturalInfo)
+            eventAt: resolveTimedEventAt(autoTimedType, explicitEventAt, naturalInfo),
+            recurrence: null
           };
         }
 
         return {
           text: text,
           type: "todo",
-          eventAt: explicitEventAt
+          eventAt: explicitEventAt,
+          recurrence: null
         };
       }
 
@@ -4555,6 +4650,675 @@
         }
 
         return "";
+      }
+
+      function resolveRecurringEventAt(type, explicitEventAt, naturalInfo, recurrenceInfo, text, referenceNow) {
+        const recurrence = normalizeRecurrenceInfo(recurrenceInfo);
+        if (!recurrence) {
+          return "";
+        }
+
+        if (explicitEventAt) {
+          return explicitEventAt;
+        }
+
+        if (naturalInfo && naturalInfo.eventAt) {
+          return naturalInfo.eventAt;
+        }
+
+        const now = isValidDate(referenceNow) ? new Date(referenceNow) : new Date();
+        const date = naturalInfo && naturalInfo.date
+          ? new Date(naturalInfo.date.getTime())
+          : getInitialRecurrenceDate(recurrence, text, now);
+        if (!date || !isValidDate(date)) {
+          return "";
+        }
+
+        const timeInfo = parseTimeFromText(text);
+        if (timeInfo.matched) {
+          date.setHours(timeInfo.hours, timeInfo.minutes, 0, 0);
+        } else if (timeInfo.defaultHours != null) {
+          date.setHours(timeInfo.defaultHours, timeInfo.defaultMinutes || 0, 0, 0);
+        } else if (type === "deadline") {
+          date.setHours(23, 59, 0, 0);
+        } else {
+          date.setHours(0, 0, 0, 0);
+        }
+
+        return date.toISOString();
+      }
+
+      function extractRecurrenceInfo(text) {
+        const source = String(text || "").trim();
+        if (!source) {
+          return null;
+        }
+
+        if (/(?:每(?:个)?工作日|每周\s*(?:一|1)\s*(?:到|至|-|~|～)\s*(?:周)?(?:五|5))/.test(source)) {
+          return normalizeRecurrenceInfo({
+            frequency: "weekly",
+            interval: 1,
+            mode: "fixed",
+            weekdays: [0, 1, 2, 3, 4],
+            label: "每个工作日"
+          });
+        }
+
+        const yearlyFixed = source.match(/每(?:年|年度)\s*([0-9一二两三四五六七八九十]{1,3})\s*月\s*([0-9一二两三四五六七八九十]{1,3})\s*(?:日|号)?/);
+        if (yearlyFixed) {
+          const month = parsePositiveIntegerToken(yearlyFixed[1]);
+          const monthDay = parsePositiveIntegerToken(yearlyFixed[2]);
+          if (isValidMonth(month) && isValidMonthDay(monthDay)) {
+            return normalizeRecurrenceInfo({
+              frequency: "yearly",
+              interval: 1,
+              mode: "fixed",
+              month: month,
+              monthDay: monthDay
+            });
+          }
+        }
+
+        const monthlyFixed = source.match(/每(?:个)?月\s*([0-9一二两三四五六七八九十]{1,3})\s*(?:日|号)/)
+          || source.match(/每月\s*([0-9一二两三四五六七八九十]{1,3})\s*(?:日|号)/);
+        if (monthlyFixed) {
+          const monthDay = parsePositiveIntegerToken(monthlyFixed[1]);
+          if (isValidMonthDay(monthDay)) {
+            return normalizeRecurrenceInfo({
+              frequency: "monthly",
+              interval: 1,
+              mode: "fixed",
+              monthDay: monthDay
+            });
+          }
+        }
+
+        if (/每(?:个)?月\s*(?:底|末)|每月\s*(?:底|末)/.test(source)) {
+          return normalizeRecurrenceInfo({
+            frequency: "monthly",
+            interval: 1,
+            mode: "fixed",
+            monthDay: "last",
+            label: "每月底"
+          });
+        }
+
+        const weeklyFixed = source.match(/每(?:周|星期|礼拜)\s*((?:(?:周|星期|礼拜)?[一二三四五六日天末]\s*[、,，和及]?\s*)+)(?!\s*(?:次|回|趟))/);
+        if (weeklyFixed) {
+          const weekdays = parseWeekdayList(weeklyFixed[1]);
+          if (weekdays.length) {
+            return normalizeRecurrenceInfo({
+              frequency: "weekly",
+              interval: 1,
+              mode: "fixed",
+              weekdays: weekdays
+            });
+          }
+        }
+
+        if (/(?:每天|每日|天天|\bdaily\b|\bevery day\b)/i.test(source)) {
+          return normalizeRecurrenceInfo({
+            frequency: "daily",
+            interval: 1,
+            mode: "fixed"
+          });
+        }
+
+        const intervalMatch = source.match(/每(?:隔)?\s*([0-9一二两三四五六七八九十]+)\s*(天|日|周|星期|礼拜|个月|月|年)/);
+        if (intervalMatch) {
+          const interval = parsePositiveIntegerToken(intervalMatch[1]);
+          const frequency = unitToRecurrenceFrequency(intervalMatch[2]);
+          if (interval && frequency) {
+            return normalizeRecurrenceInfo({
+              frequency: frequency,
+              interval: interval,
+              mode: "sliding"
+            });
+          }
+        }
+
+        const oncePerMatch = source.match(/([0-9一二两三四五六七八九十]+)?\s*(天|日|周|星期|礼拜|个月|月|年)\s*(?:一?次|一回|一趟)/);
+        if (oncePerMatch && oncePerMatch[2]) {
+          const interval = oncePerMatch[1] ? parsePositiveIntegerToken(oncePerMatch[1]) : 1;
+          const frequency = unitToRecurrenceFrequency(oncePerMatch[2]);
+          if (interval && frequency) {
+            return normalizeRecurrenceInfo({
+              frequency: frequency,
+              interval: interval,
+              mode: "sliding"
+            });
+          }
+        }
+
+        if (/每(?:周|星期|礼拜)(?:一次|一回|一趟)?/.test(source)) {
+          return normalizeRecurrenceInfo({
+            frequency: "weekly",
+            interval: 1,
+            mode: "sliding"
+          });
+        }
+
+        if (/每(?:个)?月(?:一次|一回|一趟)?|每月(?:一次|一回|一趟)?/.test(source)) {
+          return normalizeRecurrenceInfo({
+            frequency: "monthly",
+            interval: 1,
+            mode: "sliding"
+          });
+        }
+
+        if (/每(?:年|年度)(?:一次|一回|一趟)?/.test(source)) {
+          return normalizeRecurrenceInfo({
+            frequency: "yearly",
+            interval: 1,
+            mode: "sliding"
+          });
+        }
+
+        return null;
+      }
+
+      function normalizeRecurrenceInfo(value) {
+        if (!value || typeof value !== "object") {
+          return null;
+        }
+
+        const frequency = ["daily", "weekly", "monthly", "yearly"].includes(value.frequency)
+          ? value.frequency
+          : "";
+        if (!frequency) {
+          return null;
+        }
+
+        const interval = Math.max(1, Math.min(365, parseInt(value.interval, 10) || 1));
+        const mode = value.mode === "sliding" ? "sliding" : "fixed";
+        const weekdays = Array.isArray(value.weekdays)
+          ? uniqueSortedNumbers(value.weekdays, 0, 6)
+          : [];
+        const month = isValidMonth(parseInt(value.month, 10)) ? parseInt(value.month, 10) : 0;
+        let monthDay = "";
+        if (value.monthDay === "last") {
+          monthDay = "last";
+        } else if (isValidMonthDay(parseInt(value.monthDay, 10))) {
+          monthDay = parseInt(value.monthDay, 10);
+        }
+
+        return {
+          frequency: frequency,
+          interval: interval,
+          mode: mode,
+          weekdays: weekdays,
+          monthDay: monthDay,
+          month: month,
+          label: typeof value.label === "string" ? value.label.slice(0, 24) : ""
+        };
+      }
+
+      function isRecurringRecord(record) {
+        return Boolean(record && normalizeRecurrenceInfo(record.recurrence));
+      }
+
+      function recurrencesEqual(left, right) {
+        return JSON.stringify(normalizeRecurrenceInfo(left)) === JSON.stringify(normalizeRecurrenceInfo(right));
+      }
+
+      function completeAndAdvanceRecurringRecord(record, completedAt) {
+        const nextEventAt = getNextRecurrenceEventAt(record, completedAt);
+        if (!nextEventAt) {
+          return false;
+        }
+
+        record.prepared = false;
+        record.completed = true;
+        clearAutoCompleteState(record);
+        record.updatedAt = completedAt;
+        pushHistory(record, "completed", completedAt);
+
+        const nextText = stripRecurrenceInitialPhrase(record.text);
+        if (nextText) {
+          record.text = nextText;
+        }
+        record.eventAt = nextEventAt;
+        record.prepared = false;
+        record.completed = false;
+        record.ignoredConflictKeys = [];
+        record.updatedAt = completedAt;
+        pushHistory(record, "recurrence_advanced", completedAt);
+        return true;
+      }
+
+      function getNextRecurrenceEventAt(record, completedAtValue) {
+        const recurrence = normalizeRecurrenceInfo(record && record.recurrence);
+        if (!recurrence) {
+          return "";
+        }
+
+        const completedAt = isValidDate(completedAtValue) ? new Date(completedAtValue) : new Date();
+        const currentEventAt = isValidDate(record && record.eventAt)
+          ? new Date(record.eventAt)
+          : new Date(completedAt.getTime());
+        const next = recurrence.mode === "sliding"
+          ? getNextSlidingRecurrenceEventAt(recurrence, currentEventAt, completedAt)
+          : getNextFixedRecurrenceEventAt(recurrence, currentEventAt, completedAt);
+
+        return next && isValidDate(next) ? next.toISOString() : "";
+      }
+
+      function getNextSlidingRecurrenceEventAt(recurrence, currentEventAt, completedAt) {
+        const base = new Date(completedAt.getTime());
+        copyTimeParts(base, currentEventAt);
+        return addRecurrenceUnits(base, recurrence.frequency, recurrence.interval);
+      }
+
+      function getNextFixedRecurrenceEventAt(recurrence, currentEventAt, completedAt) {
+        const threshold = new Date(Math.max(currentEventAt.getTime(), completedAt.getTime()));
+        return getFirstFixedOccurrenceAfter(recurrence, threshold, currentEventAt);
+      }
+
+      function getFirstFixedOccurrenceAfter(recurrence, threshold, timeSource) {
+        if (recurrence.frequency === "daily") {
+          let candidate = makeDateWithTime(threshold, timeSource);
+          while (candidate.getTime() <= threshold.getTime()) {
+            candidate.setDate(candidate.getDate() + recurrence.interval);
+          }
+          return candidate;
+        }
+
+        if (recurrence.frequency === "weekly") {
+          const weekdays = recurrence.weekdays.length
+            ? recurrence.weekdays
+            : [getLocalWeekdayIndex(timeSource)];
+          if (recurrence.interval > 1 && weekdays.length === 1) {
+            let candidate = new Date(timeSource.getTime());
+            while (candidate.getTime() <= threshold.getTime()) {
+              candidate.setDate(candidate.getDate() + recurrence.interval * 7);
+            }
+            return candidate;
+          }
+
+          for (let offset = 0; offset <= 370; offset += 1) {
+            const candidate = makeDateWithTime(threshold, timeSource);
+            candidate.setDate(candidate.getDate() + offset);
+            if (weekdays.indexOf(getLocalWeekdayIndex(candidate)) !== -1
+              && candidate.getTime() > threshold.getTime()) {
+              return candidate;
+            }
+          }
+          return null;
+        }
+
+        if (recurrence.frequency === "monthly") {
+          if (recurrence.monthDay) {
+            let candidate = makeMonthlyOccurrence(
+              threshold.getFullYear(),
+              threshold.getMonth(),
+              recurrence.monthDay,
+              timeSource
+            );
+            while (candidate.getTime() <= threshold.getTime()) {
+              candidate = addMonthsClamped(candidate, recurrence.interval, recurrence.monthDay);
+            }
+            return candidate;
+          }
+
+          let candidate = new Date(timeSource.getTime());
+          while (candidate.getTime() <= threshold.getTime()) {
+            candidate = addMonthsClamped(candidate, recurrence.interval, timeSource.getDate());
+          }
+          return candidate;
+        }
+
+        if (recurrence.frequency === "yearly") {
+          if (recurrence.month && recurrence.monthDay) {
+            let candidate = makeMonthlyOccurrence(
+              threshold.getFullYear(),
+              recurrence.month - 1,
+              recurrence.monthDay,
+              timeSource
+            );
+            while (candidate.getTime() <= threshold.getTime()) {
+              candidate = makeMonthlyOccurrence(
+                candidate.getFullYear() + recurrence.interval,
+                recurrence.month - 1,
+                recurrence.monthDay,
+                timeSource
+              );
+            }
+            return candidate;
+          }
+
+          let candidate = new Date(timeSource.getTime());
+          while (candidate.getTime() <= threshold.getTime()) {
+            candidate = addYearsClamped(candidate, recurrence.interval);
+          }
+          return candidate;
+        }
+
+        return null;
+      }
+
+      function getInitialRecurrenceDate(recurrence, text, referenceNow) {
+        const now = isValidDate(referenceNow) ? new Date(referenceNow) : new Date();
+        const explicitInitial = parseRecurrenceInitialDate(text, now);
+        if (explicitInitial) {
+          return explicitInitial;
+        }
+
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        if (recurrence.mode === "sliding") {
+          return today;
+        }
+
+        if (recurrence.frequency === "weekly" && recurrence.weekdays.length) {
+          return getNextWeekdayDate(today, recurrence.weekdays);
+        }
+
+        if (recurrence.frequency === "monthly" && recurrence.monthDay) {
+          const candidate = makeMonthlyOccurrence(
+            today.getFullYear(),
+            today.getMonth(),
+            recurrence.monthDay,
+            today
+          );
+          return candidate.getTime() < today.getTime()
+            ? addMonthsClamped(candidate, recurrence.interval, recurrence.monthDay)
+            : candidate;
+        }
+
+        if (recurrence.frequency === "yearly" && recurrence.month && recurrence.monthDay) {
+          const candidate = makeMonthlyOccurrence(
+            today.getFullYear(),
+            recurrence.month - 1,
+            recurrence.monthDay,
+            today
+          );
+          return candidate.getTime() < today.getTime()
+            ? makeMonthlyOccurrence(today.getFullYear() + recurrence.interval, recurrence.month - 1, recurrence.monthDay, today)
+            : candidate;
+        }
+
+        return today;
+      }
+
+      function parseRecurrenceInitialDate(text, referenceNow) {
+        const source = String(text || "");
+        if (!/(?:第一次|首次|首回|第一回|从|自|开始|起始)/.test(source)) {
+          return null;
+        }
+
+        const fullOrMonthDate = parseExplicitCalendarDate(source, referenceNow);
+        if (fullOrMonthDate.matched) {
+          return fullOrMonthDate.date;
+        }
+
+        const dayMatch = source.match(/(?:第一次|首次|首回|第一回|从|自|开始|起始)[^0-9一二两三四五六七八九十]{0,8}([0-9一二两三四五六七八九十]{1,3})\s*(?:日|号)/);
+        if (!dayMatch) {
+          return null;
+        }
+
+        const day = parsePositiveIntegerToken(dayMatch[1]);
+        if (!isValidMonthDay(day)) {
+          return null;
+        }
+
+        const now = isValidDate(referenceNow) ? new Date(referenceNow) : new Date();
+        let date = makeMonthlyOccurrence(now.getFullYear(), now.getMonth(), day, now);
+        date.setHours(0, 0, 0, 0);
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        if (date.getTime() < today.getTime()) {
+          date = addMonthsClamped(date, 1, day);
+        }
+        return date;
+      }
+
+      function stripRecurrenceInitialPhrase(text) {
+        let source = String(text || "").trim();
+        if (!source) {
+          return "";
+        }
+
+        const datePattern = "(?:今天|明天|后天|大后天|今晚|今早|明早|明晚|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]|\\d{4}\\s*(?:年|[\\/.-])\\s*\\d{1,2}\\s*(?:月|[\\/.-])\\s*\\d{1,2}\\s*(?:日|号)?|\\d{1,2}\\s*(?:月|[\\/.-])\\s*\\d{1,2}\\s*(?:日|号)?|[0-9一二两三四五六七八九十]{1,3}\\s*(?:日|号))";
+        const patterns = [
+          new RegExp("[，,。；;、\\s]*(?:第一次|首次|首回|第一回)\\s*(?:是|在|从)?\\s*" + datePattern + "\\s*(?:开始|执行)?", "g"),
+          new RegExp("[，,。；;、\\s]*(?:从|自)\\s*" + datePattern + "\\s*(?:开始|起|起始)", "g"),
+          new RegExp("[，,。；;、\\s]*(?:开始|起始)\\s*(?:日期|时间)?\\s*(?:是|为)?\\s*" + datePattern, "g")
+        ];
+
+        patterns.forEach(function (pattern) {
+          source = source.replace(pattern, "");
+        });
+
+        source = source
+          .replace(/\s{2,}/g, " ")
+          .replace(/^[，,。；;、\s]+/, "")
+          .replace(/[，,。；;、\s]+$/, "")
+          .trim();
+        return source || String(text || "").trim();
+      }
+
+      function addRecurrenceUnits(date, frequency, interval) {
+        const next = new Date(date.getTime());
+        if (frequency === "daily") {
+          next.setDate(next.getDate() + interval);
+          return next;
+        }
+        if (frequency === "weekly") {
+          next.setDate(next.getDate() + interval * 7);
+          return next;
+        }
+        if (frequency === "monthly") {
+          return addMonthsClamped(next, interval, next.getDate());
+        }
+        if (frequency === "yearly") {
+          return addYearsClamped(next, interval);
+        }
+        return null;
+      }
+
+      function addMonthsClamped(date, count, preferredDay) {
+        const target = new Date(date.getTime());
+        const day = preferredDay === "last"
+          ? "last"
+          : Math.max(1, Math.min(31, parseInt(preferredDay, 10) || target.getDate()));
+        target.setDate(1);
+        target.setMonth(target.getMonth() + count);
+        target.setDate(resolveMonthDay(day, target.getFullYear(), target.getMonth()));
+        return target;
+      }
+
+      function addYearsClamped(date, count) {
+        const target = new Date(date.getTime());
+        const preferredDay = target.getDate();
+        target.setDate(1);
+        target.setFullYear(target.getFullYear() + count);
+        target.setDate(Math.min(preferredDay, daysInMonth(target.getFullYear(), target.getMonth())));
+        return target;
+      }
+
+      function makeMonthlyOccurrence(year, monthIndex, monthDay, timeSource) {
+        const date = new Date(year, monthIndex, resolveMonthDay(monthDay, year, monthIndex));
+        copyTimeParts(date, timeSource);
+        return date;
+      }
+
+      function makeDateWithTime(dateSource, timeSource) {
+        const date = new Date(dateSource.getFullYear(), dateSource.getMonth(), dateSource.getDate());
+        copyTimeParts(date, timeSource);
+        return date;
+      }
+
+      function copyTimeParts(target, source) {
+        const date = isValidDate(source) ? new Date(source) : new Date();
+        target.setHours(date.getHours(), date.getMinutes(), date.getSeconds(), date.getMilliseconds());
+      }
+
+      function resolveMonthDay(monthDay, year, monthIndex) {
+        if (monthDay === "last") {
+          return daysInMonth(year, monthIndex);
+        }
+        return Math.max(1, Math.min(daysInMonth(year, monthIndex), parseInt(monthDay, 10) || 1));
+      }
+
+      function daysInMonth(year, monthIndex) {
+        return new Date(year, monthIndex + 1, 0).getDate();
+      }
+
+      function getNextWeekdayDate(today, weekdays) {
+        const current = getLocalWeekdayIndex(today);
+        let bestOffset = 7;
+        weekdays.forEach(function (weekday) {
+          let offset = weekday - current;
+          if (offset < 0) {
+            offset += 7;
+          }
+          if (offset < bestOffset) {
+            bestOffset = offset;
+          }
+        });
+
+        const date = new Date(today.getTime());
+        date.setDate(date.getDate() + bestOffset);
+        return date;
+      }
+
+      function getLocalWeekdayIndex(date) {
+        return (new Date(date).getDay() + 6) % 7;
+      }
+
+      function parseWeekdayList(value) {
+        const source = String(value || "");
+        const weekdays = [];
+        if (/末/.test(source)) {
+          weekdays.push(5, 6);
+        }
+        source.replace(/[一二三四五六日天]/g, function (token) {
+          const index = weekdayToIndex(token);
+          if (typeof index === "number") {
+            weekdays.push(index);
+          }
+          return token;
+        });
+        return uniqueSortedNumbers(weekdays, 0, 6);
+      }
+
+      function uniqueSortedNumbers(values, min, max) {
+        const unique = [];
+        values.forEach(function (value) {
+          const number = parseInt(value, 10);
+          if (Number.isNaN(number) || number < min || number > max || unique.indexOf(number) !== -1) {
+            return;
+          }
+          unique.push(number);
+        });
+        return unique.sort(function (a, b) {
+          return a - b;
+        });
+      }
+
+      function unitToRecurrenceFrequency(unit) {
+        if (/^(?:天|日)$/.test(unit)) {
+          return "daily";
+        }
+        if (/^(?:周|星期|礼拜)$/.test(unit)) {
+          return "weekly";
+        }
+        if (/^(?:个月|月)$/.test(unit)) {
+          return "monthly";
+        }
+        if (/^年$/.test(unit)) {
+          return "yearly";
+        }
+        return "";
+      }
+
+      function parsePositiveIntegerToken(value) {
+        const source = String(value || "").trim();
+        if (/^\d+$/.test(source)) {
+          return parseInt(source, 10);
+        }
+        return parseChineseNumber(source);
+      }
+
+      function parseChineseNumber(value) {
+        const source = String(value || "").replace(/两/g, "二");
+        const digits = {
+          "零": 0,
+          "一": 1,
+          "二": 2,
+          "三": 3,
+          "四": 4,
+          "五": 5,
+          "六": 6,
+          "七": 7,
+          "八": 8,
+          "九": 9
+        };
+        if (!source) {
+          return 0;
+        }
+        if (digits[source] != null) {
+          return digits[source];
+        }
+        if (source === "十") {
+          return 10;
+        }
+        const tenMatch = source.match(/^([一二三四五六七八九])?十([一二三四五六七八九])?$/);
+        if (tenMatch) {
+          return (tenMatch[1] ? digits[tenMatch[1]] : 1) * 10 + (tenMatch[2] ? digits[tenMatch[2]] : 0);
+        }
+        return 0;
+      }
+
+      function isValidMonth(value) {
+        return Number.isInteger(value) && value >= 1 && value <= 12;
+      }
+
+      function isValidMonthDay(value) {
+        return Number.isInteger(value) && value >= 1 && value <= 31;
+      }
+
+      function formatRecurrenceLabel(value) {
+        const recurrence = normalizeRecurrenceInfo(value);
+        if (!recurrence) {
+          return "";
+        }
+        if (recurrence.label) {
+          return recurrence.label;
+        }
+
+        const intervalText = recurrence.interval > 1 ? String(recurrence.interval) : "";
+        if (recurrence.frequency === "daily") {
+          return recurrence.interval === 1 ? "每天" : "每" + intervalText + "天";
+        }
+
+        if (recurrence.frequency === "weekly") {
+          if (recurrence.mode === "fixed" && recurrence.weekdays.length) {
+            return "每周" + formatWeekdayList(recurrence.weekdays);
+          }
+          return recurrence.interval === 1 ? "每周一次" : "每" + intervalText + "周一次";
+        }
+
+        if (recurrence.frequency === "monthly") {
+          if (recurrence.mode === "fixed" && recurrence.monthDay) {
+            return recurrence.monthDay === "last" ? "每月底" : "每月" + recurrence.monthDay + "号";
+          }
+          return recurrence.interval === 1 ? "每月一次" : "每" + intervalText + "个月一次";
+        }
+
+        if (recurrence.frequency === "yearly") {
+          if (recurrence.mode === "fixed" && recurrence.month && recurrence.monthDay) {
+            return "每年" + recurrence.month + "/" + recurrence.monthDay;
+          }
+          return recurrence.interval === 1 ? "每年一次" : "每" + intervalText + "年一次";
+        }
+
+        return "循环";
+      }
+
+      function formatWeekdayList(weekdays) {
+        const labels = ["一", "二", "三", "四", "五", "六", "日"];
+        return weekdays.map(function (weekday) {
+          return labels[weekday] || "";
+        }).filter(Boolean).join("、");
       }
 
       function extractNaturalDateInfo(text, referenceNow) {
@@ -4953,6 +5717,7 @@
           text: record && typeof record.text === "string" ? record.text : "",
           type: record && typeof record.type === "string" ? record.type : "",
           eventAt: normalizeDateTime(record && record.eventAt),
+          recurrence: normalizeRecurrenceInfo(record && record.recurrence),
           prepared: Boolean(record && record.prepared),
           completed: Boolean(record && record.completed)
         };
@@ -4971,6 +5736,7 @@
               text: typeof entry.text === "string" ? entry.text : "",
               type: typeof entry.type === "string" ? entry.type : "",
               eventAt: normalizeDateTime(entry.eventAt),
+              recurrence: normalizeRecurrenceInfo(entry.recurrence),
               prepared: Boolean(entry.prepared),
               completed: Boolean(entry.completed)
             };
@@ -5066,7 +5832,14 @@
         }
         const createdAt = isValidDate(record.createdAt) ? new Date(record.createdAt).toISOString() : new Date().toISOString();
         const updatedAt = isValidDate(record.updatedAt) ? new Date(record.updatedAt).toISOString() : createdAt;
+        const importedRecurrence = normalizeRecurrenceInfo(record.recurrence);
+        const inferredRecurrence = type === "idea" ? null : extractRecurrenceInfo(text);
+        const recurrence = importedRecurrence || inferredRecurrence;
         let eventAt = normalizeDateTime(record.eventAt);
+        if (recurrence && !eventAt) {
+          const naturalInfo = extractNaturalDateInfo(text, createdAt);
+          eventAt = resolveRecurringEventAt(type, "", naturalInfo, recurrence, text, createdAt);
+        }
         if (isTimedType(type)) {
           const repairReferenceAt = getTextResolutionReferenceAt(record, text, type);
           const naturalInfo = extractNaturalDateInfo(text, repairReferenceAt);
@@ -5082,12 +5855,14 @@
           type: type,
           createdAt: createdAt,
           eventAt: eventAt,
+          recurrence: recurrence,
           ignoredConflictKeys: normalizeConflictKeys(record.ignoredConflictKeys),
           history: normalizeHistoryEntries(record.history, {
             text: text,
             type: type,
             createdAt: createdAt,
             eventAt: eventAt,
+            recurrence: recurrence,
             prepared: type === "meeting" ? Boolean(record.prepared) && !Boolean(record.completed) : false,
             completed: Boolean(record.completed),
             updatedAt: updatedAt

@@ -3008,6 +3008,21 @@
             return;
           }
 
+          state.remote.sha = result.sha;
+          state.remote.lastSyncAt = new Date().toISOString();
+          state.remote.lastPayloadAt = result.payloadAt || state.remote.lastPayloadAt;
+          state.remote.staleSha = "";
+          state.remote.error = "";
+
+          if (!recordsChanged) {
+            saveRemoteSyncSettingsToLocal();
+            updateStorageStatus();
+            if (!opts.silent) {
+              setStatus("GitHub 已是最新。");
+            }
+            return;
+          }
+
           if (recordsChanged
             && !state.remote.lastSyncAt
             && state.records.length
@@ -3017,11 +3032,6 @@
             return;
           }
 
-          state.remote.sha = result.sha;
-          state.remote.lastSyncAt = new Date().toISOString();
-          state.remote.lastPayloadAt = result.payloadAt || state.remote.lastPayloadAt;
-          state.remote.staleSha = "";
-          state.remote.error = "";
           state.records = result.records;
           state.editingId = null;
           saveLocalRecords({

@@ -4018,10 +4018,13 @@
         if (recurrenceInfo) {
           const recurrenceChanged = !recurrencesEqual(record && record.recurrence, recurrenceInfo);
           const naturalInfo = extractNaturalDateInfo(source);
+          const shouldResolveEventAt = recurrenceChanged
+            || Boolean(parseRecurrenceAnchorInfo(source))
+            || (recurrenceInfo.mode === "sliding" && hasExplicitCalendarDateToken(source));
           const inferredType = isDeadlineHintText(source)
             ? "deadline"
             : (record && record.type === "meeting" ? "meeting" : "todo");
-          const resolvedEventAt = recurrenceChanged
+          const resolvedEventAt = shouldResolveEventAt
             ? resolveRecurringEventAt(inferredType, "", naturalInfo, recurrenceInfo, source)
             : normalizeDateTime(record && record.eventAt)
               || resolveRecurringEventAt(inferredType, "", naturalInfo, recurrenceInfo, source);
@@ -4150,7 +4153,7 @@
       }
 
       function getTimedPriorityMeta(record, nowTime) {
-        if (!isTimedType(record.type) || !record.eventAt || record.completed) {
+        if (!hasScheduledEvent(record) || record.completed) {
           return { bucket: 3, value: 0 };
         }
 
@@ -4186,7 +4189,19 @@
           return endAt ? endAt.getTime() : null;
         }
 
+        if (isRecurringRecord(record)) {
+          const endAt = getDefaultEventEndAt(record);
+          return endAt ? endAt.getTime() : null;
+        }
+
         return null;
+      }
+
+      function hasScheduledEvent(record) {
+        return Boolean(record
+          && record.eventAt
+          && (isTimedType(record.type) || isRecurringRecord(record))
+          && isValidDate(record.eventAt));
       }
 
       function getStatusSearchText(record) {
@@ -4333,6 +4348,21 @@
         return end;
       }
 
+      function getDefaultEventEndAt(record) {
+        if (!record || !isValidDate(record.eventAt)) {
+          return null;
+        }
+
+        const end = new Date(record.eventAt);
+        if (isMidnightDateTime(record.eventAt) && !hasExplicitTimeToken(record.text)) {
+          end.setHours(23, 59, 0, 0);
+          return end;
+        }
+
+        end.setTime(end.getTime() + 60 * 60 * 1000);
+        return end;
+      }
+
       function buildConflictMap(records) {
         const map = {};
         records.forEach(function (record) {
@@ -4384,10 +4414,14 @@
 
       function isConflictCandidate(record) {
         return record
-          && record.type === "meeting"
+          && isConflictRecordType(record)
           && !isVisuallyCompleted(record)
           && isValidDate(record.eventAt)
           && hasConflictTimeInfo(record);
+      }
+
+      function isConflictRecordType(record) {
+        return Boolean(record && (record.type === "meeting" || isRecurringRecord(record)));
       }
 
       function hasConflictTimeInfo(record) {
@@ -4403,8 +4437,7 @@
           return true;
         }
 
-        const naturalInfo = extractNaturalDateInfo(record.text);
-        return Boolean(naturalInfo.eventAt);
+        return isConflictRecordType(record);
       }
 
       function buildConflictWindow(record) {
@@ -4421,6 +4454,8 @@
           if (end.getTime() <= start.getTime()) {
             end.setTime(start.getTime() + 60 * 60 * 1000);
           }
+        } else if (isMidnightDateTime(record.eventAt) && !hasExplicitTimeToken(record.text)) {
+          end.setHours(23, 59, 0, 0);
         } else {
           end.setTime(start.getTime() + 60 * 60 * 1000);
         }
@@ -4662,12 +4697,15 @@
           return explicitEventAt;
         }
 
-        if (naturalInfo && naturalInfo.eventAt) {
+        const now = isValidDate(referenceNow) ? new Date(referenceNow) : new Date();
+        const anchorInfo = parseRecurrenceAnchorInfo(text, now);
+        if (!anchorInfo && naturalInfo && naturalInfo.eventAt) {
           return naturalInfo.eventAt;
         }
 
-        const now = isValidDate(referenceNow) ? new Date(referenceNow) : new Date();
-        const date = naturalInfo && naturalInfo.date
+        const date = anchorInfo
+          ? getInitialRecurrenceDate(recurrence, text, now)
+          : naturalInfo && naturalInfo.date
           ? new Date(naturalInfo.date.getTime())
           : getInitialRecurrenceDate(recurrence, text, now);
         if (!date || !isValidDate(date)) {
@@ -4998,9 +5036,17 @@
 
       function getInitialRecurrenceDate(recurrence, text, referenceNow) {
         const now = isValidDate(referenceNow) ? new Date(referenceNow) : new Date();
-        const explicitInitial = parseRecurrenceInitialDate(text, now);
-        if (explicitInitial) {
-          return explicitInitial;
+        const anchorInfo = parseRecurrenceAnchorInfo(text, now);
+        if (anchorInfo) {
+          const anchorDate = new Date(anchorInfo.date.getTime());
+          const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          if (anchorInfo.relation === "previous") {
+            return getNextOccurrenceFromAnchor(recurrence, anchorDate, today, false);
+          }
+          if (anchorDate.getTime() >= today.getTime()) {
+            return anchorDate;
+          }
+          return getNextOccurrenceFromAnchor(recurrence, anchorDate, today, true);
         }
 
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -5040,17 +5086,97 @@
       }
 
       function parseRecurrenceInitialDate(text, referenceNow) {
+        const anchorInfo = parseRecurrenceAnchorInfo(text, referenceNow);
+        return anchorInfo ? anchorInfo.date : null;
+      }
+
+      function parseRecurrenceAnchorInfo(text, referenceNow) {
         const source = String(text || "");
-        if (!/(?:第一次|首次|首回|第一回|从|自|开始|起始)/.test(source)) {
+        if (!source) {
           return null;
         }
 
-        const fullOrMonthDate = parseExplicitCalendarDate(source, referenceNow);
-        if (fullOrMonthDate.matched) {
-          return fullOrMonthDate.date;
+        const now = isValidDate(referenceNow) ? new Date(referenceNow) : new Date();
+        const previousPattern = /(?:上一次|上次|上回|上一回|最近一次|最近一回|上轮|上一轮|上个周期|上一周期)/g;
+        const previousContext = getRecurrenceAnchorContext(source, previousPattern);
+        if (previousContext) {
+          const previousDate = parseAnchorDateFromText(previousContext, now, "previous");
+          if (previousDate) {
+            return {
+              relation: "previous",
+              date: previousDate
+            };
+          }
         }
 
-        const dayMatch = source.match(/(?:第一次|首次|首回|第一回|从|自|开始|起始)[^0-9一二两三四五六七八九十]{0,8}([0-9一二两三四五六七八九十]{1,3})\s*(?:日|号)/);
+        const startPattern = /(?:第一次|首次|首回|第一回|从|自|自从|开始|起始|起)/g;
+        const startContext = getRecurrenceAnchorContext(source, startPattern);
+        if (startContext) {
+          const startDate = parseAnchorDateFromText(startContext, now, "start");
+          if (startDate) {
+            return {
+              relation: "start",
+              date: startDate
+            };
+          }
+        }
+
+        return null;
+      }
+
+      function getRecurrenceAnchorContext(source, pattern) {
+        let match;
+        while ((match = pattern.exec(source)) !== null) {
+          const index = match.index;
+          const start = Math.max(0, index - 28);
+          const end = Math.min(source.length, index + match[0].length + 72);
+          const context = source.slice(start, end);
+          if (hasDateLikeToken(context)) {
+            return context;
+          }
+        }
+        return "";
+      }
+
+      function parseAnchorDateFromText(text, referenceNow, relation) {
+        const source = String(text || "");
+        const now = isValidDate(referenceNow) ? new Date(referenceNow) : new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        const relativeMap = [
+          { pattern: /大前天/, offset: -3 },
+          { pattern: /前天/, offset: -2 },
+          { pattern: /昨天|昨日/, offset: -1 },
+          { pattern: /大后天/, offset: 3 },
+          { pattern: /后天/, offset: 2 },
+          { pattern: /明天|明早|明晚/, offset: 1 },
+          { pattern: /今天|今日|今晚|今早|今晨|今午/, offset: 0 }
+        ];
+
+        for (let index = 0; index < relativeMap.length; index += 1) {
+          if (relativeMap[index].pattern.test(source)) {
+            const date = new Date(today);
+            date.setDate(date.getDate() + relativeMap[index].offset);
+            return date;
+          }
+        }
+
+        const fullDateMatch = source.match(/(\d{4})\s*(?:年|[\/.-])\s*(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?/);
+        if (fullDateMatch) {
+          return new Date(Number(fullDateMatch[1]), Number(fullDateMatch[2]) - 1, Number(fullDateMatch[3]));
+        }
+
+        const monthDayMatch = source.match(/(?:^|[^\d])(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?/);
+        if (monthDayMatch) {
+          return new Date(now.getFullYear(), Number(monthDayMatch[1]) - 1, Number(monthDayMatch[2]));
+        }
+
+        const weekdayMatch = source.match(/(上周|上星期|上礼拜|下周|下星期|下礼拜|本周|这周|本星期|这星期|本礼拜|这礼拜)?\s*(?:周|星期|礼拜)\s*([一二三四五六日天])/);
+        if (weekdayMatch) {
+          return resolveAnchorWeekdayDate(weekdayMatch[1] || "", weekdayMatch[2], now, relation);
+        }
+
+        const dayMatch = source.match(/(?:^|[^\d月])([0-9一二两三四五六七八九十]{1,3})\s*(?:日|号)/);
         if (!dayMatch) {
           return null;
         }
@@ -5060,14 +5186,60 @@
           return null;
         }
 
+        return makeMonthlyOccurrence(now.getFullYear(), now.getMonth(), day, today);
+      }
+
+      function resolveAnchorWeekdayDate(prefix, weekdayLabel, referenceNow, relation) {
         const now = isValidDate(referenceNow) ? new Date(referenceNow) : new Date();
-        let date = makeMonthlyOccurrence(now.getFullYear(), now.getMonth(), day, now);
-        date.setHours(0, 0, 0, 0);
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        if (date.getTime() < today.getTime()) {
-          date = addMonthsClamped(date, 1, day);
+        const target = weekdayToIndex(weekdayLabel);
+        const current = getLocalWeekdayIndex(today);
+        let diff = target - current;
+
+        if (/上/.test(prefix)) {
+          diff -= 7;
+        } else if (/下/.test(prefix)) {
+          diff += 7;
+        } else if (relation === "previous" && diff > 0) {
+          diff -= 7;
+        } else if (relation !== "previous" && diff < 0) {
+          diff += 7;
         }
+
+        const date = new Date(today);
+        date.setDate(date.getDate() + diff);
         return date;
+      }
+
+      function hasDateLikeToken(text) {
+        return /(?:今天|今日|昨天|昨日|前天|大前天|明天|后天|大后天|下周[一二三四五六日天]|上周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]|\d{4}\s*(?:年|[\/.-])\s*\d{1,2}\s*(?:月|[\/.-])\s*\d{1,2}|\d{1,2}\s*(?:月|[\/.-])\s*\d{1,2}|[0-9一二两三四五六七八九十]{1,3}\s*(?:日|号))/.test(String(text || ""));
+      }
+
+      function hasExplicitCalendarDateToken(text) {
+        return /(?:\d{4}\s*(?:年|[\/.-])\s*\d{1,2}\s*(?:月|[\/.-])\s*\d{1,2}|\d{1,2}\s*(?:月|[\/.-])\s*\d{1,2})/.test(String(text || ""));
+      }
+
+      function getNextOccurrenceFromAnchor(recurrence, anchorDate, thresholdDate, includeAnchor) {
+        const threshold = isValidDate(thresholdDate) ? new Date(thresholdDate) : new Date();
+        if (recurrence.mode === "sliding") {
+          let candidate = new Date(anchorDate.getTime());
+          if (!includeAnchor || candidate.getTime() < threshold.getTime()) {
+            candidate = addRecurrenceUnits(candidate, recurrence.frequency, recurrence.interval);
+          }
+          while (candidate && candidate.getTime() < threshold.getTime()) {
+            candidate = addRecurrenceUnits(candidate, recurrence.frequency, recurrence.interval);
+          }
+          return candidate;
+        }
+
+        if (includeAnchor && anchorDate.getTime() >= threshold.getTime()) {
+          return anchorDate;
+        }
+
+        const searchAfter = includeAnchor
+          ? new Date(threshold.getTime() - 1)
+          : anchorDate;
+        return getFirstFixedOccurrenceAfter(recurrence, searchAfter, anchorDate);
       }
 
       function stripRecurrenceInitialPhrase(text) {
@@ -5078,7 +5250,8 @@
 
         const datePattern = "(?:今天|明天|后天|大后天|今晚|今早|明早|明晚|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]|\\d{4}\\s*(?:年|[\\/.-])\\s*\\d{1,2}\\s*(?:月|[\\/.-])\\s*\\d{1,2}\\s*(?:日|号)?|\\d{1,2}\\s*(?:月|[\\/.-])\\s*\\d{1,2}\\s*(?:日|号)?|[0-9一二两三四五六七八九十]{1,3}\\s*(?:日|号))";
         const patterns = [
-          new RegExp("[，,。；;、\\s]*(?:第一次|首次|首回|第一回)\\s*(?:是|在|从)?\\s*" + datePattern + "\\s*(?:开始|执行)?", "g"),
+          new RegExp("[，,。；;、\\s]*(?:第一次|首次|首回|第一回)[^，,。；;、\\n]{0,28}?(?:是|在|从|为)?\\s*" + datePattern + "\\s*(?:开始|执行)?", "g"),
+          new RegExp("[，,。；;、\\s]*(?:上一次|上次|上回|上一回|最近一次|最近一回|上轮|上一轮|上个周期|上一周期)[^，,。；;、\\n]{0,28}?(?:是|在|为)?\\s*" + datePattern, "g"),
           new RegExp("[，,。；;、\\s]*(?:从|自)\\s*" + datePattern + "\\s*(?:开始|起|起始)", "g"),
           new RegExp("[，,。；;、\\s]*(?:开始|起始)\\s*(?:日期|时间)?\\s*(?:是|为)?\\s*" + datePattern, "g")
         ];

@@ -1521,6 +1521,7 @@
       const DEFAULT_REMOTE_BRANCH = "main";
       const DEFAULT_REMOTE_PATH = "minimal-notes-records.json";
       const REMOTE_SYNC_INTERVAL = 15000;
+      const REMOTE_WRITE_MAX_ATTEMPTS = 5;
       const SUPPORTS_FILE_SYNC = Boolean(
         window.isSecureContext
         && window.indexedDB
@@ -1538,6 +1539,7 @@
 
       const state = {
         records: initialLocalPayload.records,
+        recurrenceCompletionArchive: initialLocalPayload.recurrenceCompletionArchive || [],
         recordsRevision: 0,
         localPayloadAt: initialLocalPayload.payloadAt,
         filter: "all",
@@ -2155,6 +2157,7 @@
           return;
         }
 
+        const archivedCompletions = archiveRecurrenceCompletions(record, new Date().toISOString());
         state.records = state.records.filter(function (item) {
           return item.id !== id;
         });
@@ -2163,7 +2166,7 @@
         }
         persist();
         render();
-        setStatus("已删除。");
+        setStatus(archivedCompletions ? "已删除；循环完成记录已保留在 JSON。" : "已删除。");
       }
 
       function confirmAutoComplete(id) {
@@ -2288,7 +2291,8 @@
         reader.onload = function (loadEvent) {
           try {
             const raw = String(loadEvent.target.result || "");
-            const normalized = parseRecordsPayload(raw);
+            const payload = parseRecordsEnvelope(raw);
+            const normalized = payload.records;
             const ok = window.confirm("导入会覆盖当前本地数据，是否继续？");
             if (!ok) {
               importFile.value = "";
@@ -2296,6 +2300,7 @@
             }
 
             state.records = normalized.sort(sortRecords);
+            state.recurrenceCompletionArchive = payload.recurrenceCompletionArchive;
             state.editingId = null;
             persist();
             render();
@@ -2577,6 +2582,7 @@
 
         const payload = parseRecordsEnvelope(raw);
         state.records = payload.records;
+        state.recurrenceCompletionArchive = payload.recurrenceCompletionArchive;
         state.localPayloadAt = payload.payloadAt || state.localPayloadAt;
         state.editingId = null;
         state.sync.permissionNeeded = false;
@@ -3004,7 +3010,7 @@
           }
 
           if (result.missing) {
-            if (opts.createIfMissing || state.records.length) {
+            if (opts.createIfMissing || state.records.length || state.recurrenceCompletionArchive.length) {
               const ok = await writeCurrentRecordsToRemote();
               if (ok && !opts.silent) {
                 setStatus("已创建 GitHub 数据文件。");
@@ -3032,7 +3038,11 @@
           }
 
           const recordsChanged = !recordsEqual(state.records, result.records);
-          if (recordsChanged && isRemoteOlderThanLocal(result)) {
+          const archiveChanged = !recurrenceCompletionArchivesEqual(
+            state.recurrenceCompletionArchive,
+            result.recurrenceCompletionArchive
+          );
+          if ((recordsChanged || archiveChanged) && isRemoteOlderThanLocal(result)) {
             state.remote.sha = result.sha || state.remote.sha;
             state.remote.lastSyncAt = new Date().toISOString();
             state.remote.lastPayloadAt = state.localPayloadAt || state.remote.lastPayloadAt;
@@ -3054,7 +3064,7 @@
           state.remote.staleSha = "";
           state.remote.error = "";
 
-          if (!recordsChanged) {
+          if (!recordsChanged && !archiveChanged) {
             saveRemoteSyncSettingsToLocal();
             updateStorageStatus();
             if (!opts.silent) {
@@ -3063,7 +3073,7 @@
             return;
           }
 
-          if (recordsChanged
+          if ((recordsChanged || archiveChanged)
             && !state.remote.lastSyncAt
             && state.records.length
             && result.records.length
@@ -3073,6 +3083,7 @@
           }
 
           state.records = result.records;
+          state.recurrenceCompletionArchive = result.recurrenceCompletionArchive;
           state.editingId = null;
           saveLocalRecords({
             payloadSavedAt: result.savedAt,
@@ -3098,13 +3109,15 @@
 
       async function fetchRemoteRecords() {
         const response = await fetch(getRemoteContentsUrl(true), {
-          headers: getRemoteHeaders(false)
+          headers: getRemoteHeaders(false),
+          cache: "no-store"
         });
 
         if (response.status === 404) {
           return {
             missing: true,
             records: [],
+            recurrenceCompletionArchive: [],
             sha: ""
           };
         }
@@ -3119,6 +3132,7 @@
         return {
           missing: false,
           records: payload.records,
+          recurrenceCompletionArchive: payload.recurrenceCompletionArchive,
           sha: typeof data.sha === "string" ? data.sha : "",
           savedAt: payload.savedAt,
           syncedAt: payload.syncedAt,
@@ -3148,32 +3162,36 @@
             branch: state.remote.branch || DEFAULT_REMOTE_BRANCH
           };
 
-          if (baseSha) {
-            body.sha = baseSha;
-          }
-
-          let response = await fetch(getRemoteContentsUrl(false), {
-            method: "PUT",
-            headers: getRemoteHeaders(true),
-            body: JSON.stringify(body)
-          });
-
-          if (response.status === 409 || response.status === 422) {
-            const latest = await fetchRemoteRecords();
-            state.remote.sha = latest.sha || "";
-            if (state.remote.sha) {
-              body.sha = state.remote.sha;
+          let response = null;
+          for (let attempt = 0; attempt < REMOTE_WRITE_MAX_ATTEMPTS; attempt += 1) {
+            const writeSha = attempt === 0 ? baseSha : state.remote.sha;
+            if (writeSha) {
+              body.sha = writeSha;
             } else {
               delete body.sha;
             }
+
             response = await fetch(getRemoteContentsUrl(false), {
               method: "PUT",
               headers: getRemoteHeaders(true),
-              body: JSON.stringify(body)
+              body: JSON.stringify(body),
+              cache: "no-store"
             });
+
+            if (response.ok) {
+              break;
+            }
+
+            if (!isRemoteShaConflict(response) || attempt >= REMOTE_WRITE_MAX_ATTEMPTS - 1) {
+              throw await createRemoteHttpError(response, "GitHub 写入失败");
+            }
+
+            const latest = await fetchRemoteRecords();
+            state.remote.sha = latest.sha || "";
+            await waitForRemoteWriteRetry(attempt);
           }
 
-          if (!response.ok) {
+          if (!response || !response.ok) {
             throw await createRemoteHttpError(response, "GitHub 写入失败");
           }
 
@@ -3256,7 +3274,9 @@
       function getRemoteHeaders(includeJsonContentType) {
         const headers = {
           "Accept": "application/vnd.github+json",
-          "Authorization": "Bearer " + state.remote.token
+          "Authorization": "Bearer " + state.remote.token,
+          "Cache-Control": "no-cache",
+          "Pragma": "no-cache"
         };
 
         if (includeJsonContentType) {
@@ -3266,7 +3286,21 @@
         return headers;
       }
 
+      function isRemoteShaConflict(response) {
+        return Boolean(response && (response.status === 409 || response.status === 422));
+      }
+
+      function waitForRemoteWriteRetry(attempt) {
+        return new Promise(function (resolve) {
+          window.setTimeout(resolve, Math.min(1200, 200 + attempt * 250));
+        });
+      }
+
       async function createRemoteHttpError(response, fallback) {
+        if (!response) {
+          return new Error(fallback);
+        }
+
         let message = "";
         try {
           const data = await response.json();
@@ -3345,12 +3379,20 @@
         return JSON.stringify(left || []) === JSON.stringify(right || []);
       }
 
+      function recurrenceCompletionArchivesEqual(left, right) {
+        return JSON.stringify(normalizeRecurrenceCompletionArchiveEntries(left))
+          === JSON.stringify(normalizeRecurrenceCompletionArchiveEntries(right));
+      }
+
       function getRecordsSnapshot(records) {
-        return JSON.stringify(Array.isArray(records) ? records : state.records || []);
+        return JSON.stringify({
+          records: Array.isArray(records) ? records : state.records || [],
+          recurrenceCompletionArchive: normalizeRecurrenceCompletionArchiveEntries(state.recurrenceCompletionArchive)
+        });
       }
 
       function getRecordsPayloadSnapshot() {
-        return JSON.parse(getRecordsSnapshot());
+        return JSON.parse(JSON.stringify(state.records || []));
       }
 
       function getPayloadTimestamp(payload) {
@@ -3395,7 +3437,10 @@
       }
 
       function isRemoteOlderThanLocal(result) {
-        if (!result || result.missing || !state.records.length || !result.records.length) {
+        const localArchive = normalizeRecurrenceCompletionArchiveEntries(state.recurrenceCompletionArchive);
+        const remoteArchive = normalizeRecurrenceCompletionArchiveEntries(result && result.recurrenceCompletionArchive);
+        const hasLocalData = state.records.length || localArchive.length;
+        if (!result || result.missing || !hasLocalData) {
           return false;
         }
 
@@ -3406,7 +3451,8 @@
           ? new Date(result.payloadAt).getTime()
           : 0;
 
-        return Boolean(localPayloadTime && resultPayloadTime && resultPayloadTime < localPayloadTime);
+        const hasRemoteData = (Array.isArray(result.records) ? result.records.length : 0) || remoteArchive.length;
+        return Boolean(localPayloadTime && (!hasRemoteData || !resultPayloadTime || resultPayloadTime < localPayloadTime));
       }
 
       function render() {
@@ -5101,6 +5147,37 @@
         record.recurrenceCompletions = entries;
       }
 
+      function archiveRecurrenceCompletions(record, deletedAt) {
+        const entry = createRecurrenceCompletionArchiveEntry(record, deletedAt);
+        if (!entry) {
+          return false;
+        }
+
+        const entries = normalizeRecurrenceCompletionArchiveEntries(state.recurrenceCompletionArchive);
+        entries.push(entry);
+        state.recurrenceCompletionArchive = entries;
+        return true;
+      }
+
+      function createRecurrenceCompletionArchiveEntry(record, deletedAt) {
+        if (!record) {
+          return null;
+        }
+
+        return normalizeRecurrenceCompletionArchiveEntry({
+          recordId: record.id,
+          deletedAt: deletedAt,
+          text: typeof record.text === "string" ? record.text : "",
+          displayText: getDisplayText(record),
+          type: typeof record.type === "string" ? record.type : "",
+          createdAt: record.createdAt,
+          updatedAt: record.updatedAt,
+          recurrence: record.recurrence,
+          recurrenceLabel: formatRecurrenceLabel(record.recurrence),
+          completions: record.recurrenceCompletions
+        });
+      }
+
       function normalizeRecurrenceCompletionEntries(value) {
         if (!Array.isArray(value)) {
           return [];
@@ -5126,6 +5203,46 @@
           text: typeof value.text === "string" ? value.text : "",
           displayText: typeof value.displayText === "string" ? value.displayText : "",
           recurrenceLabel: typeof value.recurrenceLabel === "string" ? value.recurrenceLabel : ""
+        };
+      }
+
+      function normalizeRecurrenceCompletionArchiveEntries(value) {
+        if (!Array.isArray(value)) {
+          return [];
+        }
+
+        return value
+          .map(normalizeRecurrenceCompletionArchiveEntry)
+          .filter(Boolean)
+          .sort(function (a, b) {
+            return new Date(a.deletedAt).getTime() - new Date(b.deletedAt).getTime();
+          });
+      }
+
+      function normalizeRecurrenceCompletionArchiveEntry(value) {
+        if (!value || typeof value !== "object" || !isValidDate(value.deletedAt)) {
+          return null;
+        }
+
+        const completions = normalizeRecurrenceCompletionEntries(value.completions);
+        if (!completions.length) {
+          return null;
+        }
+
+        const recurrence = normalizeRecurrenceInfo(value.recurrence);
+        return {
+          recordId: typeof value.recordId === "string" ? value.recordId : "",
+          deletedAt: new Date(value.deletedAt).toISOString(),
+          text: typeof value.text === "string" ? value.text : "",
+          displayText: typeof value.displayText === "string" ? value.displayText : "",
+          type: typeof value.type === "string" ? value.type : "",
+          createdAt: normalizeDateTime(value.createdAt),
+          updatedAt: normalizeDateTime(value.updatedAt),
+          recurrence: recurrence,
+          recurrenceLabel: typeof value.recurrenceLabel === "string" && value.recurrenceLabel
+            ? value.recurrenceLabel
+            : formatRecurrenceLabel(recurrence),
+          completions: completions
         };
       }
 
@@ -6043,6 +6160,7 @@
           if (!raw) {
             return {
               records: [],
+              recurrenceCompletionArchive: [],
               savedAt: "",
               syncedAt: "",
               payloadAt: ""
@@ -6054,6 +6172,7 @@
           console.error(error);
           return {
             records: [],
+            recurrenceCompletionArchive: [],
             savedAt: "",
             syncedAt: "",
             payloadAt: ""
@@ -6100,7 +6219,8 @@
         return Object.assign({
           version: 2,
           savedAt: new Date().toISOString(),
-          records: Array.isArray(records) ? records : state.records
+          records: Array.isArray(records) ? records : state.records,
+          recurrenceCompletionArchive: normalizeRecurrenceCompletionArchiveEntries(state.recurrenceCompletionArchive)
         }, extra || {});
       }
 
@@ -6117,6 +6237,9 @@
 
         return {
           records: records.map(normalizeImportedRecord).filter(Boolean).sort(sortRecords),
+          recurrenceCompletionArchive: !Array.isArray(parsed)
+            ? normalizeRecurrenceCompletionArchiveEntries(parsed.recurrenceCompletionArchive)
+            : [],
           savedAt: !Array.isArray(parsed) && isValidDate(parsed.savedAt) ? new Date(parsed.savedAt).toISOString() : "",
           syncedAt: !Array.isArray(parsed) && isValidDate(parsed.syncedAt) ? new Date(parsed.syncedAt).toISOString() : "",
           payloadAt: getPayloadTimestamp(parsed)

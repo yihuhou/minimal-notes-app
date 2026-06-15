@@ -2060,6 +2060,7 @@
           recurrence: parsed.recurrence,
           ignoredConflictKeys: [],
           history: [],
+          recurrenceCompletions: [],
           autoCompleteState: "",
           autoCompleteRef: "",
           autoCompletedAt: "",
@@ -3755,8 +3756,11 @@
 
       function getDisplayText(record) {
         const rawText = record && typeof record.text === "string" ? record.text.trim() : "";
-        const recurringText = isRecurringRecord(record) ? stripRecurringDisplayText(rawText) : "";
-        const source = recurringText || rawText;
+        if (isRecurringRecord(record)) {
+          return getRecurringDisplayText(record, rawText);
+        }
+
+        const source = rawText;
         if (!source || !record || !isValidDate(record.eventAt) || hasExplicitWeekdayToken(source)) {
           return source;
         }
@@ -3772,6 +3776,32 @@
         }
 
         return injectWeekdayIntoText(source, weekday);
+      }
+
+      function getRecurringDisplayText(record, rawText) {
+        const actionText = stripRecurringDisplayText(rawText) || rawText;
+        const datePrefix = formatRecurringDisplayDatePrefix(record, rawText);
+        if (!datePrefix) {
+          return actionText;
+        }
+        if (actionText.indexOf(datePrefix) === 0) {
+          return actionText;
+        }
+        return joinDisplayPrefix(datePrefix, actionText);
+      }
+
+      function joinDisplayPrefix(prefix, text) {
+        const cleanPrefix = String(prefix || "").trim();
+        const cleanText = String(text || "").trim();
+        if (!cleanPrefix) {
+          return cleanText;
+        }
+        if (!cleanText) {
+          return cleanPrefix;
+        }
+        return /^[A-Za-z0-9]/.test(cleanText)
+          ? cleanPrefix + " " + cleanText
+          : cleanPrefix + cleanText;
       }
 
       function stripRecurringDisplayText(text) {
@@ -3795,12 +3825,15 @@
           /每月/g
         ];
 
+        source = stripRecurrenceOccurrencePhrase(source);
+
         patterns.forEach(function (pattern) {
           source = source.replace(pattern, "");
         });
 
         source = source
           .replace(/(?:一?次|一回|一趟)(?!性)/g, "")
+          .replace(getDisplayDateTokenPattern(), "")
           .replace(/\s{2,}/g, " ")
           .replace(/\s*([，,。；;、])\s*/g, "$1")
           .replace(/[，,。；;、]{2,}/g, "，")
@@ -3809,6 +3842,92 @@
           .trim();
 
         return source;
+      }
+
+      function stripRecurrenceOccurrencePhrase(text) {
+        let source = String(text || "");
+        const datePattern = getDisplayDatePatternSource();
+        const patterns = [
+          new RegExp("[，,。；;、\\s]*(?:下次|下一次|下回|下一回|下一期|下期|下轮|下一轮|下个周期|下一周期|本次|这次|本期|这一期)[^，,。；;、\\n]{0,28}?(?:是|在|为|安排在)?\\s*" + datePattern + "\\s*(?:开始|执行)?", "g"),
+          new RegExp("[，,。；;、\\s]*(?:下次|下一次|下回|下一回|下一期|下期|下轮|下一轮|下个周期|下一周期|本次|这次|本期|这一期)\\s*(?:是|在|为)?\\s*", "g")
+        ];
+
+        patterns.forEach(function (pattern) {
+          source = source.replace(pattern, "");
+        });
+        return source;
+      }
+
+      function getDisplayDateTokenPattern() {
+        return new RegExp(getDisplayDatePatternSource(), "g");
+      }
+
+      function getDisplayDatePatternSource() {
+        return "(?:今天|今日|昨天|昨日|前天|大前天|明天|后天|大后天|今晚|今早|明早|明晚|下周[一二三四五六日天]|上周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]|\\d{4}\\s*(?:年|[\\/.-])\\s*\\d{1,2}\\s*(?:月|[\\/.-])\\s*\\d{1,2}\\s*(?:日|号)?|\\d{1,2}\\s*(?:月|[\\/.-])\\s*\\d{1,2}\\s*(?:日|号)?)";
+      }
+
+      function formatRecurringDisplayDatePrefix(record, rawText) {
+        if (!record || !isValidDate(record.eventAt)) {
+          return "";
+        }
+
+        if (hasExplicitCalendarDateToken(rawText)) {
+          return formatDotDateWithWeekday(record.eventAt);
+        }
+
+        return formatRelativeDatePrefix(record.eventAt) || formatDotDateWithWeekday(record.eventAt);
+      }
+
+      function formatRelativeDatePrefix(value) {
+        if (!isValidDate(value)) {
+          return "";
+        }
+
+        const target = new Date(value);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const targetDay = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+        const dayMs = 24 * 60 * 60 * 1000;
+        const diffDays = Math.round((targetDay.getTime() - today.getTime()) / dayMs);
+        const weekday = formatWeekdayToken(target);
+
+        if (diffDays === 0) {
+          return "今天" + weekday;
+        }
+        if (diffDays === 1) {
+          return "明天" + weekday;
+        }
+        if (diffDays === 2) {
+          return "后天" + weekday;
+        }
+
+        const todayWeekStart = getLocalWeekStart(today);
+        const targetWeekStart = getLocalWeekStart(targetDay);
+        const weekDiff = Math.round((targetWeekStart.getTime() - todayWeekStart.getTime()) / (7 * dayMs));
+        if (weekDiff === 0 && diffDays > 0) {
+          return weekday;
+        }
+        if (weekDiff === 1) {
+          return "下" + weekday;
+        }
+
+        return "";
+      }
+
+      function getLocalWeekStart(value) {
+        const date = new Date(value);
+        date.setHours(0, 0, 0, 0);
+        date.setDate(date.getDate() - getLocalWeekdayIndex(date));
+        return date;
+      }
+
+      function formatDotDateWithWeekday(value) {
+        if (!isValidDate(value)) {
+          return "";
+        }
+
+        const date = new Date(value);
+        return [date.getMonth() + 1, ".", date.getDate(), formatWeekdayToken(date)].join("");
       }
 
       function injectWeekdayIntoText(source, weekday) {
@@ -4967,17 +5086,70 @@
         return JSON.stringify(normalizeRecurrenceInfo(left)) === JSON.stringify(normalizeRecurrenceInfo(right));
       }
 
+      function pushRecurrenceCompletion(record, completion) {
+        if (!record || !completion) {
+          return;
+        }
+
+        const entries = normalizeRecurrenceCompletionEntries(record.recurrenceCompletions);
+        const normalized = normalizeRecurrenceCompletionEntry(completion);
+        if (!normalized) {
+          return;
+        }
+
+        entries.push(normalized);
+        record.recurrenceCompletions = entries;
+      }
+
+      function normalizeRecurrenceCompletionEntries(value) {
+        if (!Array.isArray(value)) {
+          return [];
+        }
+
+        return value
+          .map(normalizeRecurrenceCompletionEntry)
+          .filter(Boolean)
+          .sort(function (a, b) {
+            return new Date(a.completedAt).getTime() - new Date(b.completedAt).getTime();
+          });
+      }
+
+      function normalizeRecurrenceCompletionEntry(value) {
+        if (!value || typeof value !== "object" || !isValidDate(value.completedAt)) {
+          return null;
+        }
+
+        return {
+          occurrenceAt: normalizeDateTime(value.occurrenceAt),
+          completedAt: new Date(value.completedAt).toISOString(),
+          nextEventAt: normalizeDateTime(value.nextEventAt),
+          text: typeof value.text === "string" ? value.text : "",
+          displayText: typeof value.displayText === "string" ? value.displayText : "",
+          recurrenceLabel: typeof value.recurrenceLabel === "string" ? value.recurrenceLabel : ""
+        };
+      }
+
       function completeAndAdvanceRecurringRecord(record, completedAt) {
         const nextEventAt = getNextRecurrenceEventAt(record, completedAt);
         if (!nextEventAt) {
           return false;
         }
 
+        const completedOccurrence = {
+          occurrenceAt: normalizeDateTime(record.eventAt),
+          completedAt: completedAt,
+          nextEventAt: nextEventAt,
+          text: typeof record.text === "string" ? record.text : "",
+          displayText: getDisplayText(record),
+          recurrenceLabel: formatRecurrenceLabel(record.recurrence)
+        };
+
         record.prepared = false;
         record.completed = true;
         clearAutoCompleteState(record);
         record.updatedAt = completedAt;
         pushHistory(record, "completed", completedAt);
+        pushRecurrenceCompletion(record, completedOccurrence);
 
         const nextText = stripRecurrenceInitialPhrase(record.text);
         if (nextText) {
@@ -6108,6 +6280,7 @@
             completed: Boolean(record.completed),
             updatedAt: updatedAt
           }),
+          recurrenceCompletions: normalizeRecurrenceCompletionEntries(record.recurrenceCompletions),
           autoCompleteState: typeof record.autoCompleteState === "string" ? record.autoCompleteState : "",
           autoCompleteRef: typeof record.autoCompleteRef === "string" ? record.autoCompleteRef : "",
           autoCompletedAt: normalizeDateTime(record.autoCompletedAt),

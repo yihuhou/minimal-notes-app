@@ -3274,9 +3274,7 @@
       function getRemoteHeaders(includeJsonContentType) {
         const headers = {
           "Accept": "application/vnd.github+json",
-          "Authorization": "Bearer " + state.remote.token,
-          "Cache-Control": "no-cache",
-          "Pragma": "no-cache"
+          "Authorization": "Bearer " + state.remote.token
         };
 
         if (includeJsonContentType) {
@@ -3322,7 +3320,15 @@
       function formatRemoteError(fallback, error) {
         const message = error && error.message ? String(error.message) : "";
         if (/load failed|failed to fetch|networkerror|cancelled|internet connection/i.test(message)) {
-          return fallback + "：网络请求失败。请用 https 页面打开，不要从手机本地文件直接打开 HTML。";
+          if (isLocalFilePage()) {
+            return fallback + "：网络请求失败。请用 https 页面打开，不要从手机本地文件直接打开 HTML。";
+          }
+
+          if (isHttpPage()) {
+            return fallback + "：网络请求失败。请用 https 页面打开后再试。";
+          }
+
+          return fallback + "：网络请求失败。请检查网络、GitHub token 权限，或稍后重试。";
         }
 
         if (message) {
@@ -3330,6 +3336,14 @@
         }
 
         return fallback;
+      }
+
+      function isLocalFilePage() {
+        return Boolean(window.location && window.location.protocol === "file:");
+      }
+
+      function isHttpPage() {
+        return Boolean(window.location && window.location.protocol === "http:");
       }
 
       function normalizeRemoteRepo(value) {

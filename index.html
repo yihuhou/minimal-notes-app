@@ -4815,16 +4815,47 @@
           return false;
         }
 
-        const diff = new Date(record.eventAt).getTime() - Date.now();
+        const upcomingAt = getUpcomingComparisonAt(record);
+        if (!upcomingAt) {
+          return false;
+        }
+
+        const diff = upcomingAt.getTime() - Date.now();
         return diff >= 0 && diff <= 24 * 60 * 60 * 1000;
       }
 
+      function getUpcomingComparisonAt(record) {
+        if (!record || !isValidDate(record.eventAt)) {
+          return null;
+        }
+
+        const start = new Date(record.eventAt);
+        if (isUntimedDateRecord(record) && start.getTime() <= Date.now()) {
+          return getDefaultEventEndAt(record) || start;
+        }
+
+        return start;
+      }
+
       function getUpcomingLabel(record) {
-        const diff = new Date(record.eventAt).getTime() - Date.now();
+        const upcomingAt = getUpcomingComparisonAt(record);
+        if (!upcomingAt) {
+          return "";
+        }
+
+        const nowTime = Date.now();
+        const diff = upcomingAt.getTime() - nowTime;
+        const startsIn = new Date(record.eventAt).getTime() - nowTime;
         const hours = diff / (60 * 60 * 1000);
-        const baseLabel = record.type === "deadline" ? "截止" : "日程";
-        if (hours <= 2) {
-          return record.type === "deadline" ? "即将截止" : "即将开始";
+        const baseLabel = record.type === "deadline" ? "截止" : (record.type === "todo" ? "待办" : "日程");
+        if (record.type === "todo") {
+          return "24 小时内";
+        }
+        if (record.type === "deadline" && hours <= 2) {
+          return "即将截止";
+        }
+        if (record.type !== "deadline" && !isUntimedDateRecord(record) && startsIn >= 0 && startsIn / (60 * 60 * 1000) <= 2) {
+          return "即将开始";
         }
         if (hours <= 24) {
           return record.type === "deadline" ? "24h内截止" : "24 小时内";
@@ -4896,7 +4927,7 @@
       }
 
       function isTimedType(type) {
-        return type === "meeting" || type === "deadline";
+        return type === "todo" || type === "meeting" || type === "deadline";
       }
 
       function isDeadlineHintText(text) {

@@ -4684,7 +4684,7 @@
           return true;
         }
 
-        return isConflictRecordType(record);
+        return hasExplicitAllDayToken(record.text);
       }
 
       function buildConflictWindow(record) {
@@ -4701,7 +4701,7 @@
           if (end.getTime() <= start.getTime()) {
             end.setTime(start.getTime() + 60 * 60 * 1000);
           }
-        } else if (isMidnightDateTime(record.eventAt) && !hasExplicitTimeToken(record.text)) {
+        } else if (isMidnightDateTime(record.eventAt) && hasExplicitAllDayToken(record.text)) {
           end.setHours(23, 59, 0, 0);
         } else {
           end.setTime(start.getTime() + 60 * 60 * 1000);
@@ -5950,7 +5950,44 @@
           return { matched: true, date: date };
         }
 
+        const standaloneDayMatch = text.match(/(?:^|[^第\dA-Za-z年月\/.-])([0-9一二两三四五六七八九十]{1,3})\s*(?:日|号)(?!\s*(?:楼|栋|座|门|线|院|房|室|厅|馆|车|桌|床|柜|机|文件|题|组|页|个|人|名|位|次|岁|元|块|%))/);
+        if (standaloneDayMatch) {
+          const date = resolveStandaloneDayDate(parseCalendarDayToken(standaloneDayMatch[1]), today);
+          if (date) {
+            return { matched: true, date: date };
+          }
+        }
+
         return { matched: false, date: null };
+      }
+
+      function parseCalendarDayToken(value) {
+        const source = String(value || "").trim();
+        const number = /^\d+$/.test(source) ? parseInt(source, 10) : parseChineseNumber(source);
+        return isValidMonthDay(number) ? number : 0;
+      }
+
+      function resolveStandaloneDayDate(day, today) {
+        if (!isValidMonthDay(day) || !isValidDate(today)) {
+          return null;
+        }
+
+        const threshold = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        threshold.setDate(threshold.getDate() - 1);
+
+        for (let monthOffset = 0; monthOffset <= 12; monthOffset += 1) {
+          const candidate = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
+          if (day > daysInMonth(candidate.getFullYear(), candidate.getMonth())) {
+            continue;
+          }
+
+          candidate.setDate(day);
+          if (candidate.getTime() >= threshold.getTime()) {
+            return candidate;
+          }
+        }
+
+        return null;
       }
 
       function parseDateFromText(text, referenceNow) {
@@ -6122,6 +6159,16 @@
 
       function hasExplicitTimeToken(text) {
         return /(\d{1,2}[:：]\d{2}|\d{1,2}\s*点(?:半|[0-5]?\d\s*分?)?)/.test(String(text || ""));
+      }
+
+      function hasExplicitAllDayToken(text) {
+        const source = String(text || "");
+        if (/(?:全天|整天|全日|整日|一整天|一整日)/.test(source)) {
+          return true;
+        }
+
+        return /(?:开|上|忙|占用|安排|培训|考试|监考|招生|出差|请假|活动|会议|工作)[^，,。；;、\n]{0,6}一天/.test(source)
+          || /一天[^，,。；;、\n]{0,6}(?:会|会议|培训|考试|监考|招生|出差|请假|活动|安排|工作)/.test(source);
       }
 
       function toEndOfDayIso(value) {
@@ -6417,6 +6464,13 @@
         const inferredRecurrence = type === "idea" ? null : extractRecurrenceInfo(text);
         const recurrence = importedRecurrence || inferredRecurrence;
         let eventAt = normalizeDateTime(record.eventAt);
+        if (type === "todo" && !recurrence && !eventAt) {
+          const naturalInfo = extractNaturalDateInfo(text, createdAt);
+          if (naturalInfo.hasTemporalHint) {
+            type = inferTimedTypeFromText(text);
+            eventAt = resolveTimedEventAt(type, "", naturalInfo);
+          }
+        }
         if (recurrence && !eventAt) {
           const naturalInfo = extractNaturalDateInfo(text, createdAt);
           eventAt = resolveRecurringEventAt(type, "", naturalInfo, recurrence, text, createdAt);

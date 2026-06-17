@@ -3526,14 +3526,14 @@
 
       function renderItem(record, conflicts) {
         const editing = state.editingId === record.id;
-        const upcoming = isUpcomingMeeting(record);
+        const urgent = hasUrgencyTag(record);
         const classes = [
           "item",
           record.type,
           isPrepared(record) ? "prepared" : "",
           isVisuallyCompleted(record) ? "completed" : "",
           isAutoCompletionPending(record) ? "auto-completed" : "",
-          upcoming ? "upcoming" : ""
+          urgent ? "upcoming" : ""
         ].filter(Boolean).join(" ");
         const toggleMeta = getToggleMeta(record);
 
@@ -3543,7 +3543,7 @@
           toggleMeta.symbol,
           "</button>",
           '<div class="item-main">',
-          editing ? renderInlineEdit(record) : renderDisplay(record, upcoming, conflicts),
+          editing ? renderInlineEdit(record) : renderDisplay(record, urgent, conflicts),
           "</div>",
           '<div class="item-actions">',
           '<button type="button" class="icon-btn danger" data-action="delete" data-id="' + escapeHtml(record.id) + '" aria-label="删除" title="删除">×</button>',
@@ -3552,13 +3552,13 @@
         ].join("");
       }
 
-      function renderDisplay(record, upcoming, conflicts) {
+      function renderDisplay(record, urgent, conflicts) {
         const displayText = getDisplayText(record);
         const parts = [];
         parts.push('<div class="item-line" data-action="open-edit" data-id="' + escapeHtml(record.id) + '" tabindex="0" title="' + escapeHtml(buildItemTitle(record)) + '">');
         parts.push('<span class="item-tags">');
         parts.push('<span class="badge">' + TYPE_LABELS[record.type] + "</span>");
-        if (upcoming) {
+        if (urgent) {
           parts.push('<span class="badge strong">' + escapeHtml(getUpcomingLabel(record)) + "</span>");
         }
         if (isRecurringRecord(record)) {
@@ -5077,7 +5077,7 @@
         setStatus("已忽略这组时间冲突提醒。");
       }
 
-      function isUpcomingMeeting(record) {
+      function hasUrgencyTag(record) {
         if (!isTimedType(record.type) || !record.eventAt || record.completed) {
           return false;
         }
@@ -5088,7 +5088,11 @@
         }
 
         const diff = upcomingAt.getTime() - Date.now();
-        return diff >= 0 && diff <= 24 * 60 * 60 * 1000;
+        return isOverdueUrgencyRecord(record, diff) || (diff >= 0 && diff <= 24 * 60 * 60 * 1000);
+      }
+
+      function isOverdueUrgencyRecord(record, diff) {
+        return diff < 0 && (record.type === "deadline" || isRecurringRecord(record));
       }
 
       function getUpcomingComparisonAt(record) {
@@ -5115,6 +5119,9 @@
         const startsIn = new Date(record.eventAt).getTime() - nowTime;
         const hours = diff / (60 * 60 * 1000);
         const baseLabel = record.type === "deadline" ? "截止" : (record.type === "todo" ? "待办" : "日程");
+        if (isOverdueUrgencyRecord(record, diff)) {
+          return "已过期";
+        }
         if (record.type === "todo") {
           return "24 小时内";
         }

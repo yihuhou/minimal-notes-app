@@ -655,6 +655,15 @@
       border-color: rgba(121, 91, 24, 0.14);
     }
 
+    .item.readonly .item-line {
+      cursor: default;
+    }
+
+    .item.readonly .toggle {
+      cursor: default;
+      opacity: 0.34;
+    }
+
     .item.upcoming {
       background: #f7f7f4;
       box-shadow: inset 2px 0 0 rgba(17, 17, 17, 0.16);
@@ -679,6 +688,13 @@
       background: var(--accent);
       border-color: var(--accent);
       color: #ffffff;
+    }
+
+    .toggle.readonly {
+      color: #8a8a84;
+      background: #f7f7f4;
+      border-color: #ecece6;
+      font-size: 12px;
     }
 
     .toggle.partial {
@@ -1570,6 +1586,7 @@
       const REMOTE_SYNC_INTERVAL = 15000;
       const REMOTE_WRITE_MAX_ATTEMPTS = 5;
       const JOURNAL_ROLLOVER_HOUR = 5;
+      const JOURNAL_EDIT_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
       const SUPPORTS_FILE_SYNC = Boolean(
         window.isSecureContext
         && window.indexedDB
@@ -1876,9 +1893,7 @@
         }
 
         if (action === "open-edit") {
-          state.editingId = id;
-          render();
-          focusEditField(id);
+          startEditingRecord(id);
           return;
         }
 
@@ -1904,9 +1919,7 @@
           event.preventDefault();
           const id = openEditTarget.dataset.id;
           if (id) {
-            state.editingId = id;
-            render();
-            focusEditField(id);
+            startEditingRecord(id);
           }
           return;
         }
@@ -1946,6 +1959,26 @@
         }
 
         autoSizeInlineEditInput(input);
+      }
+
+      function startEditingRecord(id) {
+        const record = state.records.find(function (item) {
+          return item.id === id;
+        });
+        if (!record) {
+          return;
+        }
+
+        if (isRecordReadOnly(record)) {
+          state.editingId = null;
+          render();
+          setStatus("3 天以外的日记只读。");
+          return;
+        }
+
+        state.editingId = id;
+        render();
+        focusEditField(id);
       }
 
       function handleListFocusOut(event) {
@@ -2150,6 +2183,11 @@
           return;
         }
 
+        if (isRecordReadOnly(record)) {
+          setStatus("3 天以外的日记只读。");
+          return;
+        }
+
         if (isAutoCompletionPending(record)) {
           confirmAutoComplete(id);
           return;
@@ -2207,6 +2245,11 @@
           return item.id === id;
         });
         if (!record) {
+          return;
+        }
+
+        if (isRecordReadOnly(record)) {
+          setStatus("3 天以外的日记只读。");
           return;
         }
 
@@ -2295,6 +2338,13 @@
           return entry.id === id;
         });
         if (!record) {
+          return;
+        }
+
+        if (isRecordReadOnly(record)) {
+          state.editingId = null;
+          render();
+          setStatus("3 天以外的日记只读。");
           return;
         }
 
@@ -3573,11 +3623,13 @@
       }
 
       function renderItem(record, conflicts) {
-        const editing = state.editingId === record.id;
+        const readOnly = isRecordReadOnly(record);
+        const editing = state.editingId === record.id && !readOnly;
         const urgent = hasUrgencyTag(record);
         const classes = [
           "item",
           record.type,
+          readOnly ? "readonly" : "",
           isPrepared(record) ? "prepared" : "",
           isVisuallyCompleted(record) ? "completed" : "",
           isAutoCompletionPending(record) ? "auto-completed" : "",
@@ -3587,14 +3639,14 @@
 
         return [
           '<article class="' + classes + '" data-id="' + escapeHtml(record.id) + '">',
-          '<button type="button" class="toggle ' + escapeHtml(toggleMeta.className) + '" data-action="toggle" data-id="' + escapeHtml(record.id) + '" aria-label="' + escapeHtml(toggleMeta.ariaLabel) + '" title="' + escapeHtml(toggleMeta.title) + '">',
+          '<button type="button" class="toggle ' + escapeHtml(toggleMeta.className) + '" data-action="toggle" data-id="' + escapeHtml(record.id) + '" aria-label="' + escapeHtml(toggleMeta.ariaLabel) + '" title="' + escapeHtml(toggleMeta.title) + '"' + (readOnly ? ' disabled aria-disabled="true"' : "") + '>',
           toggleMeta.symbol,
           "</button>",
           '<div class="item-main">',
           editing ? renderInlineEdit(record) : renderDisplay(record, urgent, conflicts),
           "</div>",
           '<div class="item-actions">',
-          '<button type="button" class="icon-btn danger" data-action="delete" data-id="' + escapeHtml(record.id) + '" aria-label="删除" title="删除">×</button>',
+          readOnly ? "" : '<button type="button" class="icon-btn danger" data-action="delete" data-id="' + escapeHtml(record.id) + '" aria-label="删除" title="删除">×</button>',
           "</div>",
           "</article>"
         ].join("");
@@ -3602,8 +3654,11 @@
 
       function renderDisplay(record, urgent, conflicts) {
         const displayText = getDisplayText(record);
+        const readOnly = isRecordReadOnly(record);
         const parts = [];
-        parts.push('<div class="item-line" data-action="open-edit" data-id="' + escapeHtml(record.id) + '" tabindex="0" title="' + escapeHtml(buildItemTitle(record)) + '">');
+        parts.push(readOnly
+          ? '<div class="item-line" title="' + escapeHtml(buildItemTitle(record)) + '">'
+          : '<div class="item-line" data-action="open-edit" data-id="' + escapeHtml(record.id) + '" tabindex="0" title="' + escapeHtml(buildItemTitle(record)) + '">');
         parts.push('<span class="item-tags">');
         parts.push('<span class="badge">' + TYPE_LABELS[record.type] + "</span>");
         if (urgent) {
@@ -3630,6 +3685,9 @@
         }
         if (record.type === "journal") {
           parts.push('<span class="code-token token-muted">' + escapeHtml(formatJournalDateToken(record)) + "</span>");
+          if (readOnly) {
+            parts.push('<span class="code-token token-muted">只读</span>');
+          }
         }
         if (record.completed) {
           parts.push('<span class="code-token token-muted">' + (isPassiveRecord(record) ? "archived" : "done") + "</span>");
@@ -3727,6 +3785,15 @@
       }
 
       function getToggleMeta(record) {
+        if (isRecordReadOnly(record)) {
+          return {
+            className: "readonly",
+            symbol: "•",
+            ariaLabel: "只读日记",
+            title: "3 天以外的日记只读"
+          };
+        }
+
         if (isAutoCompletionPending(record)) {
           return {
             className: "done",
@@ -3923,6 +3990,23 @@
 
       function isPassiveRecord(record) {
         return Boolean(record) && (record.type === "idea" || record.type === "journal");
+      }
+
+      function isRecordReadOnly(record) {
+        return isJournalReadOnly(record);
+      }
+
+      function isJournalReadOnly(record) {
+        if (!record || record.type !== "journal") {
+          return false;
+        }
+
+        const createdAt = normalizeDateTime(record.createdAt);
+        if (!createdAt) {
+          return false;
+        }
+
+        return Date.now() - new Date(createdAt).getTime() > JOURNAL_EDIT_WINDOW_MS;
       }
 
       function getDisplayText(record) {

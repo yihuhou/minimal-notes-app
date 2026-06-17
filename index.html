@@ -1947,7 +1947,13 @@
           return;
         }
 
-        record.text = input.value;
+        const nextText = String(input.value || "");
+        if (record.text === nextText) {
+          autoSizeIdeaInput(input);
+          return;
+        }
+
+        record.text = nextText;
         autoSizeIdeaInput(input);
         persist();
         patchIdeaTextInList(record);
@@ -2031,22 +2037,25 @@
           return;
         }
 
-        record.text = nextText;
         const changed = trimmedNext !== String(previousText || "").trim();
-        if (changed) {
-          const now = new Date().toISOString();
-          record.updatedAt = now;
-          pushHistory(record, "edited", now);
+        if (!changed) {
           input.dataset.originalValue = nextText;
-          persist();
-          render();
-          setStatus("想法已更新。");
+          if (record.text !== nextText) {
+            record.text = nextText;
+            persist();
+            patchIdeaTextInList(record);
+          }
           return;
         }
 
+        record.text = nextText;
+        const now = new Date().toISOString();
+        record.updatedAt = now;
+        pushHistory(record, "edited", now);
         input.dataset.originalValue = nextText;
         persist();
-        patchIdeaTextInList(record);
+        render();
+        setStatus("想法已更新。");
       }
 
       function addRecord() {

@@ -2240,6 +2240,12 @@
           return;
         }
 
+        if (text === String(record.text || "").trim()) {
+          state.editingId = null;
+          render();
+          return;
+        }
+
         const updated = inferUpdateFromText(text, record);
         const changed = record.text !== updated.text
           || record.type !== updated.type

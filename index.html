@@ -831,6 +831,16 @@
       background: rgba(79, 98, 83, 0.08);
     }
 
+    .code-inline-weekday-mismatch {
+      border-radius: 4px;
+      padding: 0 2px;
+      color: #b42318;
+      background: rgba(180, 35, 24, 0.08);
+      text-decoration: line-through;
+      text-decoration-thickness: 1.5px;
+      text-decoration-color: #b42318;
+    }
+
     .badge.strong {
       background: var(--accent-soft);
       color: var(--text);
@@ -1991,7 +2001,7 @@
 
         const textNode = item.querySelector(".item-text");
         if (textNode) {
-          textNode.innerHTML = highlightRecordText(getDisplayText(record));
+          textNode.innerHTML = renderDisplayTextHtml(record);
         }
 
         const lineNode = item.querySelector(".item-line");
@@ -3574,7 +3584,7 @@
           parts.push('<span class="code-token token-muted">' + (record.type === "idea" ? "archived" : "done") + "</span>");
         }
         parts.push("</span>");
-        parts.push('<span class="item-text">' + highlightRecordText(displayText) + "</span>");
+        parts.push('<span class="item-text">' + renderDisplayTextHtml(record) + "</span>");
         parts.push("</div>");
         return parts.join("");
       }
@@ -3858,6 +3868,104 @@
         }
 
         return injectWeekdayIntoText(source, weekday);
+      }
+
+      function renderDisplayTextHtml(record) {
+        const mismatchInfo = getWeekdayMismatchInfo(record);
+        if (!mismatchInfo) {
+          return highlightRecordText(getDisplayText(record));
+        }
+
+        return highlightRecordText(mismatchInfo.before)
+          + highlightRecordText(mismatchInfo.displayDate)
+          + escapeHtml(mismatchInfo.gap)
+          + '<span class="code-inline-weekday-mismatch" title="输入的星期和日期不一致">'
+          + escapeHtml(mismatchInfo.inputWeekday)
+          + "</span>"
+          + highlightRecordText(mismatchInfo.expectedWeekday)
+          + highlightRecordText(mismatchInfo.after);
+      }
+
+      function getWeekdayMismatchInfo(record) {
+        const source = record && typeof record.text === "string" ? record.text.trim() : "";
+        if (!source || !record || !isValidDate(record.eventAt)) {
+          return null;
+        }
+
+        const expectedWeekday = formatWeekdayToken(record.eventAt);
+        const expectedIndex = weekdayToIndex(expectedWeekday.replace("周", ""));
+        if (!expectedWeekday || expectedIndex == null) {
+          return null;
+        }
+
+        const match = findDateWeekdayMatch(source);
+        if (!match) {
+          return null;
+        }
+
+        const inputIndex = weekdayToIndex(getWeekdayLabelFromToken(match.weekday));
+        if (inputIndex == null || inputIndex === expectedIndex) {
+          return null;
+        }
+
+        const dynamicDatePrefix = match.dynamicDate
+          ? formatRelativeDatePrefix(record.eventAt) || formatDotDateWithWeekday(record.eventAt)
+          : "";
+        const displayDate = match.dynamicDate
+          ? stripWeekdayFromDatePrefix(dynamicDatePrefix, expectedWeekday) || match.date
+          : match.date;
+
+        return {
+          before: source.slice(0, match.index),
+          displayDate: displayDate,
+          gap: match.gap,
+          inputWeekday: match.weekday,
+          expectedWeekday: expectedWeekday,
+          after: source.slice(match.index + match.full.length)
+        };
+      }
+
+      function findDateWeekdayMatch(source) {
+        const relativePattern = /(大前天|前天|昨天|昨日|今天|今日|明天|后天|大后天)(\s*)((?:周|星期)[一二三四五六日天])/;
+        const relativeMatch = String(source || "").match(relativePattern);
+        if (relativeMatch && relativeMatch.index != null) {
+          return {
+            index: relativeMatch.index,
+            full: relativeMatch[0],
+            date: relativeMatch[1],
+            gap: relativeMatch[2] || "",
+            weekday: relativeMatch[3],
+            dynamicDate: true
+          };
+        }
+
+        const explicitDatePattern = /(\d{4}\s*(?:年|[\/.-])\s*\d{1,2}\s*(?:月|[\/.-])\s*\d{1,2}\s*(?:日|号)?|\d{1,2}\s*(?:月|[\/.-])\s*\d{1,2}\s*(?:日|号)?)(\s*)((?:周|星期)[一二三四五六日天])/;
+        const explicitDateMatch = String(source || "").match(explicitDatePattern);
+        if (explicitDateMatch && explicitDateMatch.index != null) {
+          return {
+            index: explicitDateMatch.index,
+            full: explicitDateMatch[0],
+            date: explicitDateMatch[1],
+            gap: explicitDateMatch[2] || "",
+            weekday: explicitDateMatch[3],
+            dynamicDate: false
+          };
+        }
+
+        return null;
+      }
+
+      function getWeekdayLabelFromToken(token) {
+        const match = String(token || "").match(/[一二三四五六日天]/);
+        return match ? match[0] : "";
+      }
+
+      function stripWeekdayFromDatePrefix(prefix, weekday) {
+        const source = String(prefix || "");
+        const suffix = String(weekday || "");
+        return suffix && source.endsWith(suffix)
+          ? source.slice(0, -suffix.length)
+          : source;
       }
 
       function replaceDynamicRelativeDateText(source, eventAt) {

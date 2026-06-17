@@ -2183,6 +2183,11 @@
           return;
         }
 
+        if (record.type === "journal") {
+          setStatus("日记不需要标记完成。");
+          return;
+        }
+
         if (isRecordReadOnly(record)) {
           setStatus("3 天以外的日记只读。");
           return;
@@ -2365,6 +2370,10 @@
         record.recurrence = updated.recurrence;
         record.ignoredConflictKeys = [];
         clearAutoCompleteState(record);
+        if (updated.type === "journal") {
+          record.completed = false;
+          record.prepared = false;
+        }
         if (!supportsPreparedState(updated)) {
           record.prepared = false;
         }
@@ -3624,6 +3633,7 @@
 
       function renderItem(record, conflicts) {
         const readOnly = isRecordReadOnly(record);
+        const toggleDisabled = isRecordToggleDisabled(record);
         const editing = state.editingId === record.id && !readOnly;
         const urgent = hasUrgencyTag(record);
         const classes = [
@@ -3639,7 +3649,7 @@
 
         return [
           '<article class="' + classes + '" data-id="' + escapeHtml(record.id) + '">',
-          '<button type="button" class="toggle ' + escapeHtml(toggleMeta.className) + '" data-action="toggle" data-id="' + escapeHtml(record.id) + '" aria-label="' + escapeHtml(toggleMeta.ariaLabel) + '" title="' + escapeHtml(toggleMeta.title) + '"' + (readOnly ? ' disabled aria-disabled="true"' : "") + '>',
+          '<button type="button" class="toggle ' + escapeHtml(toggleMeta.className) + '" data-action="toggle" data-id="' + escapeHtml(record.id) + '" aria-label="' + escapeHtml(toggleMeta.ariaLabel) + '" title="' + escapeHtml(toggleMeta.title) + '"' + (toggleDisabled ? ' disabled aria-disabled="true"' : "") + '>',
           toggleMeta.symbol,
           "</button>",
           '<div class="item-main">',
@@ -3689,7 +3699,7 @@
             parts.push('<span class="code-token token-muted">只读</span>');
           }
         }
-        if (record.completed) {
+        if (record.completed && record.type !== "journal") {
           parts.push('<span class="code-token token-muted">' + (isPassiveRecord(record) ? "archived" : "done") + "</span>");
         }
         parts.push("</span>");
@@ -3791,6 +3801,15 @@
             symbol: "•",
             ariaLabel: "只读日记",
             title: "3 天以外的日记只读"
+          };
+        }
+
+        if (record && record.type === "journal") {
+          return {
+            className: "readonly",
+            symbol: "",
+            ariaLabel: "日记不支持完成",
+            title: "日记不支持完成或归档"
           };
         }
 
@@ -3994,6 +4013,10 @@
 
       function isRecordReadOnly(record) {
         return isJournalReadOnly(record);
+      }
+
+      function isRecordToggleDisabled(record) {
+        return Boolean(record && record.type === "journal") || isRecordReadOnly(record);
       }
 
       function isJournalReadOnly(record) {
@@ -4674,6 +4697,10 @@
               if (isPassiveRecord(record)) {
                 return false;
               }
+            } else if (state.filter === "journal") {
+              if (record.type !== "journal") {
+                return false;
+              }
             } else if (state.filter !== "all") {
               if (record.completed || record.type !== state.filter) {
                 return false;
@@ -4702,6 +4729,8 @@
       function sortRecords(a, b) {
         const aAutoPending = isAutoCompletionPending(a);
         const bAutoPending = isAutoCompletionPending(b);
+        const aCompleted = isCompletionSortingRecord(a);
+        const bCompleted = isCompletionSortingRecord(b);
         const nowTime = Date.now();
         if (aAutoPending !== bAutoPending) {
           return aAutoPending ? -1 : 1;
@@ -4711,11 +4740,11 @@
           return getAutoCompletionSortScore(a) - getAutoCompletionSortScore(b);
         }
 
-        if (a.completed !== b.completed) {
-          return a.completed ? 1 : -1;
+        if (aCompleted !== bCompleted) {
+          return aCompleted ? 1 : -1;
         }
 
-        if (a.completed && b.completed) {
+        if (aCompleted && bCompleted) {
           return getCompletedSortTimestamp(b) - getCompletedSortTimestamp(a);
         }
 
@@ -4880,7 +4909,15 @@
       }
 
       function isVisuallyCompleted(record) {
-        return Boolean(record && (record.completed || isAutoCompletionPending(record)));
+        return Boolean(record && (isCompletionDisplayRecord(record) || isAutoCompletionPending(record)));
+      }
+
+      function isCompletionDisplayRecord(record) {
+        return Boolean(record && record.type !== "journal" && record.completed);
+      }
+
+      function isCompletionSortingRecord(record) {
+        return isCompletionDisplayRecord(record);
       }
 
       function getAutoCompleteRef(record) {
@@ -7031,7 +7068,7 @@
             eventAt: eventAt,
             recurrence: recurrence,
             prepared: type === "meeting" ? Boolean(record.prepared) && !Boolean(record.completed) : false,
-            completed: Boolean(record.completed),
+            completed: type === "journal" ? false : Boolean(record.completed),
             updatedAt: updatedAt
           }),
           recurrenceCompletions: normalizeRecurrenceCompletionEntries(record.recurrenceCompletions),
@@ -7039,7 +7076,7 @@
           autoCompleteRef: typeof record.autoCompleteRef === "string" ? record.autoCompleteRef : "",
           autoCompletedAt: normalizeDateTime(record.autoCompletedAt),
           prepared: type === "meeting" ? Boolean(record.prepared) && !Boolean(record.completed) : false,
-          completed: Boolean(record.completed),
+          completed: type === "journal" ? false : Boolean(record.completed),
           updatedAt: updatedAt
         };
       }

@@ -3821,8 +3821,24 @@
         }
 
         const source = rawText;
-        if (!source || !record || !isValidDate(record.eventAt) || hasExplicitWeekdayToken(source)) {
+        if (!source || !record || !isValidDate(record.eventAt)) {
           return source;
+        }
+
+        const dynamicDateText = replaceDynamicRelativeDateText(source, record.eventAt);
+        if (dynamicDateText !== source) {
+          return dynamicDateText;
+        }
+
+        if (hasExplicitWeekdayToken(source)) {
+          return source;
+        }
+
+        if (!hasDisplayDateToken(source) && hasExplicitTimeToken(source)) {
+          const datePrefix = formatRelativeDatePrefix(record.eventAt) || formatDotDateWithWeekday(record.eventAt);
+          if (datePrefix) {
+            return joinDisplayPrefix(datePrefix, source);
+          }
         }
 
         const rangeText = injectWeekdayRangeIntoText(source, record.eventAt);
@@ -3836,6 +3852,25 @@
         }
 
         return injectWeekdayIntoText(source, weekday);
+      }
+
+      function replaceDynamicRelativeDateText(source, eventAt) {
+        const datePrefix = formatRelativeDatePrefix(eventAt) || formatDotDateWithWeekday(eventAt);
+        if (!datePrefix) {
+          return source;
+        }
+
+        const relativeWithWeekdayPattern = /(大前天|前天|昨天|昨日|今天|今日|明天|后天|大后天)\s*(?:(?:周|星期)[一二三四五六日天])?/;
+        if (relativeWithWeekdayPattern.test(source)) {
+          return source.replace(relativeWithWeekdayPattern, datePrefix);
+        }
+
+        const weekdayPattern = /(?:(?:上周|本周|这周|下周)\s*)?(?:周|星期)[一二三四五六日天]/;
+        if (weekdayPattern.test(source)) {
+          return source.replace(weekdayPattern, datePrefix);
+        }
+
+        return source;
       }
 
       function getRecurringDisplayText(record, rawText) {
@@ -3920,6 +3955,10 @@
 
       function getDisplayDateTokenPattern() {
         return new RegExp(getDisplayDatePatternSource(), "g");
+      }
+
+      function hasDisplayDateToken(text) {
+        return getDisplayDateTokenPattern().test(String(text || ""));
       }
 
       function getDisplayDatePatternSource() {

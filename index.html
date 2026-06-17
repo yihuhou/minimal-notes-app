@@ -882,12 +882,12 @@
     }
 
     .item.journal .item-text {
-      white-space: normal;
+      white-space: pre-wrap;
       line-height: 1.68;
-      display: -webkit-box;
-      -webkit-line-clamp: 3;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
+      display: block;
+      -webkit-line-clamp: unset;
+      -webkit-box-orient: initial;
+      overflow: visible;
       text-overflow: clip;
       overflow-wrap: anywhere;
       word-break: break-word;
@@ -1472,7 +1472,7 @@
       <section class="composer" aria-label="快速输入区">
         <div class="composer-card">
           <label class="sr-only" for="quickInput">记录内容</label>
-          <textarea id="quickInput" placeholder="写下一件事、一场会，或用“记录：”写一段日记。"></textarea>
+          <textarea id="quickInput" placeholder="写下一件事、一场会，或一段日常。"></textarea>
           <div class="composer-bar">
             <div class="meta-note">
               <span>Enter 保存。默认自动识别时间和类型；需要时再展开手动选项。</span>
@@ -1569,6 +1569,7 @@
       const DEFAULT_REMOTE_PATH = "minimal-notes-records.json";
       const REMOTE_SYNC_INTERVAL = 15000;
       const REMOTE_WRITE_MAX_ATTEMPTS = 5;
+      const JOURNAL_ROLLOVER_HOUR = 5;
       const SUPPORTS_FILE_SYNC = Boolean(
         window.isSecureContext
         && window.indexedDB
@@ -3644,6 +3645,12 @@
           return;
         }
 
+        if (state.filter === "journal") {
+          workspace.classList.remove("has-ideas");
+          ideaPane.innerHTML = "";
+          return;
+        }
+
         const ideas = getOpenIdeas();
         const hasIdeas = ideas.length > 0;
         workspace.classList.toggle("has-ideas", hasIdeas);
@@ -3851,7 +3858,7 @@
       }
 
       function formatJournalDateToken(record) {
-        const value = normalizeDateTime(record && record.createdAt) || normalizeDateTime(record && record.updatedAt);
+        const value = getJournalDateValue(record);
         if (!value) {
           return "日记";
         }
@@ -3863,6 +3870,26 @@
           : [date.getFullYear(), "/", date.getMonth() + 1, "/", date.getDate()].join("");
         const weekday = formatWeekdayToken(date);
         return weekday ? datePart + " " + weekday : datePart;
+      }
+
+      function getJournalDateValue(record) {
+        const baseValue = normalizeDateTime(record && record.createdAt) || normalizeDateTime(record && record.updatedAt);
+        if (!baseValue) {
+          return "";
+        }
+
+        const date = new Date(baseValue);
+        if (shouldBackdateJournalToday(record && record.text, date)) {
+          date.setDate(date.getDate() - 1);
+        }
+        return date.toISOString();
+      }
+
+      function shouldBackdateJournalToday(text, date) {
+        return Boolean(date
+          && isValidDate(date)
+          && date.getHours() < JOURNAL_ROLLOVER_HOUR
+          && /(?:今天|今日)/.test(String(text || "")));
       }
 
       function formatWeekdayToken(value) {
@@ -3940,6 +3967,10 @@
       }
 
       function renderDisplayTextHtml(record) {
+        if (record && record.type === "journal") {
+          return highlightRecordText(getJournalPreviewText(getDisplayText(record)));
+        }
+
         const mismatchInfo = getWeekdayMismatchInfo(record);
         if (!mismatchInfo) {
           return highlightRecordText(getDisplayText(record));
@@ -3953,6 +3984,16 @@
           + "</span>"
           + highlightRecordText(mismatchInfo.expectedWeekday)
           + highlightRecordText(mismatchInfo.after);
+      }
+
+      function getJournalPreviewText(text) {
+        const source = String(text || "");
+        const limit = 200;
+        if (source.length <= limit) {
+          return source;
+        }
+
+        return source.slice(0, limit).replace(/\s+$/, "") + "...";
       }
 
       function getWeekdayMismatchInfo(record) {

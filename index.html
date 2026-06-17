@@ -4379,8 +4379,9 @@
           return { bucket: 2, value: Number.MAX_SAFE_INTEGER };
         }
 
-        const startAt = getTimedSortStartAt(record);
-        const endAt = getTimedSortEndAt(record);
+        const sortEventAt = getCarryForwardRecurringSortEventAt(record, nowTime);
+        const startAt = getTimedSortStartAt(record, sortEventAt);
+        const endAt = getTimedSortEndAt(record, sortEventAt);
         const priorityLimitAt = getScheduledPriorityLimitAt(nowTime);
         if (startAt > priorityLimitAt) {
           return { bucket: 4, value: startAt };
@@ -4402,30 +4403,53 @@
         return { bucket: 2, value: nowTime - sortAnchor };
       }
 
-      function getTimedSortStartAt(record) {
-        if (!record || !isValidDate(record.eventAt)) {
+      function getCarryForwardRecurringSortEventAt(record, nowTime) {
+        const eventAtValue = record && record.eventAt;
+        if (!eventAtValue || !isValidDate(eventAtValue)) {
+          return eventAtValue || "";
+        }
+
+        if (!isRecurringRecord(record) || record.completed || record.type === "deadline") {
+          return eventAtValue;
+        }
+
+        const now = isValidDate(nowTime) ? new Date(nowTime) : new Date();
+        const currentEndAt = getTimedSortEndAt(record, eventAtValue);
+        if ((currentEndAt != null && currentEndAt >= now.getTime())
+          || isSameLocalCalendarDay(eventAtValue, now)) {
+          return eventAtValue;
+        }
+
+        const carried = makeDateWithTime(now, new Date(eventAtValue));
+        return carried.toISOString();
+      }
+
+      function getTimedSortStartAt(record, eventAtValue) {
+        const eventAt = eventAtValue || (record && record.eventAt);
+        if (!record || !isValidDate(eventAt)) {
           return 0;
         }
 
-        const start = new Date(record.eventAt);
-        if (isUntimedDateRecord(record)) {
+        const start = new Date(eventAt);
+        if (isUntimedDateRecordAt(record, eventAt)) {
           start.setHours(23, 59, 0, 0);
         }
         return start.getTime();
       }
 
-      function getTimedSortEndAt(record) {
-        if (!record || !record.eventAt) {
+      function getTimedSortEndAt(record, eventAtValue) {
+        const eventAt = eventAtValue || (record && record.eventAt);
+        if (!record || !eventAt) {
           return null;
         }
 
         if (record.type === "meeting") {
-          const endAt = getMeetingEndAt(record);
+          const endAt = getMeetingEndAt(record, eventAt);
           return endAt ? endAt.getTime() : null;
         }
 
         if (record.type === "todo" || isRecurringRecord(record)) {
-          const endAt = getDefaultEventEndAt(record);
+          const endAt = getDefaultEventEndAt(record, eventAt);
           return endAt ? endAt.getTime() : null;
         }
 
@@ -4438,9 +4462,13 @@
       }
 
       function isUntimedDateRecord(record) {
+        return isUntimedDateRecordAt(record, record && record.eventAt);
+      }
+
+      function isUntimedDateRecordAt(record, eventAtValue) {
         return Boolean(record
-          && record.eventAt
-          && isMidnightDateTime(record.eventAt)
+          && eventAtValue
+          && isMidnightDateTime(eventAtValue)
           && !hasExplicitTimeToken(record.text));
       }
 
@@ -4563,13 +4591,14 @@
         return Date.now() - endAt.getTime();
       }
 
-      function getMeetingEndAt(record) {
-        if (!record || record.type !== "meeting" || !isValidDate(record.eventAt)) {
+      function getMeetingEndAt(record, eventAtValue) {
+        const eventAt = eventAtValue || (record && record.eventAt);
+        if (!record || record.type !== "meeting" || !isValidDate(eventAt)) {
           return null;
         }
 
-        const start = new Date(record.eventAt);
-        const rangeInfo = extractDateRangeInfo(record.text, record.eventAt);
+        const start = new Date(eventAt);
+        const rangeInfo = extractDateRangeInfo(record.text, eventAt);
         if (rangeInfo) {
           const end = new Date(rangeInfo.endDate);
           end.setHours(23, 59, 0, 0);
@@ -4586,7 +4615,7 @@
           return end;
         }
 
-        if (isMidnightDateTime(record.eventAt)) {
+        if (isMidnightDateTime(eventAt)) {
           end.setHours(23, 59, 0, 0);
           return end;
         }
@@ -4595,13 +4624,14 @@
         return end;
       }
 
-      function getDefaultEventEndAt(record) {
-        if (!record || !isValidDate(record.eventAt)) {
+      function getDefaultEventEndAt(record, eventAtValue) {
+        const eventAt = eventAtValue || (record && record.eventAt);
+        if (!record || !isValidDate(eventAt)) {
           return null;
         }
 
-        const end = new Date(record.eventAt);
-        if (isMidnightDateTime(record.eventAt) && !hasExplicitTimeToken(record.text)) {
+        const end = new Date(eventAt);
+        if (isMidnightDateTime(eventAt) && !hasExplicitTimeToken(record.text)) {
           end.setHours(23, 59, 0, 0);
           return end;
         }

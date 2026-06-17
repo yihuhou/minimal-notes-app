@@ -1587,6 +1587,9 @@
       const REMOTE_WRITE_MAX_ATTEMPTS = 5;
       const JOURNAL_ROLLOVER_HOUR = 5;
       const JOURNAL_EDIT_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+      const LOCATION_ALIASES = {
+        "北三": "北区食堂三楼"
+      };
       const SUPPORTS_FILE_SYNC = Boolean(
         window.isSecureContext
         && window.indexedDB
@@ -4491,7 +4494,10 @@
         const periodTimePattern = timePeriodPattern + "\\s*(?:" + timeFragmentPattern + ")?";
         const relativeDatePattern = "今天|明天|后天|大后天|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]";
         const deadlinePattern = "截止|截至|过期|到期|失效|期满|有效期|DDL|ddl|deadline|之前|前";
-        const locationPattern = "(?:[在去到]\\s*)?(?:[\\u4e00-\\u9fa5]{2,3}\\s*[A-Za-z]?\\d{3,4}|[A-Za-z]?\\d{2,4}\\s*(?:会议室|教室|报告厅|办公室|实验室|研讨室|活动室|房间|室|厅)|[\\u4e00-\\u9fa5]{1,8}(?:食堂|餐厅|饭店|咖啡馆|图书馆|办公室|实验室|会议室|教室|报告厅|礼堂|体育馆|活动室|研讨室|中心|校区|广场|大厦|酒店|宾馆))(?!\\d|\\s*(?:字|词|页|元|块|个|人|次|篇|本|分钟|小时|天|周|月|年|%))";
+        const locationAliasPattern = getLocationAliasPatternSource();
+        const knownLocationPattern = (locationAliasPattern ? locationAliasPattern + "|" : "")
+          + "[\\u4e00-\\u9fa5]{2,3}\\s*[A-Za-z]?\\d{3,4}|[A-Za-z]?\\d{2,4}\\s*(?:会议室|教室|报告厅|办公室|实验室|研讨室|活动室|房间|室|厅)|[\\u4e00-\\u9fa5]{1,8}(?:食堂|餐厅|饭店|咖啡馆|图书馆|办公室|实验室|会议室|教室|报告厅|礼堂|体育馆|活动室|研讨室|中心|校区|广场|大厦|酒店|宾馆)";
+        const locationPattern = "(?:[在去到]\\s*)?(?:" + knownLocationPattern + ")(?!\\d|\\s*(?:字|词|页|元|块|个|人|次|篇|本|分钟|小时|天|周|月|年|%))";
         const calendarDatePattern = "\\d{4}(?:年|[\\/.-])\\d{1,2}(?:月|[\\/.-])\\d{1,2}|\\d{1,2}(?:月|[\\/.-])\\d{1,2}(?:日|号)?|\\d{1,2}(?:日|号)";
         const tokenPattern = new RegExp(
           "((?:想法|记录|日记)[:：]?|" + periodTimePattern + "|" + relativeDatePattern + "|" + deadlinePattern + "|" + locationPattern + "|" + timeFragmentPattern + "|" + calendarDatePattern + ")",
@@ -4521,11 +4527,11 @@
         const locationWithPrefix = splitLocationPrefix(token);
         if (locationWithPrefix) {
           return escapeHtml(locationWithPrefix.prefix)
-            + '<span class="code-inline-location">' + escapeHtml(locationWithPrefix.location) + "</span>";
+            + renderLocationTokenHtml(locationWithPrefix.location);
         }
 
         if (isLocationToken(token)) {
-          return '<span class="code-inline-location">' + escapeHtml(token) + "</span>";
+          return renderLocationTokenHtml(token);
         }
 
         if (isRejectedLocationLikeToken(token)) {
@@ -4556,9 +4562,32 @@
           return false;
         }
 
-        return /^[\u4e00-\u9fa5]{2,3}\s*[A-Za-z]?\d{3,4}$/.test(source)
+        return Boolean(getLocationAliasLabel(source))
+          || /^[\u4e00-\u9fa5]{2,3}\s*[A-Za-z]?\d{3,4}$/.test(source)
           || /^(?:[\u4e00-\u9fa5]{1,8}\s*)?[A-Za-z]?\d{2,4}\s*(?:会议室|教室|报告厅|办公室|实验室|研讨室|活动室|房间|室|厅)$/.test(source)
           || /^[\u4e00-\u9fa5]{1,8}(?:食堂|餐厅|饭店|咖啡馆|图书馆|办公室|实验室|会议室|教室|报告厅|礼堂|体育馆|活动室|研讨室|中心|校区|广场|大厦|酒店|宾馆)$/.test(source);
+      }
+
+      function renderLocationTokenHtml(location) {
+        const source = String(location || "").trim();
+        const aliasLabel = getLocationAliasLabel(source);
+        const titleAttr = aliasLabel ? ' title="' + escapeHtml(aliasLabel) + '"' : "";
+        return '<span class="code-inline-location"' + titleAttr + ">" + escapeHtml(location) + "</span>";
+      }
+
+      function getLocationAliasLabel(location) {
+        const source = String(location || "").trim();
+        return Object.prototype.hasOwnProperty.call(LOCATION_ALIASES, source)
+          ? LOCATION_ALIASES[source]
+          : "";
+      }
+
+      function getLocationAliasPatternSource() {
+        return Object.keys(LOCATION_ALIASES).map(escapeRegExp).join("|");
+      }
+
+      function escapeRegExp(value) {
+        return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       }
 
       function isRejectedLocationLikeToken(token) {

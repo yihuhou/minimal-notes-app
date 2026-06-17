@@ -4117,7 +4117,17 @@
 
       function highlightRecordText(text) {
         const source = String(text || "");
-        const tokenPattern = /(想法[:：]?|(?:凌晨|今早|明早|早上|今晨|上午|中午|今午|下午|傍晚|晚上|今晚|明晚)\s*(?:\d{1,2}[:：]\d{2}|\d{1,2}\s*点(?:半|[0-5]?\d\s*分?)?)|今天|明天|后天|大后天|今晚|今早|明早|明晚|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]|凌晨|早上|今晨|上午|中午|今午|下午|傍晚|晚上|截止|截至|过期|到期|失效|期满|有效期|DDL|ddl|deadline|之前|前|(?:[在去到]\s*)?(?:[\u4e00-\u9fa5]{2,3}\s*[A-Za-z]?\d{3,4}|[A-Za-z]?\d{2,4}\s*(?:会议室|教室|报告厅|办公室|实验室|研讨室|活动室|房间|室|厅)|[\u4e00-\u9fa5]{1,8}(?:食堂|餐厅|饭店|咖啡馆|图书馆|办公室|实验室|会议室|教室|报告厅|礼堂|体育馆|活动室|研讨室|中心|校区|广场|大厦|酒店|宾馆))(?!\d|\s*(?:字|词|页|元|块|个|人|次|篇|本|分钟|小时|天|周|月|年|%))|\d{1,2}[:：]\d{2}|\d{1,2}\s*点(?:半|[0-5]?\d\s*分?)?|\d{4}(?:年|[\/.-])\d{1,2}(?:月|[\/.-])\d{1,2}|\d{1,2}(?:月|[\/.-])\d{1,2}(?:日|号)?|\d{1,2}(?:日|号))/g;
+        const timePeriodPattern = getTimePeriodPatternSource();
+        const timeFragmentPattern = getTimeFragmentPatternSource();
+        const periodTimePattern = timePeriodPattern + "\\s*(?:" + timeFragmentPattern + ")?";
+        const relativeDatePattern = "今天|明天|后天|大后天|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]";
+        const deadlinePattern = "截止|截至|过期|到期|失效|期满|有效期|DDL|ddl|deadline|之前|前";
+        const locationPattern = "(?:[在去到]\\s*)?(?:[\\u4e00-\\u9fa5]{2,3}\\s*[A-Za-z]?\\d{3,4}|[A-Za-z]?\\d{2,4}\\s*(?:会议室|教室|报告厅|办公室|实验室|研讨室|活动室|房间|室|厅)|[\\u4e00-\\u9fa5]{1,8}(?:食堂|餐厅|饭店|咖啡馆|图书馆|办公室|实验室|会议室|教室|报告厅|礼堂|体育馆|活动室|研讨室|中心|校区|广场|大厦|酒店|宾馆))(?!\\d|\\s*(?:字|词|页|元|块|个|人|次|篇|本|分钟|小时|天|周|月|年|%))";
+        const calendarDatePattern = "\\d{4}(?:年|[\\/.-])\\d{1,2}(?:月|[\\/.-])\\d{1,2}|\\d{1,2}(?:月|[\\/.-])\\d{1,2}(?:日|号)?|\\d{1,2}(?:日|号)";
+        const tokenPattern = new RegExp(
+          "(想法[:：]?|" + periodTimePattern + "|" + relativeDatePattern + "|" + deadlinePattern + "|" + locationPattern + "|" + timeFragmentPattern + "|" + calendarDatePattern + ")",
+          "g"
+        );
         let lastIndex = 0;
         let html = "";
         let match;
@@ -4166,9 +4176,9 @@
 
       function isTimeHighlightToken(token) {
         const source = String(token || "").trim();
-        return /^\d{1,2}[:：]\d{2}$/.test(source)
-          || /点/.test(source)
-          || /^(?:凌晨|今早|明早|早上|今晨|上午|中午|今午|下午|傍晚|晚上|今晚|明晚)(?:\s*(?:\d{1,2}[:：]\d{2}|\d{1,2}\s*点(?:半|[0-5]?\d\s*分?)?))?$/.test(source);
+        const timeFragmentPattern = getTimeFragmentPatternSource();
+        return new RegExp("^" + timeFragmentPattern + "$").test(source)
+          || new RegExp("^" + getTimePeriodPatternSource() + "(?:\\s*" + timeFragmentPattern + ")?$").test(source);
       }
 
       function isLocationToken(token) {
@@ -4217,7 +4227,8 @@
           return false;
         }
 
-        return /(?:今天|明天|后天|大后天|今晚|今早|明早|明晚|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]|\d{4}(?:年|[\/.-])\d{1,2}(?:月|[\/.-])\d{1,2}|\d{1,2}(?:月|[\/.-])\d{1,2}(?:日|号)?|\d{1,2}\s*点(?:半|[0-5]?\d\s*分?)?|\d{1,2}[:：]\d{2})\s*$/.test(String(source || "").slice(0, index));
+        const dateOrTimePattern = "(?:今天|明天|后天|大后天|今晚|今早|明早|明晚|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]|\\d{4}(?:年|[\\/.-])\\d{1,2}(?:月|[\\/.-])\\d{1,2}|\\d{1,2}(?:月|[\\/.-])\\d{1,2}(?:日|号)?|" + getTimeFragmentPatternSource() + ")";
+        return new RegExp(dateOrTimePattern + "\\s*$").test(String(source || "").slice(0, index));
       }
 
       function inferUpdateFromText(text, record) {
@@ -4746,7 +4757,8 @@
 
       function extractTimeRangeFromText(text) {
         const source = String(text || "");
-        const rangeMatch = source.match(/((?:凌晨|今早|明早|早上|今晨|上午|中午|今午|下午|傍晚|晚上|今晚|明晚)?\s*(?:\d{1,2}\s*[:：]\s*\d{1,2}|\d{1,2}\s*点\s*(?:半|[0-5]?\d\s*分?)?))\s*(?:到|至|-|~|～)\s*((?:凌晨|今早|明早|早上|今晨|上午|中午|今午|下午|傍晚|晚上|今晚|明晚)?\s*(?:\d{1,2}\s*[:：]\s*\d{1,2}|\d{1,2}\s*点\s*(?:半|[0-5]?\d\s*分?)?))/);
+        const periodTimePattern = "(?:" + getTimePeriodPatternSource() + ")?\\s*" + getTimeFragmentPatternSource();
+        const rangeMatch = source.match(new RegExp("(" + periodTimePattern + ")\\s*(?:到|至|-|~|～)\\s*(" + periodTimePattern + ")"));
         if (!rangeMatch) {
           return null;
         }
@@ -4755,30 +4767,102 @@
         return parseTimeFragment(rangeMatch[2], fallbackLabel);
       }
 
-      function parseTimeFragment(text, fallbackPeriodLabel) {
-        const source = String(text || "");
-        const periodLabel = extractTimePeriodLabel(source) || fallbackPeriodLabel || "";
-        const hmMatch = source.match(/(\d{1,2})\s*[:：]\s*(\d{1,2})/);
-        if (hmMatch) {
-          return {
-            hours: clampHour(applyTimePeriod(Number(hmMatch[1]), periodLabel)),
-            minutes: clampMinute(Number(hmMatch[2]))
-          };
+      function getTimePeriodPatternSource() {
+        return "(?:凌晨|今早|明早|早上|今晨|上午|中午|今午|下午|傍晚|晚上|今晚|明晚)";
+      }
+
+      function getTimeNumberPatternSource() {
+        return "(?:\\d{1,2}|[零〇一二两三四五六七八九十]{1,3})";
+      }
+
+      function getMinuteTokenPatternSource() {
+        return "(?:半|一刻|三刻|" + getTimeNumberPatternSource() + "\\s*分?)";
+      }
+
+      function getPointTimePatternSource() {
+        return getTimeNumberPatternSource() + "\\s*点\\s*(?:" + getMinuteTokenPatternSource() + ")?";
+      }
+
+      function getTimeFragmentPatternSource() {
+        return "(?:" + getTimeNumberPatternSource() + "\\s*[:：]\\s*" + getTimeNumberPatternSource() + "|" + getPointTimePatternSource() + ")";
+      }
+
+      function parseTimeNumberToken(value) {
+        const source = String(value || "").replace(/\s/g, "").replace(/分$/g, "").trim();
+        if (!source) {
+          return null;
+        }
+        if (/^\d+$/.test(source)) {
+          return parseInt(source, 10);
+        }
+        if (!/^[零〇一二两三四五六七八九十]+$/.test(source)) {
+          return null;
         }
 
-        const pointMatch = source.match(/(凌晨|今早|明早|早上|今晨|上午|中午|今午|下午|傍晚|晚上|今晚|明晚)?\s*(\d{1,2})\s*点\s*(半|[0-5]?\d\s*分?)?/);
+        const parsed = parseChineseNumber(source);
+        if (parsed || /^(?:零|〇)$/.test(source)) {
+          return parsed;
+        }
+        return null;
+      }
+
+      function parseMinuteToken(value) {
+        const source = String(value || "").trim();
+        if (!source) {
+          return 0;
+        }
+        if (source.indexOf("半") >= 0) {
+          return 30;
+        }
+        if (source.indexOf("一刻") >= 0) {
+          return 15;
+        }
+        if (source.indexOf("三刻") >= 0) {
+          return 45;
+        }
+
+        const minutes = parseTimeNumberToken(source.replace(/分/g, ""));
+        return minutes == null ? null : clampMinute(minutes);
+      }
+
+      function parsePointTimeFragment(text, fallbackPeriodLabel) {
+        const source = String(text || "");
+        const pointPattern = "(" + getTimePeriodPatternSource() + ")?\\s*(" + getTimeNumberPatternSource() + ")\\s*点\\s*(" + getMinuteTokenPatternSource() + ")?";
+        const pointMatch = source.match(new RegExp(pointPattern));
         if (!pointMatch) {
           return null;
         }
 
-        const minutes = pointMatch[3]
-          ? (pointMatch[3].indexOf("半") >= 0 ? 30 : clampMinute(parseInt(pointMatch[3], 10) || 0))
-          : 0;
+        const hours = parseTimeNumberToken(pointMatch[2]);
+        const minutes = parseMinuteToken(pointMatch[3]);
+        if (hours == null || minutes == null) {
+          return null;
+        }
 
         return {
-          hours: clampHour(applyTimePeriod(Number(pointMatch[2]), pointMatch[1] || periodLabel)),
+          hours: clampHour(applyTimePeriod(hours, pointMatch[1] || fallbackPeriodLabel || "")),
           minutes: minutes
         };
+      }
+
+      function parseTimeFragment(text, fallbackPeriodLabel) {
+        const source = String(text || "");
+        const periodLabel = extractTimePeriodLabel(source) || fallbackPeriodLabel || "";
+        const hmMatch = source.match(new RegExp("(" + getTimeNumberPatternSource() + ")\\s*[:：]\\s*(" + getTimeNumberPatternSource() + ")"));
+        if (hmMatch) {
+          const hours = parseTimeNumberToken(hmMatch[1]);
+          const minutes = parseTimeNumberToken(hmMatch[2]);
+          if (hours == null || minutes == null) {
+            return null;
+          }
+
+          return {
+            hours: clampHour(applyTimePeriod(hours, periodLabel)),
+            minutes: clampMinute(minutes)
+          };
+        }
+
+        return parsePointTimeFragment(source, periodLabel);
       }
 
       function buildConflictTitle(otherRecord) {
@@ -4966,7 +5050,8 @@
           return true;
         }
 
-        return /(?:今天|明天|后天|大后天|今晚|今早|明早|明晚|周[一二三四五六日天]|星期[一二三四五六日天]|\d{4}(?:年|[\/.-])\d{1,2}(?:月|[\/.-])\d{1,2}|\d{1,2}(?:月|[\/.-])\d{1,2}(?:日|号)?|\d{1,2}\s*点(?:半|[0-5]?\d\s*分?)?|\d{1,2}[:：]\d{2})\s*(?:前|之前)/.test(source);
+        const dateOrTimePattern = "(?:今天|明天|后天|大后天|今晚|今早|明早|明晚|周[一二三四五六日天]|星期[一二三四五六日天]|\\d{4}(?:年|[\\/.-])\\d{1,2}(?:月|[\\/.-])\\d{1,2}|\\d{1,2}(?:月|[\\/.-])\\d{1,2}(?:日|号)?|" + getTimeFragmentPatternSource() + ")";
+        return new RegExp(dateOrTimePattern + "\\s*(?:前|之前)").test(source);
       }
 
       function inferTimedTypeFromText(text) {
@@ -5844,7 +5929,7 @@
       }
 
       function parseChineseNumber(value) {
-        const source = String(value || "").replace(/两/g, "二");
+        const source = String(value || "").replace(/两/g, "二").replace(/〇/g, "零");
         const digits = {
           "零": 0,
           "一": 1,
@@ -5938,6 +6023,13 @@
 
         if (!hasTemporalHint) {
           return { hasTemporalHint: false, eventAt: "", date: null };
+        }
+
+        if (!dateInfo.matched && timeInfo.matched) {
+          const now = isValidDate(referenceNow) ? new Date(referenceNow) : new Date();
+          const date = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          date.setHours(timeInfo.hours, timeInfo.minutes, 0, 0);
+          return { hasTemporalHint: true, eventAt: date.toISOString(), date: new Date(now.getFullYear(), now.getMonth(), now.getDate()) };
         }
 
         if (!dateInfo.matched) {
@@ -6070,29 +6162,33 @@
       function parseTimeFromText(text) {
         const defaultTime = inferDefaultTimeByWords(text);
         const periodLabel = extractTimePeriodLabel(text);
-        const hmMatch = text.match(/(\d{1,2})\s*[:：]\s*(\d{1,2})/);
+        const hmMatch = text.match(new RegExp("(" + getTimeNumberPatternSource() + ")\\s*[:：]\\s*(" + getTimeNumberPatternSource() + ")"));
         if (hmMatch) {
+          const hours = parseTimeNumberToken(hmMatch[1]);
+          const minutes = parseTimeNumberToken(hmMatch[2]);
+          if (hours == null || minutes == null) {
+            return {
+              matched: false,
+              hours: 0,
+              minutes: 0,
+              defaultHours: defaultTime ? defaultTime.hours : null,
+              defaultMinutes: defaultTime ? defaultTime.minutes : null
+            };
+          }
+
           return {
             matched: true,
-            hours: clampHour(applyTimePeriod(Number(hmMatch[1]), periodLabel)),
-            minutes: clampMinute(Number(hmMatch[2]))
+            hours: clampHour(applyTimePeriod(hours, periodLabel)),
+            minutes: clampMinute(minutes)
           };
         }
 
-        const pointMatch = text.match(/(凌晨|今早|明早|早上|今晨|上午|中午|今午|下午|傍晚|晚上|今晚|明晚)?\s*(\d{1,2})\s*点\s*(半|[0-5]?\d\s*分?)?/);
-        if (pointMatch) {
-          let hours = Number(pointMatch[2]);
-          let minutes = 0;
-
-          if (pointMatch[3]) {
-            minutes = pointMatch[3].indexOf("半") >= 0 ? 30 : clampMinute(parseInt(pointMatch[3], 10) || 0);
-          }
-
-          hours = applyTimePeriod(hours, pointMatch[1] || periodLabel || "");
+        const pointTime = parsePointTimeFragment(text, periodLabel);
+        if (pointTime) {
           return {
             matched: true,
-            hours: clampHour(hours),
-            minutes: minutes
+            hours: pointTime.hours,
+            minutes: pointTime.minutes
           };
         }
 
@@ -6188,7 +6284,7 @@
       }
 
       function hasExplicitTimeToken(text) {
-        return /(\d{1,2}[:：]\d{2}|\d{1,2}\s*点(?:半|[0-5]?\d\s*分?)?)/.test(String(text || ""));
+        return new RegExp(getTimeFragmentPatternSource()).test(String(text || ""));
       }
 
       function hasExplicitAllDayToken(text) {

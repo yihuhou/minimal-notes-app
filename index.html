@@ -3879,17 +3879,16 @@
         }
 
         const date = new Date(baseValue);
-        if (shouldBackdateJournalToday(record && record.text, date)) {
+        if (shouldBackdateJournalDate(date)) {
           date.setDate(date.getDate() - 1);
         }
         return date.toISOString();
       }
 
-      function shouldBackdateJournalToday(text, date) {
+      function shouldBackdateJournalDate(date) {
         return Boolean(date
           && isValidDate(date)
-          && date.getHours() < JOURNAL_ROLLOVER_HOUR
-          && /(?:今天|今日)/.test(String(text || "")));
+          && date.getHours() < JOURNAL_ROLLOVER_HOUR);
       }
 
       function formatWeekdayToken(value) {

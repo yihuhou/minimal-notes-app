@@ -627,13 +627,32 @@
       background: #fafaf8;
     }
 
-    .item.idea .toggle {
+    .item.idea .toggle,
+    .item.journal .toggle {
       opacity: 0.42;
     }
 
     .item.idea:hover .toggle,
-    .item.idea:focus-within .toggle {
+    .item.idea:focus-within .toggle,
+    .item.journal:hover .toggle,
+    .item.journal:focus-within .toggle {
       opacity: 0.82;
+    }
+
+    .item.journal {
+      background: #fffdf8;
+      box-shadow: inset 2px 0 0 rgba(121, 91, 24, 0.18);
+    }
+
+    .item.journal:hover,
+    .item.journal:focus-within {
+      background: #fffaf0;
+    }
+
+    .item.journal .badge {
+      color: #72541b;
+      background: rgba(121, 91, 24, 0.08);
+      border-color: rgba(121, 91, 24, 0.14);
     }
 
     .item.upcoming {
@@ -856,6 +875,22 @@
       text-overflow: ellipsis;
       min-width: 0;
       flex: 1 1 auto;
+    }
+
+    .item.journal .item-line {
+      align-items: start;
+    }
+
+    .item.journal .item-text {
+      white-space: normal;
+      line-height: 1.68;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: clip;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .completed .item-text {
@@ -1426,18 +1461,18 @@
       <header class="header">
         <div class="title-block">
           <h1>极简记录</h1>
-          <p>像记事本一样记下待办、日程、截止和想法。打开就能写。</p>
+          <p>像记事本一样记下待办、日程、截止、想法和日记。打开就能写。</p>
         </div>
         <div class="counter" aria-live="polite">
           <strong id="openCount">0</strong>
-          <span>未完成事项 · 不含想法</span>
+          <span>未完成事项 · 不含想法/日记</span>
         </div>
       </header>
 
       <section class="composer" aria-label="快速输入区">
         <div class="composer-card">
           <label class="sr-only" for="quickInput">记录内容</label>
-          <textarea id="quickInput" placeholder="写下一件事、一场会，或一个突然冒出来的想法。"></textarea>
+          <textarea id="quickInput" placeholder="写下一件事、一场会，或用“记录：”写一段日记。"></textarea>
           <div class="composer-bar">
             <div class="meta-note">
               <span>Enter 保存。默认自动识别时间和类型；需要时再展开手动选项。</span>
@@ -1458,6 +1493,7 @@
               <option value="meeting">日程</option>
               <option value="deadline">截止</option>
               <option value="idea">想法</option>
+              <option value="journal">日记</option>
             </select>
             <label class="sr-only" for="quickEventAt">事件时间</label>
             <input id="quickEventAt" class="manual-datetime-input" type="datetime-local" autocomplete="off" title="事件时间">
@@ -1491,6 +1527,7 @@
             <button type="button" data-filter="meeting" aria-pressed="false">日程</button>
             <button type="button" data-filter="deadline" aria-pressed="false">截止</button>
             <button type="button" data-filter="idea" aria-pressed="false">想法</button>
+            <button type="button" data-filter="journal" aria-pressed="false">日记</button>
             <button type="button" data-filter="completed" aria-pressed="false">已完成</button>
           </div>
         </div>
@@ -1543,7 +1580,8 @@
         todo: "待办",
         meeting: "日程",
         deadline: "截止",
-        idea: "想法"
+        idea: "想法",
+        journal: "日记"
       };
       const initialLocalPayload = loadLocalRecordsEnvelope();
 
@@ -2100,7 +2138,7 @@
         toggleComposerAdvanced(false);
         render();
         focusQuickInput();
-        setStatus("已保存。");
+        setStatus(parsed.type === "journal" ? "已收入日记。" : "已保存。");
       }
 
       function toggleRecord(id) {
@@ -3514,7 +3552,7 @@
 
       function renderSummary(visible) {
         const unfinishedCount = state.records.filter(function (record) {
-          return !isVisuallyCompleted(record) && record.type !== "idea";
+          return !isVisuallyCompleted(record) && !isPassiveRecord(record);
         }).length;
         openCount.textContent = String(unfinishedCount);
         summaryText.textContent = "共 " + state.records.length + " 条，当前显示 " + visible.length + " 条";
@@ -3589,8 +3627,11 @@
           parts.push('<button type="button" class="code-token token-action" data-action="confirm-auto-complete" data-id="' + escapeHtml(record.id) + '" title="确认自动完成">确认</button>');
           parts.push('<button type="button" class="code-token token-action" data-action="revert-auto-complete" data-id="' + escapeHtml(record.id) + '" title="恢复为未完成">revert</button>');
         }
+        if (record.type === "journal") {
+          parts.push('<span class="code-token token-muted">' + escapeHtml(formatJournalDateToken(record)) + "</span>");
+        }
         if (record.completed) {
-          parts.push('<span class="code-token token-muted">' + (record.type === "idea" ? "archived" : "done") + "</span>");
+          parts.push('<span class="code-token token-muted">' + (isPassiveRecord(record) ? "archived" : "done") + "</span>");
         }
         parts.push("</span>");
         parts.push('<span class="item-text">' + renderDisplayTextHtml(record) + "</span>");
@@ -3715,7 +3756,7 @@
           };
         }
 
-        const completionLabel = record.type === "idea" ? "归档" : "完成";
+        const completionLabel = isPassiveRecord(record) ? "归档" : "完成";
         return {
           className: record.completed ? "done" : "",
           symbol: record.completed ? "✓" : "",
@@ -3809,6 +3850,21 @@
         return [date.getMonth() + 1, "/", date.getDate()].join("");
       }
 
+      function formatJournalDateToken(record) {
+        const value = normalizeDateTime(record && record.createdAt) || normalizeDateTime(record && record.updatedAt);
+        if (!value) {
+          return "日记";
+        }
+
+        const date = new Date(value);
+        const now = new Date();
+        const datePart = date.getFullYear() === now.getFullYear()
+          ? [date.getMonth() + 1, "/", date.getDate()].join("")
+          : [date.getFullYear(), "/", date.getMonth() + 1, "/", date.getDate()].join("");
+        const weekday = formatWeekdayToken(date);
+        return weekday ? datePart + " " + weekday : datePart;
+      }
+
       function formatWeekdayToken(value) {
         if (!value || !isValidDate(value)) {
           return "";
@@ -3837,6 +3893,10 @@
 
       function isPrepared(record) {
         return supportsPreparedState(record) && Boolean(record.prepared) && !record.completed;
+      }
+
+      function isPassiveRecord(record) {
+        return Boolean(record) && (record.type === "idea" || record.type === "journal");
       }
 
       function getDisplayText(record) {
@@ -4287,7 +4347,7 @@
         const locationPattern = "(?:[在去到]\\s*)?(?:[\\u4e00-\\u9fa5]{2,3}\\s*[A-Za-z]?\\d{3,4}|[A-Za-z]?\\d{2,4}\\s*(?:会议室|教室|报告厅|办公室|实验室|研讨室|活动室|房间|室|厅)|[\\u4e00-\\u9fa5]{1,8}(?:食堂|餐厅|饭店|咖啡馆|图书馆|办公室|实验室|会议室|教室|报告厅|礼堂|体育馆|活动室|研讨室|中心|校区|广场|大厦|酒店|宾馆))(?!\\d|\\s*(?:字|词|页|元|块|个|人|次|篇|本|分钟|小时|天|周|月|年|%))";
         const calendarDatePattern = "\\d{4}(?:年|[\\/.-])\\d{1,2}(?:月|[\\/.-])\\d{1,2}|\\d{1,2}(?:月|[\\/.-])\\d{1,2}(?:日|号)?|\\d{1,2}(?:日|号)";
         const tokenPattern = new RegExp(
-          "(想法[:：]?|" + periodTimePattern + "|" + relativeDatePattern + "|" + deadlinePattern + "|" + locationPattern + "|" + timeFragmentPattern + "|" + calendarDatePattern + ")",
+          "((?:想法|记录|日记)[:：]?|" + periodTimePattern + "|" + relativeDatePattern + "|" + deadlinePattern + "|" + locationPattern + "|" + timeFragmentPattern + "|" + calendarDatePattern + ")",
           "g"
         );
         let lastIndex = 0;
@@ -4307,7 +4367,7 @@
       }
 
       function wrapHighlightedToken(token, source, index) {
-        if (/^想法/.test(token) || isDeadlineKeywordToken(token, source, index)) {
+        if (/^(?:想法|记录|日记)/.test(token) || isDeadlineKeywordToken(token, source, index)) {
           return '<span class="code-inline-keyword">' + escapeHtml(token) + "</span>";
         }
 
@@ -4393,6 +4453,16 @@
         return new RegExp(dateOrTimePattern + "\\s*$").test(String(source || "").slice(0, index));
       }
 
+      function parseJournalCommandText(text) {
+        const source = String(text || "").trim();
+        const match = source.match(/^\s*(?:记录|日记)\s*[:：]\s*(.*)$/);
+        if (!match) {
+          return null;
+        }
+
+        return (match[1] || "").trim() || source;
+      }
+
       function inferUpdateFromText(text, record) {
         const source = String(text || "").trim();
         const ideaMatch = source.match(/^\s*(?:想法|idea)\s*(?:[:：]\s*)?(.*)$/i);
@@ -4400,6 +4470,25 @@
           return {
             text: (ideaMatch[1] || "").trim() || source,
             type: "idea",
+            eventAt: "",
+            recurrence: null
+          };
+        }
+
+        const journalText = parseJournalCommandText(source);
+        if (journalText) {
+          return {
+            text: journalText,
+            type: "journal",
+            eventAt: "",
+            recurrence: null
+          };
+        }
+
+        if (record && record.type === "journal") {
+          return {
+            text: source,
+            type: "journal",
             eventAt: "",
             recurrence: null
           };
@@ -4458,7 +4547,7 @@
                 return false;
               }
             } else if (state.filter === "all") {
-              if (record.type === "idea") {
+              if (isPassiveRecord(record)) {
                 return false;
               }
             } else if (state.filter !== "all") {
@@ -4648,7 +4737,7 @@
       function hasScheduledEvent(record) {
         return Boolean(record
           && record.eventAt
-          && record.type !== "idea"
+          && !isPassiveRecord(record)
           && isValidDate(record.eventAt));
       }
 
@@ -5161,6 +5250,15 @@
             };
           }
 
+          if (manualType === "journal") {
+            return {
+              text: parseJournalCommandText(text) || text,
+              type: "journal",
+              eventAt: "",
+              recurrence: null
+            };
+          }
+
           const resolvedManualEventAt = recurrenceInfo
             ? resolveRecurringEventAt(manualType, explicitEventAt, naturalInfo, recurrenceInfo, text)
             : resolveTimedEventAt(manualType, explicitEventAt, naturalInfo);
@@ -5177,6 +5275,16 @@
           return {
             text: (ideaMatch[1] || "").trim() || text.trim(),
             type: "idea",
+            eventAt: "",
+            recurrence: null
+          };
+        }
+
+        const journalText = parseJournalCommandText(text);
+        if (journalText) {
+          return {
+            text: journalText,
+            type: "journal",
             eventAt: "",
             recurrence: null
           };
@@ -6744,21 +6852,26 @@
           return null;
         }
 
-        const text = typeof record.text === "string" ? record.text.trim() : "";
+        let text = typeof record.text === "string" ? record.text.trim() : "";
         if (!text) {
           return null;
         }
 
-        let type = ["todo", "meeting", "deadline", "idea"].includes(record.type) ? record.type : "todo";
+        let type = ["todo", "meeting", "deadline", "idea", "journal"].includes(record.type) ? record.type : "todo";
+        const journalText = parseJournalCommandText(text);
+        if (journalText) {
+          text = journalText;
+          type = "journal";
+        }
         if (type === "meeting" && isDeadlineHintText(text)) {
           type = "deadline";
         }
         const createdAt = isValidDate(record.createdAt) ? new Date(record.createdAt).toISOString() : new Date().toISOString();
         const updatedAt = isValidDate(record.updatedAt) ? new Date(record.updatedAt).toISOString() : createdAt;
-        const importedRecurrence = normalizeRecurrenceInfo(record.recurrence);
-        const inferredRecurrence = type === "idea" ? null : extractRecurrenceInfo(text);
+        const importedRecurrence = isPassiveRecord({ type: type }) ? null : normalizeRecurrenceInfo(record.recurrence);
+        const inferredRecurrence = isPassiveRecord({ type: type }) ? null : extractRecurrenceInfo(text);
         const recurrence = importedRecurrence || inferredRecurrence;
-        let eventAt = normalizeDateTime(record.eventAt);
+        let eventAt = isPassiveRecord({ type: type }) ? "" : normalizeDateTime(record.eventAt);
         if (type === "todo" && !recurrence && !eventAt) {
           const naturalInfo = extractNaturalDateInfo(text, createdAt);
           if (naturalInfo.hasTemporalHint) {

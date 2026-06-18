@@ -46,6 +46,11 @@
       color: var(--text);
       background: var(--bg);
       -webkit-font-smoothing: antialiased;
+      transition: background-color 0.22s ease;
+    }
+
+    body.journal-focus {
+      background: #14161d;
     }
 
     button,
@@ -94,6 +99,7 @@
       justify-content: center;
       align-items: flex-start;
       gap: 18px;
+      transition: gap 0.22s ease;
     }
 
     .shell {
@@ -105,6 +111,13 @@
       min-width: 0;
       flex: 1 1 980px;
       max-width: 980px;
+      transition: border-color 0.22s ease, box-shadow 0.22s ease, background-color 0.22s ease;
+    }
+
+    body.journal-focus .shell {
+      background: #fffefa;
+      border-color: rgba(255, 255, 255, 0.38);
+      box-shadow: 0 22px 70px rgba(0, 0, 0, 0.34), 0 0 0 1px rgba(255, 255, 255, 0.08);
     }
 
     .idea-pane {
@@ -112,6 +125,7 @@
       flex: 0 0 min(460px, 36vw);
       width: min(460px, 36vw);
       display: none;
+      transition: opacity 0.22s ease, filter 0.22s ease;
     }
 
     .workspace.has-ideas .idea-pane {
@@ -120,12 +134,32 @@
       gap: 12px;
     }
 
+    .workspace.journal-focus .idea-pane {
+      opacity: 0.62;
+      filter: grayscale(0.28) blur(0.7px);
+      pointer-events: none;
+      user-select: none;
+    }
+
     .idea-card {
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 20px;
       box-shadow: var(--shadow-soft);
       padding: 14px 14px 12px;
+    }
+
+    .workspace.journal-focus .idea-card,
+    .journal-idea-veil {
+      background: rgba(18, 20, 27, 0.84);
+      border-color: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 14px 42px rgba(0, 0, 0, 0.24);
+    }
+
+    .journal-idea-veil {
+      min-height: 260px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
     }
 
     .idea-card-head,
@@ -154,11 +188,20 @@
       color: var(--text-soft);
     }
 
+    .workspace.journal-focus .idea-card-label {
+      color: rgba(245, 246, 248, 0.42);
+    }
+
     .idea-card-hint,
     .idea-card-foot {
       color: var(--text-faint);
       font-size: 11px;
       line-height: 1.6;
+    }
+
+    .workspace.journal-focus .idea-card-hint,
+    .workspace.journal-focus .idea-card-foot {
+      color: rgba(245, 246, 248, 0.28);
     }
 
     .idea-card-foot {
@@ -184,6 +227,10 @@
       display: block;
     }
 
+    .workspace.journal-focus .idea-card textarea {
+      color: rgba(245, 246, 248, 0.38);
+    }
+
     .idea-card-editor {
       min-height: 0;
       padding: 10px 12px;
@@ -191,6 +238,11 @@
       border-radius: 16px;
       background: #fbfbfa;
       transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+
+    .workspace.journal-focus .idea-card-editor {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: rgba(255, 255, 255, 0.07);
     }
 
     .idea-card-editor:focus-within {
@@ -1343,6 +1395,10 @@
       .idea-pane {
         width: auto;
         margin-top: 12px;
+      }
+
+      .workspace.journal-focus .idea-pane {
+        display: none;
       }
     }
 
@@ -3887,23 +3943,43 @@
           return;
         }
 
-        if (state.filter === "journal") {
-          workspace.classList.remove("has-ideas");
+        const journalFocus = state.filter === "journal";
+        const ideas = getOpenIdeas();
+        const hasIdeas = ideas.length > 0;
+        const shouldShowIdeaPane = hasIdeas || journalFocus;
+
+        document.body.classList.toggle("journal-focus", journalFocus);
+        workspace.classList.toggle("journal-focus", journalFocus);
+        workspace.classList.toggle("has-ideas", shouldShowIdeaPane);
+        setIdeaPanePrivacyMode(journalFocus);
+
+        if (!shouldShowIdeaPane) {
           ideaPane.innerHTML = "";
           return;
         }
 
-        const ideas = getOpenIdeas();
-        const hasIdeas = ideas.length > 0;
-        workspace.classList.toggle("has-ideas", hasIdeas);
-
         if (!hasIdeas) {
-          ideaPane.innerHTML = "";
+          ideaPane.innerHTML = journalFocus ? '<div class="journal-idea-veil" aria-hidden="true"></div>' : "";
           return;
         }
 
         ideaPane.innerHTML = ideas.map(renderIdeaCard).join("");
         syncIdeaPaneHeights();
+      }
+
+      function setIdeaPanePrivacyMode(enabled) {
+        if (!ideaPane) {
+          return;
+        }
+
+        if (enabled) {
+          ideaPane.setAttribute("inert", "");
+          ideaPane.setAttribute("aria-hidden", "true");
+          return;
+        }
+
+        ideaPane.removeAttribute("inert");
+        ideaPane.removeAttribute("aria-hidden");
       }
 
       function renderIdeaCard(record) {

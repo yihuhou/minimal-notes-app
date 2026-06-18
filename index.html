@@ -4906,32 +4906,54 @@
         let match = source.match(/(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?\s*(?:到|至|-|~|～)\s*(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?/);
         if (match && match.index != null) {
           const year = startDate.getFullYear();
-          const rangeStart = new Date(year, Number(match[1]) - 1, Number(match[2]));
-          const rangeEnd = new Date(year, Number(match[3]) - 1, Number(match[4]));
-          if (rangeEnd.getTime() < rangeStart.getTime()) {
-            rangeEnd.setFullYear(rangeEnd.getFullYear() + 1);
+          const startMonth = Number(match[1]);
+          const startDay = Number(match[2]);
+          const endMonth = Number(match[3]);
+          const endDay = Number(match[4]);
+          if (isValidCalendarDateParts(year, startMonth, startDay)
+            && isValidCalendarDateParts(year, endMonth, endDay)) {
+            const rangeStart = new Date(year, startMonth - 1, startDay);
+            const rangeEnd = new Date(year, endMonth - 1, endDay);
+            if (rangeEnd.getTime() < rangeStart.getTime()) {
+              rangeEnd.setFullYear(rangeEnd.getFullYear() + 1);
+            }
+            return {
+              index: match.index,
+              length: match[0].length,
+              startDate: rangeStart,
+              endDate: rangeEnd
+            };
           }
-          return {
-            index: match.index,
-            length: match[0].length,
-            startDate: rangeStart,
-            endDate: rangeEnd
-          };
         }
 
         match = source.match(/(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?\s*(?:到|至|-|~|～)\s*(\d{1,2})\s*(?:日|号)?(?!\s*(?:月|[\/.-]))/);
         if (match && match.index != null) {
           const year = startDate.getFullYear();
-          const rangeStart = new Date(year, Number(match[1]) - 1, Number(match[2]));
-          const rangeEnd = new Date(year, Number(match[1]) - 1, Number(match[3]));
-          if (rangeEnd.getTime() < rangeStart.getTime()) {
-            rangeEnd.setMonth(rangeEnd.getMonth() + 1);
+          const month = Number(match[1]);
+          const startDay = Number(match[2]);
+          const endDay = Number(match[3]);
+          if (isValidCalendarDateParts(year, month, startDay)
+            && isValidMonthDay(endDay)) {
+            const rangeStart = new Date(year, month - 1, startDay);
+            const rangeEnd = resolveDayRangeEndDate(rangeStart, endDay);
+            if (rangeEnd) {
+              return {
+                index: match.index,
+                length: match[0].length,
+                startDate: rangeStart,
+                endDate: rangeEnd
+              };
+            }
           }
+        }
+
+        const standaloneDayRangeInfo = parseStandaloneDayRangeInfo(source, startDate);
+        if (standaloneDayRangeInfo && standaloneDayRangeInfo.endDate) {
           return {
-            index: match.index,
-            length: match[0].length,
-            startDate: rangeStart,
-            endDate: rangeEnd
+            index: standaloneDayRangeInfo.index,
+            length: standaloneDayRangeInfo.length,
+            startDate: standaloneDayRangeInfo.startDate,
+            endDate: standaloneDayRangeInfo.endDate
           };
         }
 
@@ -5382,10 +5404,6 @@
         const sortEventAt = getCarryForwardRecurringSortEventAt(record, nowTime);
         const startAt = getTimedSortStartAt(record, sortEventAt);
         const endAt = getTimedSortEndAt(record, sortEventAt);
-        const priorityLimitAt = getScheduledPriorityLimitAt(nowTime);
-        if (startAt > priorityLimitAt) {
-          return { bucket: 4, value: startAt };
-        }
 
         if (record.type === "deadline") {
           return { bucket: 1, value: startAt - nowTime };
@@ -5454,11 +5472,6 @@
         }
 
         return null;
-      }
-
-      function getScheduledPriorityLimitAt(nowTime) {
-        const now = isValidDate(nowTime) ? new Date(nowTime) : new Date();
-        return addMonthsClamped(now, 3, now.getDate()).getTime();
       }
 
       function isUntimedDateRecord(record) {
@@ -7055,6 +7068,14 @@
         return Number.isInteger(value) && value >= 1 && value <= 31;
       }
 
+      function isValidCalendarDateParts(year, month, monthDay) {
+        return Number.isInteger(year)
+          && isValidMonth(month)
+          && Number.isInteger(monthDay)
+          && monthDay >= 1
+          && monthDay <= daysInMonth(year, month - 1);
+      }
+
       function formatRecurrenceLabel(value) {
         const recurrence = normalizeRecurrenceInfo(value);
         if (!recurrence) {
@@ -7145,20 +7166,34 @@
 
         const fullDateMatch = text.match(/(\d{4})\s*(?:年|[\/.-])\s*(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?/);
         if (fullDateMatch) {
-          return {
-            matched: true,
-            date: new Date(Number(fullDateMatch[1]), Number(fullDateMatch[2]) - 1, Number(fullDateMatch[3]))
-          };
+          const year = Number(fullDateMatch[1]);
+          const month = Number(fullDateMatch[2]);
+          const monthDay = Number(fullDateMatch[3]);
+          if (isValidCalendarDateParts(year, month, monthDay)) {
+            return {
+              matched: true,
+              date: new Date(year, month - 1, monthDay)
+            };
+          }
         }
 
         const monthDayMatch = text.match(/(?:^|[^\d])(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?/);
         if (monthDayMatch) {
           const year = now.getFullYear();
-          const date = new Date(year, Number(monthDayMatch[1]) - 1, Number(monthDayMatch[2]));
-          if (date.getTime() < today.getTime() - 24 * 60 * 60 * 1000) {
-            date.setFullYear(year + 1);
+          const month = Number(monthDayMatch[1]);
+          const monthDay = Number(monthDayMatch[2]);
+          if (isValidCalendarDateParts(year, month, monthDay)) {
+            const date = new Date(year, month - 1, monthDay);
+            if (date.getTime() < today.getTime() - 24 * 60 * 60 * 1000) {
+              date.setFullYear(year + 1);
+            }
+            return { matched: true, date: date };
           }
-          return { matched: true, date: date };
+        }
+
+        const standaloneDayRangeInfo = parseStandaloneDayRangeInfo(text, today);
+        if (standaloneDayRangeInfo) {
+          return { matched: true, date: standaloneDayRangeInfo.startDate };
         }
 
         const standaloneDayMatch = text.match(/(?:^|[^第\dA-Za-z年月\/.-])([0-9一二两三四五六七八九十]{1,3})\s*(?:日|号)(?!\s*(?:楼|栋|座|门|线|院|房|室|厅|馆|车|桌|床|柜|机|文件|题|组|页|个|人|名|位|次|岁|元|块|%))/);
@@ -7170,6 +7205,67 @@
         }
 
         return { matched: false, date: null };
+      }
+
+      function parseStandaloneDayRangeInfo(text, referenceDate) {
+        const match = matchStandaloneDayRange(text);
+        if (!match || !isValidDate(referenceDate)) {
+          return null;
+        }
+
+        const startDay = parseCalendarDayToken(match.startToken);
+        const endDay = parseCalendarDayToken(match.endToken);
+        const startDate = resolveStandaloneDayDate(startDay, referenceDate);
+        if (!startDate || !isValidMonthDay(endDay)) {
+          return null;
+        }
+
+        return {
+          index: match.index,
+          length: match.length,
+          startDate: startDate,
+          endDate: resolveDayRangeEndDate(startDate, endDay)
+        };
+      }
+
+      function matchStandaloneDayRange(text) {
+        const match = String(text || "").match(/(^|[^第\dA-Za-z年月\/.-])([0-9一二两三四五六七八九十]{1,3})\s*(?:日|号)?\s*(?:到|至|-|~|～)\s*([0-9一二两三四五六七八九十]{1,3})\s*(?:日|号)(?!\s*(?:楼|栋|座|门|线|院|房|室|厅|馆|车|桌|床|柜|机|文件|题|组|页|个|人|名|位|次|岁|元|块|%))/);
+        if (!match || match.index == null) {
+          return null;
+        }
+
+        const prefix = match[1] || "";
+        return {
+          index: match.index + prefix.length,
+          length: match[0].length - prefix.length,
+          startToken: match[2],
+          endToken: match[3]
+        };
+      }
+
+      function resolveDayRangeEndDate(startDate, endDay) {
+        if (!isValidDate(startDate) || !isValidMonthDay(endDay)) {
+          return null;
+        }
+
+        const startDay = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+        let endYear = startDay.getFullYear();
+        let endMonth = startDay.getMonth();
+        let endDate = isValidCalendarDateParts(endYear, endMonth + 1, endDay)
+          ? new Date(endYear, endMonth, endDay)
+          : null;
+        if (!endDate || endDate.getTime() < startDay.getTime()) {
+          endMonth += 1;
+          const nextMonth = new Date(endYear, endMonth, 1);
+          endYear = nextMonth.getFullYear();
+          endMonth = nextMonth.getMonth();
+          if (!isValidCalendarDateParts(endYear, endMonth + 1, endDay)) {
+            return null;
+          }
+          endDate = new Date(endYear, endMonth, endDay);
+        }
+
+        return endDate;
       }
 
       function parseCalendarDayToken(value) {

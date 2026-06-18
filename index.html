@@ -4636,7 +4636,9 @@
         const relativeDatePattern = "今天|明天|后天|大后天|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]";
         const deadlinePattern = "截止|截至|过期|到期|失效|期满|有效期|DDL|ddl|deadline|之前|前";
         const locationAliasPattern = getLocationAliasPatternSource();
+        const diningHallFloorPattern = getDiningHallFloorPatternSource();
         const knownLocationPattern = (locationAliasPattern ? locationAliasPattern + "|" : "")
+          + diningHallFloorPattern + "|"
           + "[\\u4e00-\\u9fa5]{2,3}\\s*[A-Za-z]?\\d{3,4}|[A-Za-z]?\\d{2,4}\\s*(?:会议室|教室|报告厅|办公室|实验室|研讨室|活动室|房间|室|厅)|[\\u4e00-\\u9fa5]{1,8}(?:食堂|餐厅|饭店|咖啡馆|图书馆|办公室|实验室|会议室|教室|报告厅|礼堂|体育馆|活动室|研讨室|中心|校区|广场|大厦|酒店|宾馆)";
         const locationPattern = "(?:[在去到]\\s*)?(?:" + knownLocationPattern + ")(?!\\d|\\s*(?:字|词|页|元|块|个|人|次|篇|本|分钟|小时|天|周|月|年|%))";
         const calendarDatePattern = "\\d{4}(?:年|[\\/.-])\\d{1,2}(?:月|[\\/.-])\\d{1,2}|\\d{1,2}(?:月|[\\/.-])\\d{1,2}(?:日|号)?|\\d{1,2}(?:日|号)";
@@ -4704,6 +4706,7 @@
         }
 
         return Boolean(getLocationAliasLabel(source))
+          || isDiningHallFloorToken(source)
           || /^[\u4e00-\u9fa5]{2,3}\s*[A-Za-z]?\d{3,4}$/.test(source)
           || /^(?:[\u4e00-\u9fa5]{1,8}\s*)?[A-Za-z]?\d{2,4}\s*(?:会议室|教室|报告厅|办公室|实验室|研讨室|活动室|房间|室|厅)$/.test(source)
           || /^[\u4e00-\u9fa5]{1,8}(?:食堂|餐厅|饭店|咖啡馆|图书馆|办公室|实验室|会议室|教室|报告厅|礼堂|体育馆|活动室|研讨室|中心|校区|广场|大厦|酒店|宾馆)$/.test(source);
@@ -4711,8 +4714,8 @@
 
       function renderLocationTokenHtml(location) {
         const source = String(location || "").trim();
-        const aliasLabel = getLocationAliasLabel(source);
-        const titleAttr = aliasLabel ? ' title="' + escapeHtml(aliasLabel) + '"' : "";
+        const locationLabel = getLocationAliasLabel(source) || getDiningHallFloorLabel(source);
+        const titleAttr = locationLabel ? ' title="' + escapeHtml(locationLabel) + '"' : "";
         return '<span class="code-inline-location"' + titleAttr + ">" + escapeHtml(location) + "</span>";
       }
 
@@ -4725,6 +4728,21 @@
 
       function getLocationAliasPatternSource() {
         return Object.keys(LOCATION_ALIASES).map(escapeRegExp).join("|");
+      }
+
+      function isDiningHallFloorToken(token) {
+        const source = String(token || "").trim();
+        return new RegExp("^" + getDiningHallFloorPatternSource() + "$").test(source);
+      }
+
+      function getDiningHallFloorLabel(location) {
+        const source = String(location || "").trim();
+        const match = source.match(/^([\u4e00-\u9fa5]{1,8}区)\s*(?:食堂\s*)?([0-9一二两三四五六七八九十]{1,3})\s*(楼|层)$/);
+        return match ? match[1] + "食堂" + match[2] + match[3] : "";
+      }
+
+      function getDiningHallFloorPatternSource() {
+        return "[\\u4e00-\\u9fa5]{1,8}区\\s*(?:食堂\\s*)?[0-9一二两三四五六七八九十]{1,3}\\s*(?:楼|层)";
       }
 
       function escapeRegExp(value) {

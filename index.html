@@ -50,17 +50,17 @@
     }
 
     body.journal-focus {
-      --panel: #f7efdf;
-      --panel-strong: #fbf3e4;
-      --panel-soft: #efe3cf;
-      --border: rgba(100, 73, 33, 0.14);
-      --border-strong: rgba(100, 73, 33, 0.23);
-      --accent-soft: #efe1c7;
-      background-color: #25242b;
+      --panel: #f8f8f5;
+      --panel-strong: #fbfaf7;
+      --panel-soft: #f2f1ed;
+      --border: rgba(58, 55, 48, 0.11);
+      --border-strong: rgba(58, 55, 48, 0.18);
+      --accent-soft: #efede8;
+      background-color: #292a30;
       background-image:
-        radial-gradient(ellipse at calc(50% - 240px) 7rem, rgba(255, 219, 151, 0.44) 0%, rgba(225, 176, 92, 0.19) 34%, rgba(37, 36, 43, 0) 64%),
-        radial-gradient(ellipse at calc(50% - 240px) 34rem, rgba(255, 244, 209, 0.12) 0%, rgba(37, 36, 43, 0) 48%),
-        linear-gradient(180deg, #34323a 0%, #26262e 50%, #202128 100%);
+        radial-gradient(ellipse at calc(50% - 240px) 7rem, rgba(255, 250, 239, 0.28) 0%, rgba(221, 215, 203, 0.13) 36%, rgba(41, 42, 48, 0) 66%),
+        radial-gradient(ellipse at calc(50% - 240px) 34rem, rgba(255, 255, 250, 0.08) 0%, rgba(41, 42, 48, 0) 48%),
+        linear-gradient(180deg, #32333a 0%, #292a30 50%, #23242a 100%);
       background-attachment: fixed;
     }
 
@@ -126,11 +126,11 @@
     }
 
     body.journal-focus .shell {
-      background: rgba(248, 239, 220, 0.96);
-      border-color: rgba(255, 226, 164, 0.36);
+      background: rgba(250, 249, 246, 0.97);
+      border-color: rgba(255, 255, 255, 0.28);
       box-shadow:
-        0 28px 84px rgba(8, 9, 14, 0.28),
-        0 0 86px rgba(232, 178, 91, 0.18),
+        0 28px 84px rgba(8, 9, 14, 0.26),
+        0 0 82px rgba(236, 233, 224, 0.1),
         inset 0 1px 0 rgba(255, 255, 255, 0.58);
     }
 
@@ -165,8 +165,8 @@
 
     .workspace.journal-focus .idea-card,
     .journal-idea-veil {
-      background: rgba(29, 28, 34, 0.76);
-      border-color: rgba(255, 220, 153, 0.1);
+      background: rgba(31, 32, 38, 0.74);
+      border-color: rgba(255, 255, 255, 0.07);
       box-shadow: 0 14px 42px rgba(0, 0, 0, 0.2);
     }
 
@@ -335,7 +335,7 @@
     }
 
     body.journal-focus .counter {
-      background: rgba(247, 237, 216, 0.82);
+      background: rgba(247, 246, 242, 0.84);
     }
 
     .composer {
@@ -353,7 +353,7 @@
     }
 
     body.journal-focus .composer-card {
-      background: rgba(251, 242, 224, 0.78);
+      background: rgba(251, 250, 247, 0.8);
     }
 
     .composer textarea,
@@ -401,7 +401,7 @@
     body.journal-focus .composer select,
     body.journal-focus .composer input[type="datetime-local"],
     body.journal-focus .manual-datetime-input {
-      background: rgba(255, 250, 239, 0.7);
+      background: rgba(255, 254, 251, 0.72);
     }
 
     .composer textarea::placeholder,
@@ -695,7 +695,7 @@
     }
 
     body.journal-focus .list {
-      background: rgba(252, 244, 228, 0.72);
+      background: rgba(251, 250, 247, 0.76);
     }
 
     .item {
@@ -713,7 +713,7 @@
     }
 
     body.journal-focus .item {
-      background: rgba(252, 245, 231, 0.76);
+      background: rgba(252, 251, 248, 0.78);
     }
 
     .item + .item {
@@ -721,7 +721,7 @@
     }
 
     body.journal-focus .item + .item {
-      border-top-color: rgba(100, 73, 33, 0.08);
+      border-top-color: rgba(58, 55, 48, 0.06);
     }
 
     .item:hover,
@@ -731,7 +731,7 @@
 
     body.journal-focus .item:hover,
     body.journal-focus .item:focus-within {
-      background: rgba(255, 248, 235, 0.88);
+      background: rgba(255, 254, 250, 0.86);
     }
 
     .item.completed {
@@ -756,8 +756,8 @@
     }
 
     body.journal-focus .item.journal {
-      background: rgba(250, 239, 217, 0.84);
-      box-shadow: inset 2px 0 0 rgba(138, 92, 22, 0.18);
+      background: rgba(250, 249, 246, 0.84);
+      box-shadow: inset 2px 0 0 rgba(104, 94, 76, 0.12);
     }
 
     .item.journal:hover,
@@ -767,13 +767,19 @@
 
     body.journal-focus .item.journal:hover,
     body.journal-focus .item.journal:focus-within {
-      background: rgba(255, 244, 222, 0.92);
+      background: rgba(255, 254, 250, 0.92);
     }
 
     .item.journal .badge {
       color: #72541b;
       background: rgba(121, 91, 24, 0.08);
       border-color: rgba(121, 91, 24, 0.14);
+    }
+
+    body.journal-focus .item.journal .badge {
+      color: #5f5b52;
+      background: rgba(72, 68, 60, 0.07);
+      border-color: rgba(72, 68, 60, 0.12);
     }
 
     .item.readonly .item-line {
@@ -1179,9 +1185,9 @@
     @media (max-width: 980px) {
       body.journal-focus {
         background-image:
-          radial-gradient(ellipse at 50% 6rem, rgba(255, 219, 151, 0.42) 0%, rgba(225, 176, 92, 0.18) 34%, rgba(37, 36, 43, 0) 64%),
-          radial-gradient(ellipse at 50% 30rem, rgba(255, 244, 209, 0.11) 0%, rgba(37, 36, 43, 0) 48%),
-          linear-gradient(180deg, #34323a 0%, #26262e 50%, #202128 100%);
+          radial-gradient(ellipse at 50% 6rem, rgba(255, 250, 239, 0.27) 0%, rgba(221, 215, 203, 0.12) 36%, rgba(41, 42, 48, 0) 66%),
+          radial-gradient(ellipse at 50% 30rem, rgba(255, 255, 250, 0.08) 0%, rgba(41, 42, 48, 0) 48%),
+          linear-gradient(180deg, #32333a 0%, #292a30 50%, #23242a 100%);
       }
 
       .workspace {
@@ -2325,6 +2331,7 @@
         const text = rawText.trim();
         const explicitEventAt = normalizeDateTime(quickEventAt.value);
         const manualType = quickType.value;
+        const contextualType = manualType === "auto" && state.filter === "journal" ? "journal" : "";
         const now = new Date().toISOString();
 
         if (!text) {
@@ -2333,7 +2340,7 @@
           return;
         }
 
-        const parsed = inferTypeAndText(text, explicitEventAt, manualType);
+        const parsed = inferTypeAndText(text, explicitEventAt, manualType, contextualType);
         const record = {
           id: createId(),
           text: parsed.text,
@@ -5813,7 +5820,7 @@
         return baseLabel;
       }
 
-      function inferTypeAndText(text, explicitEventAt, manualType) {
+      function inferTypeAndText(text, explicitEventAt, manualType, contextualType) {
         const naturalInfo = extractNaturalDateInfo(text);
         const recurrenceInfo = extractRecurrenceInfo(text);
         const autoTimedType = inferTimedTypeFromText(text);
@@ -5862,6 +5869,15 @@
         if (journalText) {
           return {
             text: journalText,
+            type: "journal",
+            eventAt: "",
+            recurrence: null
+          };
+        }
+
+        if (contextualType === "journal") {
+          return {
+            text: text,
             type: "journal",
             eventAt: "",
             recurrence: null

@@ -591,6 +591,59 @@
       background: #222222;
     }
 
+    .delete-dialog {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+    }
+
+    .delete-dialog-scrim {
+      position: absolute;
+      inset: 0;
+      background: rgba(17, 17, 17, 0.22);
+    }
+
+    .delete-dialog-panel {
+      position: relative;
+      width: min(420px, 100%);
+      padding: 18px;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 18px 48px rgba(17, 17, 17, 0.16);
+    }
+
+    .delete-dialog-panel h2 {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1.35;
+      letter-spacing: 0;
+    }
+
+    .delete-dialog-panel p {
+      margin: 8px 0 0;
+      color: var(--text-soft);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .delete-dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    .delete-dialog-actions .ghost,
+    .delete-dialog-actions .primary {
+      min-height: 34px;
+      padding: 0 12px;
+    }
+
     .icon-only {
       width: 32px;
       min-width: 32px;
@@ -1716,6 +1769,18 @@
     <aside id="ideaPane" class="idea-pane" aria-live="polite"></aside>
     </div>
   </main>
+  <div id="deleteDialog" class="delete-dialog" role="dialog" aria-modal="true" aria-labelledby="deleteDialogTitle" aria-describedby="deleteDialogDescription" hidden>
+    <div class="delete-dialog-scrim" data-delete-mode="cancel"></div>
+    <div class="delete-dialog-panel">
+      <h2 id="deleteDialogTitle">删除记录</h2>
+      <p id="deleteDialogDescription">从列表删除后，可以把完整历史继续留在 JSON，也可以彻底删除。</p>
+      <div class="delete-dialog-actions">
+        <button id="deleteArchiveButton" class="primary" type="button" data-delete-mode="archive">保留到 JSON</button>
+        <button class="ghost" type="button" data-delete-mode="purge">完全删除</button>
+        <button class="ghost" type="button" data-delete-mode="cancel">取消</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     (function () {
@@ -1868,12 +1933,16 @@
       const clearRemoteSyncButton = document.getElementById("clearRemoteSyncButton");
       const secureExitButton = document.getElementById("secureExitButton");
       const importFile = document.getElementById("importFile");
+      const deleteDialog = document.getElementById("deleteDialog");
+      const deleteArchiveButton = document.getElementById("deleteArchiveButton");
 
       let statusTimer = null;
       let syncPollTimer = null;
       let syncWriteTimer = null;
       let remotePollTimer = null;
       let remoteWriteTimer = null;
+      let deleteDialogResolve = null;
+      let deleteDialogPreviousFocus = null;
 
       bindEvents();
       loadRemoteSyncSettings();
@@ -1932,6 +2001,8 @@
         ideaPane.addEventListener("input", handleIdeaPaneInput);
         ideaPane.addEventListener("keydown", handleIdeaPaneKeydown);
         ideaPane.addEventListener("focusout", handleIdeaPaneFocusOut);
+        deleteDialog.addEventListener("click", handleDeleteDialogClick);
+        deleteDialog.addEventListener("keydown", handleDeleteDialogKeydown);
 
         exportButton.addEventListener("click", exportRecords);
         importButton.addEventListener("click", function () {
@@ -2443,7 +2514,7 @@
         render();
       }
 
-      function deleteRecord(id) {
+      async function deleteRecord(id) {
         const record = state.records.find(function (item) {
           return item.id === id;
         });
@@ -2456,7 +2527,7 @@
           return;
         }
 
-        const deleteMode = chooseDeleteMode();
+        const deleteMode = await chooseDeleteMode();
         if (!deleteMode) {
           return;
         }
@@ -2479,24 +2550,61 @@
       }
 
       function chooseDeleteMode() {
-        const answer = window.prompt(
-          "删除这条记录：\n1 = 从 JSON 里完全删除\n2 = 从列表删除，但在 JSON 里保留完整记录\n\n留空或取消 = 不删除",
-          "2"
-        );
-        if (answer === null) {
-          return "";
+        if (!deleteDialog) {
+          return Promise.resolve(window.confirm("从 JSON 里完全删除这条记录吗？") ? "purge" : "archive");
         }
 
-        const value = String(answer || "").trim();
-        if (value === "1") {
-          return "purge";
-        }
-        if (value === "2") {
-          return "archive";
+        if (deleteDialogResolve) {
+          closeDeleteDialog("");
         }
 
-        setStatus("已取消删除，请输入 1 或 2。");
-        return "";
+        deleteDialogPreviousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        deleteDialog.hidden = false;
+
+        requestAnimationFrame(function () {
+          if (deleteArchiveButton) {
+            deleteArchiveButton.focus();
+          }
+        });
+
+        return new Promise(function (resolve) {
+          deleteDialogResolve = resolve;
+        });
+      }
+
+      function handleDeleteDialogClick(event) {
+        const target = event.target.closest("[data-delete-mode]");
+        if (!target || !deleteDialog.contains(target)) {
+          return;
+        }
+
+        const mode = target.dataset.deleteMode;
+        closeDeleteDialog(mode === "archive" || mode === "purge" ? mode : "");
+      }
+
+      function handleDeleteDialogKeydown(event) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeDeleteDialog("");
+        }
+      }
+
+      function closeDeleteDialog(mode) {
+        const resolve = deleteDialogResolve;
+        deleteDialogResolve = null;
+        if (deleteDialog) {
+          deleteDialog.hidden = true;
+        }
+
+        const previousFocus = deleteDialogPreviousFocus;
+        deleteDialogPreviousFocus = null;
+        if (previousFocus && document.contains(previousFocus)) {
+          previousFocus.focus();
+        }
+
+        if (resolve) {
+          resolve(mode);
+        }
       }
 
       function confirmAutoComplete(id) {

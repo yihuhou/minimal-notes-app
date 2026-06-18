@@ -4198,7 +4198,7 @@
           return source.replace(relativeWithWeekdayPattern, datePrefix);
         }
 
-        const weekdayPattern = /(?:(?:上周|本周|这周|下周)\s*)?(?:周|星期)[一二三四五六日天]/;
+        const weekdayPattern = /(?:上周|本周|这周|下周)\s*[一二三四五六日天]|(?:(?:上周|本周|这周|下周)\s*)?(?:周|星期)\s*[一二三四五六日天]/;
         if (weekdayPattern.test(source)) {
           return source.replace(weekdayPattern, datePrefix);
         }

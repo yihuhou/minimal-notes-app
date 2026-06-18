@@ -4491,7 +4491,7 @@
         const source = String(text || "");
         const timePeriodPattern = getTimePeriodPatternSource();
         const timeFragmentPattern = getTimeFragmentPatternSource();
-        const periodTimePattern = timePeriodPattern + "\\s*(?:" + timeFragmentPattern + ")?";
+        const periodTimePattern = timePeriodPattern + "(?:\\s*" + timeFragmentPattern + ")?";
         const relativeDatePattern = "今天|明天|后天|大后天|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]";
         const deadlinePattern = "截止|截至|过期|到期|失效|期满|有效期|DDL|ddl|deadline|之前|前";
         const locationAliasPattern = getLocationAliasPatternSource();
@@ -5221,7 +5221,7 @@
       }
 
       function getPointTimePatternSource() {
-        return getTimeNumberPatternSource() + "\\s*点\\s*(?:" + getMinuteTokenPatternSource() + ")?";
+        return getTimeNumberPatternSource() + "\\s*点(?:\\s*" + getMinuteTokenPatternSource() + ")?";
       }
 
       function getTimeFragmentPatternSource() {
@@ -5268,7 +5268,7 @@
 
       function parsePointTimeFragment(text, fallbackPeriodLabel) {
         const source = String(text || "");
-        const pointPattern = "(" + getTimePeriodPatternSource() + ")?\\s*(" + getTimeNumberPatternSource() + ")\\s*点\\s*(" + getMinuteTokenPatternSource() + ")?";
+        const pointPattern = "(" + getTimePeriodPatternSource() + ")?\\s*(" + getTimeNumberPatternSource() + ")\\s*点(?:\\s*(" + getMinuteTokenPatternSource() + "))?";
         const pointMatch = source.match(new RegExp(pointPattern));
         if (!pointMatch) {
           return null;

@@ -1794,6 +1794,7 @@
 
       const state = {
         records: initialLocalPayload.records,
+        deletedRecords: initialLocalPayload.deletedRecords || [],
         recurrenceCompletionArchive: initialLocalPayload.recurrenceCompletionArchive || [],
         recordsRevision: 0,
         localPayloadAt: initialLocalPayload.payloadAt,
@@ -2455,12 +2456,17 @@
           return;
         }
 
-        const ok = window.confirm("确定删除这条记录吗？");
-        if (!ok) {
+        const deleteMode = chooseDeleteMode();
+        if (!deleteMode) {
           return;
         }
 
-        const archivedCompletions = archiveRecurrenceCompletions(record, new Date().toISOString());
+        const deletedAt = new Date().toISOString();
+        if (deleteMode === "archive" && !archiveDeletedRecord(record, deletedAt)) {
+          setStatus("删除归档失败，记录未删除。");
+          return;
+        }
+
         state.records = state.records.filter(function (item) {
           return item.id !== id;
         });
@@ -2469,7 +2475,28 @@
         }
         persist();
         render();
-        setStatus(archivedCompletions ? "已删除；循环完成记录已保留在 JSON。" : "已删除。");
+        setStatus(deleteMode === "archive" ? "已删除；完整记录已保留在 JSON。" : "已从 JSON 完全删除。");
+      }
+
+      function chooseDeleteMode() {
+        const answer = window.prompt(
+          "删除这条记录：\n1 = 从 JSON 里完全删除\n2 = 从列表删除，但在 JSON 里保留完整记录\n\n留空或取消 = 不删除",
+          "2"
+        );
+        if (answer === null) {
+          return "";
+        }
+
+        const value = String(answer || "").trim();
+        if (value === "1") {
+          return "purge";
+        }
+        if (value === "2") {
+          return "archive";
+        }
+
+        setStatus("已取消删除，请输入 1 或 2。");
+        return "";
       }
 
       function confirmAutoComplete(id) {
@@ -2591,7 +2618,12 @@
             return !isRecordHiddenByTemporaryPrivacy(record);
           })
           : state.records;
-        const payload = buildRecordsPayload({ exportedAt: new Date().toISOString() }, exportRecords);
+        const exportDeletedRecords = state.remote.temporary
+          ? state.deletedRecords.filter(function (entry) {
+            return !isRecordHiddenByTemporaryPrivacy(entry && entry.record);
+          })
+          : state.deletedRecords;
+        const payload = buildRecordsPayload({ exportedAt: new Date().toISOString() }, exportRecords, exportDeletedRecords);
 
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob);
@@ -2625,6 +2657,7 @@
             }
 
             state.records = normalized.sort(sortRecords);
+            state.deletedRecords = payload.deletedRecords;
             state.recurrenceCompletionArchive = payload.recurrenceCompletionArchive;
             state.editingId = null;
             persist();
@@ -2922,6 +2955,7 @@
 
         const payload = parseRecordsEnvelope(raw);
         state.records = payload.records;
+        state.deletedRecords = payload.deletedRecords;
         state.recurrenceCompletionArchive = payload.recurrenceCompletionArchive;
         state.localPayloadAt = payload.payloadAt || state.localPayloadAt;
         state.editingId = null;
@@ -3352,6 +3386,7 @@
         remoteSyncPanel.hidden = true;
         resetFileSyncState();
         state.records = [];
+        state.deletedRecords = [];
         state.recurrenceCompletionArchive = [];
         state.recordsRevision = 0;
         state.localPayloadAt = "";
@@ -3435,7 +3470,7 @@
           }
 
           if (result.missing) {
-            if (opts.createIfMissing || state.records.length || state.recurrenceCompletionArchive.length) {
+            if (opts.createIfMissing || state.records.length || state.deletedRecords.length || state.recurrenceCompletionArchive.length) {
               const ok = await writeCurrentRecordsToRemote();
               if (ok && !opts.silent) {
                 setStatus("已创建 GitHub 数据文件。");
@@ -3463,11 +3498,12 @@
           }
 
           const recordsChanged = !recordsEqual(state.records, result.records);
+          const deletedRecordsChanged = !deletedRecordsEqual(state.deletedRecords, result.deletedRecords);
           const archiveChanged = !recurrenceCompletionArchivesEqual(
             state.recurrenceCompletionArchive,
             result.recurrenceCompletionArchive
           );
-          if ((recordsChanged || archiveChanged) && isRemoteOlderThanLocal(result)) {
+          if ((recordsChanged || deletedRecordsChanged || archiveChanged) && isRemoteOlderThanLocal(result)) {
             state.remote.sha = result.sha || state.remote.sha;
             state.remote.lastSyncAt = new Date().toISOString();
             state.remote.lastPayloadAt = state.localPayloadAt || state.remote.lastPayloadAt;
@@ -3489,7 +3525,7 @@
           state.remote.staleSha = "";
           state.remote.error = "";
 
-          if (!recordsChanged && !archiveChanged) {
+          if (!recordsChanged && !deletedRecordsChanged && !archiveChanged) {
             saveRemoteSyncSettingsToLocal();
             updateStorageStatus();
             if (!opts.silent) {
@@ -3498,7 +3534,7 @@
             return;
           }
 
-          if ((recordsChanged || archiveChanged)
+          if ((recordsChanged || deletedRecordsChanged || archiveChanged)
             && !state.remote.lastSyncAt
             && state.records.length
             && result.records.length
@@ -3508,6 +3544,7 @@
           }
 
           state.records = result.records;
+          state.deletedRecords = result.deletedRecords;
           state.recurrenceCompletionArchive = result.recurrenceCompletionArchive;
           state.editingId = null;
           saveLocalRecords({
@@ -3542,6 +3579,7 @@
           return {
             missing: true,
             records: [],
+            deletedRecords: [],
             recurrenceCompletionArchive: [],
             sha: ""
           };
@@ -3557,6 +3595,7 @@
         return {
           missing: false,
           records: payload.records,
+          deletedRecords: payload.deletedRecords,
           recurrenceCompletionArchive: payload.recurrenceCompletionArchive,
           sha: typeof data.sha === "string" ? data.sha : "",
           savedAt: payload.savedAt,
@@ -3818,6 +3857,11 @@
         return JSON.stringify(left || []) === JSON.stringify(right || []);
       }
 
+      function deletedRecordsEqual(left, right) {
+        return JSON.stringify(normalizeDeletedRecordEntries(left))
+          === JSON.stringify(normalizeDeletedRecordEntries(right));
+      }
+
       function recurrenceCompletionArchivesEqual(left, right) {
         return JSON.stringify(normalizeRecurrenceCompletionArchiveEntries(left))
           === JSON.stringify(normalizeRecurrenceCompletionArchiveEntries(right));
@@ -3826,12 +3870,17 @@
       function getRecordsSnapshot(records) {
         return JSON.stringify({
           records: Array.isArray(records) ? records : state.records || [],
+          deletedRecords: normalizeDeletedRecordEntries(state.deletedRecords),
           recurrenceCompletionArchive: normalizeRecurrenceCompletionArchiveEntries(state.recurrenceCompletionArchive)
         });
       }
 
       function getRecordsPayloadSnapshot() {
-        return JSON.parse(JSON.stringify(state.records || []));
+        return JSON.parse(JSON.stringify({
+          records: state.records || [],
+          deletedRecords: normalizeDeletedRecordEntries(state.deletedRecords),
+          recurrenceCompletionArchive: normalizeRecurrenceCompletionArchiveEntries(state.recurrenceCompletionArchive)
+        }));
       }
 
       function getPayloadTimestamp(payload) {
@@ -3876,9 +3925,11 @@
       }
 
       function isRemoteOlderThanLocal(result) {
+        const localDeletedRecords = normalizeDeletedRecordEntries(state.deletedRecords);
+        const remoteDeletedRecords = normalizeDeletedRecordEntries(result && result.deletedRecords);
         const localArchive = normalizeRecurrenceCompletionArchiveEntries(state.recurrenceCompletionArchive);
         const remoteArchive = normalizeRecurrenceCompletionArchiveEntries(result && result.recurrenceCompletionArchive);
-        const hasLocalData = state.records.length || localArchive.length;
+        const hasLocalData = state.records.length || localDeletedRecords.length || localArchive.length;
         if (!result || result.missing || !hasLocalData) {
           return false;
         }
@@ -3890,7 +3941,9 @@
           ? new Date(result.payloadAt).getTime()
           : 0;
 
-        const hasRemoteData = (Array.isArray(result.records) ? result.records.length : 0) || remoteArchive.length;
+        const hasRemoteData = (Array.isArray(result.records) ? result.records.length : 0)
+          || remoteDeletedRecords.length
+          || remoteArchive.length;
         return Boolean(localPayloadTime && (!hasRemoteData || !resultPayloadTime || resultPayloadTime < localPayloadTime));
       }
 
@@ -6178,6 +6231,63 @@
         record.recurrenceCompletions = entries;
       }
 
+      function archiveDeletedRecord(record, deletedAt) {
+        const archivedRecord = normalizeImportedRecord(record);
+        if (!archivedRecord) {
+          return false;
+        }
+
+        pushHistory(archivedRecord, "deleted", deletedAt);
+        const entry = normalizeDeletedRecordEntry({
+          recordId: archivedRecord.id,
+          deletedAt: deletedAt,
+          record: archivedRecord
+        });
+        if (!entry) {
+          return false;
+        }
+
+        const entries = normalizeDeletedRecordEntries(state.deletedRecords);
+        entries.push(entry);
+        state.deletedRecords = entries;
+        return true;
+      }
+
+      function normalizeDeletedRecordEntries(value) {
+        if (!Array.isArray(value)) {
+          return [];
+        }
+
+        return value
+          .map(normalizeDeletedRecordEntry)
+          .filter(Boolean)
+          .sort(function (a, b) {
+            return new Date(a.deletedAt).getTime() - new Date(b.deletedAt).getTime();
+          });
+      }
+
+      function normalizeDeletedRecordEntry(value) {
+        if (!value || typeof value !== "object" || !isValidDate(value.deletedAt)) {
+          return null;
+        }
+
+        const fallbackId = typeof value.recordId === "string" && value.recordId ? value.recordId : "";
+        const sourceRecord = value.record && typeof value.record === "object" ? value.record : value;
+        const recordSource = fallbackId && (!sourceRecord.id || typeof sourceRecord.id !== "string")
+          ? Object.assign({}, sourceRecord, { id: fallbackId })
+          : sourceRecord;
+        const record = normalizeImportedRecord(recordSource);
+        if (!record) {
+          return null;
+        }
+
+        return {
+          recordId: fallbackId || record.id,
+          deletedAt: new Date(value.deletedAt).toISOString(),
+          record: record
+        };
+      }
+
       function archiveRecurrenceCompletions(record, deletedAt) {
         const entry = createRecurrenceCompletionArchiveEntry(record, deletedAt);
         if (!entry) {
@@ -7249,6 +7359,7 @@
           if (!raw) {
             return {
               records: [],
+              deletedRecords: [],
               recurrenceCompletionArchive: [],
               savedAt: "",
               syncedAt: "",
@@ -7261,6 +7372,7 @@
           console.error(error);
           return {
             records: [],
+            deletedRecords: [],
             recurrenceCompletionArchive: [],
             savedAt: "",
             syncedAt: "",
@@ -7308,12 +7420,27 @@
         state.recordsRevision += 1;
       }
 
-      function buildRecordsPayload(extra, records) {
+      function buildRecordsPayload(extra, records, deletedRecords, recurrenceCompletionArchive) {
+        let payloadRecords = records;
+        let payloadDeletedRecords = deletedRecords;
+        let payloadRecurrenceArchive = recurrenceCompletionArchive;
+
+        if (records && typeof records === "object" && !Array.isArray(records) && Array.isArray(records.records)) {
+          payloadRecords = records.records;
+          payloadDeletedRecords = records.deletedRecords;
+          payloadRecurrenceArchive = records.recurrenceCompletionArchive;
+        }
+
         return Object.assign({
-          version: 2,
+          version: 3,
           savedAt: new Date().toISOString(),
-          records: Array.isArray(records) ? records : state.records,
-          recurrenceCompletionArchive: normalizeRecurrenceCompletionArchiveEntries(state.recurrenceCompletionArchive)
+          records: Array.isArray(payloadRecords) ? payloadRecords : state.records,
+          deletedRecords: normalizeDeletedRecordEntries(
+            Array.isArray(payloadDeletedRecords) ? payloadDeletedRecords : state.deletedRecords
+          ),
+          recurrenceCompletionArchive: normalizeRecurrenceCompletionArchiveEntries(
+            Array.isArray(payloadRecurrenceArchive) ? payloadRecurrenceArchive : state.recurrenceCompletionArchive
+          )
         }, extra || {});
       }
 
@@ -7330,6 +7457,9 @@
 
         return {
           records: records.map(normalizeImportedRecord).filter(Boolean).sort(sortRecords),
+          deletedRecords: !Array.isArray(parsed)
+            ? normalizeDeletedRecordEntries(parsed.deletedRecords)
+            : [],
           recurrenceCompletionArchive: !Array.isArray(parsed)
             ? normalizeRecurrenceCompletionArchiveEntries(parsed.recurrenceCompletionArchive)
             : [],

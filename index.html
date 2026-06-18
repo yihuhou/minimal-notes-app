@@ -585,6 +585,14 @@
       background: #ffffff;
     }
 
+    .remote-sync-actions {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
     .list-wrap {
       padding: 0 24px 14px;
     }
@@ -1528,8 +1536,12 @@
               <input id="remotePathInput" type="text" autocomplete="off" spellcheck="false" placeholder="minimal-notes-records.json">
               <label class="sr-only" for="remoteTokenInput">GitHub Token</label>
               <input id="remoteTokenInput" type="password" autocomplete="off" spellcheck="false" placeholder="GitHub token">
-              <button id="saveRemoteSyncButton" class="primary" type="button">保存同步</button>
-              <button id="clearRemoteSyncButton" class="ghost" type="button">关闭同步</button>
+              <div class="remote-sync-actions">
+                <button id="tempRemoteSyncButton" class="ghost" type="button">临时同步</button>
+                <button id="saveRemoteSyncButton" class="primary" type="button">保存同步</button>
+                <button id="clearRemoteSyncButton" class="ghost" type="button">关闭同步</button>
+                <button id="secureExitButton" class="ghost" type="button">安全退出</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1616,6 +1628,7 @@
         editingId: null,
         composing: false,
         composerExpanded: false,
+        sessionOnly: false,
         sync: {
           supported: SUPPORTS_FILE_SYNC,
           handle: null,
@@ -1641,6 +1654,7 @@
           pushLocalNext: false,
           writeInFlight: false,
           writeQueued: false,
+          temporary: false,
           panelOpen: false,
           error: ""
         }
@@ -1673,8 +1687,10 @@
       const remoteBranchInput = document.getElementById("remoteBranchInput");
       const remotePathInput = document.getElementById("remotePathInput");
       const remoteTokenInput = document.getElementById("remoteTokenInput");
+      const tempRemoteSyncButton = document.getElementById("tempRemoteSyncButton");
       const saveRemoteSyncButton = document.getElementById("saveRemoteSyncButton");
       const clearRemoteSyncButton = document.getElementById("clearRemoteSyncButton");
+      const secureExitButton = document.getElementById("secureExitButton");
       const importFile = document.getElementById("importFile");
 
       let statusTimer = null;
@@ -1750,8 +1766,10 @@
         remoteSyncButton.addEventListener("click", function () {
           toggleRemoteSyncPanel();
         });
+        tempRemoteSyncButton.addEventListener("click", startTemporaryRemoteSync);
         saveRemoteSyncButton.addEventListener("click", saveRemoteSyncSettings);
         clearRemoteSyncButton.addEventListener("click", clearRemoteSyncSettings);
+        secureExitButton.addEventListener("click", secureExit);
         importFile.addEventListener("change", importRecords);
 
         document.addEventListener("keydown", function (event) {
@@ -2670,6 +2688,21 @@
         }
       }
 
+      function resetFileSyncState() {
+        state.sync.handle = null;
+        state.sync.fileName = "";
+        state.sync.permissionNeeded = false;
+        state.sync.lastModified = 0;
+        state.sync.lastWriteAt = "";
+        state.sync.writeInFlight = false;
+        state.sync.writeQueued = false;
+        state.sync.error = "";
+        window.clearTimeout(syncWriteTimer);
+        window.clearInterval(syncPollTimer);
+        syncWriteTimer = null;
+        syncPollTimer = null;
+      }
+
       async function setSyncHandle(handle, shouldStore) {
         state.sync.handle = handle;
         state.sync.fileName = handle && handle.name ? handle.name : DEFAULT_SYNC_FILE_NAME;
@@ -2958,6 +2991,19 @@
         });
       }
 
+      async function deleteStoredSyncFileHandle() {
+        if (!window.indexedDB) {
+          return;
+        }
+
+        await new Promise(function (resolve) {
+          const request = window.indexedDB.deleteDatabase(SYNC_DB_NAME);
+          request.onsuccess = resolve;
+          request.onerror = resolve;
+          request.onblocked = resolve;
+        });
+      }
+
       function toggleRemoteSyncPanel(forceOpen) {
         state.remote.panelOpen = typeof forceOpen === "boolean" ? forceOpen : !state.remote.panelOpen;
         remoteSyncPanel.hidden = !state.remote.panelOpen;
@@ -2969,7 +3015,9 @@
         remoteBranchInput.value = state.remote.branch || DEFAULT_REMOTE_BRANCH;
         remotePathInput.value = state.remote.path || DEFAULT_REMOTE_PATH;
         remoteTokenInput.value = "";
-        remoteTokenInput.placeholder = state.remote.token ? "token 已保存，留空不变" : "GitHub token";
+        remoteTokenInput.placeholder = state.remote.token
+          ? (state.remote.temporary ? "临时 token 已启用，留空不变" : "token 已保存，留空不变")
+          : "GitHub token";
       }
 
       function loadRemoteSyncSettings() {
@@ -2998,13 +3046,14 @@
           state.remote.lastPayloadAt = typeof saved.lastPayloadAt === "string" ? saved.lastPayloadAt : "";
           state.remote.staleSha = typeof saved.staleSha === "string" ? saved.staleSha : "";
           state.remote.pushLocalNext = Boolean(saved.pushLocalNext);
+          state.remote.temporary = false;
         } catch (error) {
           console.error(error);
         }
       }
 
       function saveRemoteSyncSettingsToLocal() {
-        if (!state.remote.enabled) {
+        if (!state.remote.enabled || state.remote.temporary) {
           localStorage.removeItem(REMOTE_SYNC_STORAGE_KEY);
           return;
         }
@@ -3023,10 +3072,23 @@
       }
 
       async function saveRemoteSyncSettings() {
+        await applyRemoteSyncSettings({ temporary: false });
+      }
+
+      async function startTemporaryRemoteSync() {
+        await applyRemoteSyncSettings({ temporary: true });
+      }
+
+      async function applyRemoteSyncSettings(options) {
+        const opts = options || {};
         const repo = normalizeRemoteRepo(remoteRepoInput.value);
         const branch = normalizeRemoteBranch(remoteBranchInput.value);
         const path = normalizeRemotePath(remotePathInput.value);
-        const token = (remoteTokenInput.value || "").trim() || state.remote.token;
+        const inputToken = (remoteTokenInput.value || "").trim();
+        const fallbackToken = state.remote.temporary
+          ? (opts.temporary ? state.remote.token : "")
+          : state.remote.token;
+        const token = inputToken || fallbackToken;
 
         if (!repo || !path || !token) {
           setStatus("请填写 GitHub 仓库、路径和 token。");
@@ -3044,12 +3106,18 @@
         state.remote.staleSha = "";
         state.remote.pushLocalNext = false;
         state.remote.error = "";
+        state.remote.temporary = Boolean(opts.temporary);
+        state.sessionOnly = Boolean(opts.temporary);
         state.remote.panelOpen = false;
         remoteSyncPanel.hidden = true;
+        if (state.sessionOnly) {
+          localStorage.removeItem(STORAGE_KEY);
+        }
         saveRemoteSyncSettingsToLocal();
         populateRemoteSyncPanel();
         updateStorageStatus();
         await startRemoteSync(true);
+        setStatus(state.remote.temporary ? "已开启临时 GitHub 同步。" : "已保存 GitHub 同步。");
       }
 
       function clearRemoteSyncSettings() {
@@ -3058,6 +3126,14 @@
           return;
         }
 
+        resetRemoteSyncState();
+        saveRemoteSyncSettingsToLocal();
+        populateRemoteSyncPanel();
+        updateStorageStatus();
+        setStatus("已关闭 GitHub 同步。");
+      }
+
+      function resetRemoteSyncState() {
         state.remote.enabled = false;
         state.remote.token = "";
         state.remote.sha = "";
@@ -3066,15 +3142,52 @@
         state.remote.staleSha = "";
         state.remote.pushLocalNext = false;
         state.remote.error = "";
+        state.remote.temporary = false;
         state.remote.writeQueued = false;
+        state.remote.writeInFlight = false;
+        state.sessionOnly = false;
         window.clearTimeout(remoteWriteTimer);
         window.clearInterval(remotePollTimer);
         remoteWriteTimer = null;
         remotePollTimer = null;
-        saveRemoteSyncSettingsToLocal();
+      }
+
+      async function secureExit() {
+        const ok = window.confirm("安全退出会清除此浏览器里的记录缓存、GitHub token 和云盘文件授权；不会删除 GitHub 上的数据文件。是否继续？");
+        if (!ok) {
+          return;
+        }
+
+        resetRemoteSyncState();
+        state.remote.repo = DEFAULT_REMOTE_REPO;
+        state.remote.branch = DEFAULT_REMOTE_BRANCH;
+        state.remote.path = DEFAULT_REMOTE_PATH;
+        state.remote.panelOpen = false;
+        remoteSyncPanel.hidden = true;
+        resetFileSyncState();
+        state.records = [];
+        state.recurrenceCompletionArchive = [];
+        state.recordsRevision = 0;
+        state.localPayloadAt = "";
+        state.filter = "all";
+        state.search = "";
+        state.editingId = null;
+        state.composing = false;
+        state.composerExpanded = false;
+        state.sessionOnly = false;
+        quickInput.value = "";
+        quickEventAt.value = "";
+        quickType.value = "auto";
+        searchInput.value = "";
+        remoteTokenInput.value = "";
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(REMOTE_SYNC_STORAGE_KEY);
+        await deleteStoredSyncFileHandle();
         populateRemoteSyncPanel();
+        toggleComposerAdvanced(false);
+        render();
         updateStorageStatus();
-        setStatus("已关闭 GitHub 同步。");
+        setStatus("已安全退出，本浏览器记录和 token 已清除。");
       }
 
       async function startRemoteSync(runNow) {
@@ -6892,7 +7005,11 @@
         }
 
         const payload = buildRecordsPayload(extra);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        if (state.sessionOnly) {
+          localStorage.removeItem(STORAGE_KEY);
+        } else {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        }
         state.localPayloadAt = getPayloadTimestamp(payload) || state.localPayloadAt;
       }
 
@@ -7199,12 +7316,22 @@
         }
 
         if (remoteSyncButton) {
-          remoteSyncButton.textContent = state.remote.enabled ? "GitHub 已开" : "GitHub 同步";
+          remoteSyncButton.textContent = state.remote.enabled
+            ? (state.remote.temporary ? "GitHub 临时" : "GitHub 已开")
+            : "GitHub 同步";
           remoteSyncButton.disabled = !state.remote.supported;
+        }
+
+        if (tempRemoteSyncButton) {
+          tempRemoteSyncButton.disabled = !state.remote.supported || state.remote.writeInFlight;
         }
 
         if (saveRemoteSyncButton) {
           saveRemoteSyncButton.disabled = !state.remote.supported || state.remote.writeInFlight;
+        }
+
+        if (secureExitButton) {
+          secureExitButton.disabled = busy;
         }
 
         if (!statusTimer) {
@@ -7214,7 +7341,7 @@
 
       function getSyncActionText() {
         if (state.remote.enabled && (state.remote.writeInFlight || state.remote.writeQueued)) {
-          return "同步中";
+          return state.remote.temporary ? "临时同步中" : "同步中";
         }
 
         if (state.remote.enabled && state.remote.error) {
@@ -7226,7 +7353,7 @@
         }
 
         if (state.remote.enabled) {
-          return "已同步";
+          return state.remote.temporary ? "临时同步" : "已同步";
         }
 
         if (state.sync.handle && state.sync.permissionNeeded) {
@@ -7254,7 +7381,7 @@
         }
 
         if (state.remote.enabled) {
-          return "手动从 GitHub 同步";
+          return state.remote.temporary ? "手动从 GitHub 临时同步" : "手动从 GitHub 同步";
         }
 
         if (state.sync.permissionNeeded) {
@@ -7280,20 +7407,21 @@
         if (state.remote.enabled) {
           const backupText = getCloudBackupStatusText();
           const suffix = backupText ? "；" + backupText : "";
+          const modeText = state.remote.temporary ? "GitHub 临时" : "GitHub";
 
           if (state.remote.error) {
             return state.remote.error + suffix;
           }
 
           if (state.remote.pushLocalNext) {
-            return "等待写回 GitHub" + suffix;
+            return "等待写回 " + modeText + suffix;
           }
 
           if (state.remote.writeInFlight || state.remote.writeQueued) {
-            return "GitHub 同步中" + suffix;
+            return modeText + " 同步中" + suffix;
           }
 
-          return "GitHub 已同步" + suffix;
+          return modeText + " 已同步" + suffix;
         }
 
         if (!state.sync.supported) {

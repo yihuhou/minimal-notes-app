@@ -1021,7 +1021,8 @@
     .code-inline-date,
     .code-inline-keyword,
     .code-inline-location,
-    .code-inline-structure {
+    .code-inline-structure,
+    .code-inline-meal {
       border-radius: 4px;
       padding: 0 2px;
     }
@@ -1050,6 +1051,11 @@
     .code-inline-structure {
       color: #6a5a72;
       background: rgba(106, 90, 114, 0.08);
+    }
+
+    .code-inline-meal {
+      color: #765b63;
+      background: rgba(118, 91, 99, 0.08);
     }
 
     .code-inline-weekday-mismatch {
@@ -1839,6 +1845,24 @@
         {
           label: "总结",
           words: ["总之", "总体来说", "简单说", "换句话说", "也就是说"]
+        }
+      ];
+      const JOURNAL_MEAL_WORD_GROUPS = [
+        {
+          label: "餐次",
+          words: ["早餐", "早饭", "午餐", "午饭", "中饭", "晚餐", "晚饭", "夜宵", "宵夜", "早午餐", "下午茶", "饭点", "饭前", "饭后"]
+        },
+        {
+          label: "用餐",
+          words: ["吃饭", "吃早饭", "吃午饭", "吃晚饭", "吃夜宵", "做饭", "下厨", "点外卖", "外卖", "打包", "堂食", "加餐", "聚餐", "约饭", "蹭饭", "请客", "买菜"]
+        },
+        {
+          label: "菜品",
+          words: ["火锅", "烤肉", "烧烤", "炒菜", "小炒", "砂锅", "麻辣烫", "冒菜", "炸鸡", "寿司", "咖喱", "沙拉", "拉面", "米线", "螺蛳粉", "小面", "牛肉面", "鸡腿", "盖饭", "炒饭", "饺子", "包子", "馄饨", "披萨", "汉堡", "三明治"]
+        },
+        {
+          label: "饮品/甜点",
+          words: ["奶茶", "咖啡", "果汁", "酸奶", "甜品", "蛋糕", "面包", "冰淇淋"]
         }
       ];
       const SUPPORTS_FILE_SYNC = Boolean(
@@ -5017,13 +5041,14 @@
         const locationAliasPattern = getLocationAliasPatternSource();
         const diningHallFloorPattern = getDiningHallFloorPatternSource();
         const structurePattern = shouldHighlightStructure ? getJournalStructurePatternSource() : "";
+        const mealPattern = shouldHighlightStructure ? getJournalMealPatternSource() : "";
         const knownLocationPattern = (locationAliasPattern ? locationAliasPattern + "|" : "")
           + diningHallFloorPattern + "|"
           + "[\\u4e00-\\u9fa5]{2,3}\\s*[A-Za-z]?\\d{3,4}|[A-Za-z]?\\d{2,4}\\s*(?:会议室|教室|报告厅|办公室|实验室|研讨室|活动室|房间|室|厅)|[\\u4e00-\\u9fa5]{1,8}(?:食堂|餐厅|饭店|咖啡馆|图书馆|办公室|实验室|会议室|教室|报告厅|礼堂|体育馆|活动室|研讨室|中心|校区|广场|大厦|酒店|宾馆)";
         const locationPattern = "(?:[在去到]\\s*)?(?:" + knownLocationPattern + ")(?!\\d|\\s*(?:字|词|页|元|块|个|人|次|篇|本|分钟|小时|天|周|月|年|%))";
         const calendarDatePattern = "\\d{4}(?:年|[\\/.-])\\d{1,2}(?:月|[\\/.-])\\d{1,2}|\\d{1,2}(?:月|[\\/.-])\\d{1,2}(?:日|号)?|\\d{1,2}(?:日|号)";
         const tokenPattern = new RegExp(
-          "((?:想法|记录|日记)[:：]?|" + periodTimePattern + "|" + relativeDatePattern + "|" + deadlinePattern + "|" + locationPattern + "|" + timeFragmentPattern + "|" + calendarDatePattern + (structurePattern ? "|" + structurePattern : "") + ")",
+          "((?:想法|记录|日记)[:：]?|" + (mealPattern ? mealPattern + "|" : "") + periodTimePattern + "|" + relativeDatePattern + "|" + deadlinePattern + "|" + locationPattern + "|" + timeFragmentPattern + "|" + calendarDatePattern + (structurePattern ? "|" + structurePattern : "") + ")",
           "g"
         );
         let lastIndex = 0;
@@ -5063,6 +5088,11 @@
 
         if (isTimeHighlightToken(token)) {
           return '<span class="code-inline-time">' + escapeHtml(token) + "</span>";
+        }
+
+        const mealLabel = options && options.structure ? getJournalMealTokenLabel(token) : "";
+        if (mealLabel) {
+          return '<span class="code-inline-meal" title="餐食：' + escapeHtml(mealLabel) + '">' + escapeHtml(token) + "</span>";
         }
 
         const structureLabel = options && options.structure ? getJournalStructureTokenLabel(token) : "";
@@ -5131,8 +5161,24 @@
       }
 
       function getJournalStructurePatternSource() {
+        return getJournalGroupedWordPatternSource(JOURNAL_STRUCTURE_WORD_GROUPS);
+      }
+
+      function getJournalStructureTokenLabel(token) {
+        return getJournalGroupedTokenLabel(JOURNAL_STRUCTURE_WORD_GROUPS, token);
+      }
+
+      function getJournalMealPatternSource() {
+        return getJournalGroupedWordPatternSource(JOURNAL_MEAL_WORD_GROUPS);
+      }
+
+      function getJournalMealTokenLabel(token) {
+        return getJournalGroupedTokenLabel(JOURNAL_MEAL_WORD_GROUPS, token);
+      }
+
+      function getJournalGroupedWordPatternSource(groups) {
         const words = [];
-        JOURNAL_STRUCTURE_WORD_GROUPS.forEach(function(group) {
+        groups.forEach(function(group) {
           group.words.forEach(function(word) {
             if (!words.includes(word)) {
               words.push(word);
@@ -5148,10 +5194,10 @@
           .join("|");
       }
 
-      function getJournalStructureTokenLabel(token) {
+      function getJournalGroupedTokenLabel(groups, token) {
         const source = String(token || "").trim();
-        for (let index = 0; index < JOURNAL_STRUCTURE_WORD_GROUPS.length; index += 1) {
-          const group = JOURNAL_STRUCTURE_WORD_GROUPS[index];
+        for (let index = 0; index < groups.length; index += 1) {
+          const group = groups[index];
           if (group.words.includes(source)) {
             return group.label;
           }

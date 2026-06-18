@@ -1655,6 +1655,7 @@
           writeInFlight: false,
           writeQueued: false,
           temporary: false,
+          temporaryStartedAt: "",
           panelOpen: false,
           error: ""
         }
@@ -2410,7 +2411,12 @@
       }
 
       function exportRecords() {
-        const payload = buildRecordsPayload({ exportedAt: new Date().toISOString() });
+        const exportRecords = state.remote.temporary
+          ? state.records.filter(function (record) {
+            return !isRecordHiddenByTemporaryPrivacy(record);
+          })
+          : state.records;
+        const payload = buildRecordsPayload({ exportedAt: new Date().toISOString() }, exportRecords);
 
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob);
@@ -3047,6 +3053,7 @@
           state.remote.staleSha = typeof saved.staleSha === "string" ? saved.staleSha : "";
           state.remote.pushLocalNext = Boolean(saved.pushLocalNext);
           state.remote.temporary = false;
+          state.remote.temporaryStartedAt = "";
         } catch (error) {
           console.error(error);
         }
@@ -3107,6 +3114,9 @@
         state.remote.pushLocalNext = false;
         state.remote.error = "";
         state.remote.temporary = Boolean(opts.temporary);
+        state.remote.temporaryStartedAt = state.remote.temporary
+          ? (state.remote.temporaryStartedAt || new Date().toISOString())
+          : "";
         state.sessionOnly = Boolean(opts.temporary);
         state.remote.panelOpen = false;
         remoteSyncPanel.hidden = true;
@@ -3117,7 +3127,7 @@
         populateRemoteSyncPanel();
         updateStorageStatus();
         await startRemoteSync(true);
-        setStatus(state.remote.temporary ? "已开启临时 GitHub 同步。" : "已保存 GitHub 同步。");
+        setStatus(state.remote.temporary ? "已开启临时同步，过往日记已隐藏。" : "已保存 GitHub 同步。");
       }
 
       function clearRemoteSyncSettings() {
@@ -3143,6 +3153,7 @@
         state.remote.pushLocalNext = false;
         state.remote.error = "";
         state.remote.temporary = false;
+        state.remote.temporaryStartedAt = "";
         state.remote.writeQueued = false;
         state.remote.writeInFlight = false;
         state.sessionOnly = false;
@@ -3730,8 +3741,11 @@
         const unfinishedCount = state.records.filter(function (record) {
           return !isVisuallyCompleted(record) && !isPassiveRecord(record);
         }).length;
+        const totalVisibleCount = state.records.filter(function (record) {
+          return !isRecordHiddenByTemporaryPrivacy(record);
+        }).length;
         openCount.textContent = String(unfinishedCount);
-        summaryText.textContent = "共 " + state.records.length + " 条，当前显示 " + visible.length + " 条";
+        summaryText.textContent = "共 " + totalVisibleCount + " 条，当前显示 " + visible.length + " 条";
       }
 
       function renderList(visible) {
@@ -4125,6 +4139,20 @@
 
       function isPassiveRecord(record) {
         return Boolean(record) && (record.type === "idea" || record.type === "journal");
+      }
+
+      function isRecordHiddenByTemporaryPrivacy(record) {
+        if (!state.remote.temporary || !record || record.type !== "journal") {
+          return false;
+        }
+
+        const cutoff = normalizeDateTime(state.remote.temporaryStartedAt);
+        const createdAt = normalizeDateTime(record.createdAt);
+        if (!cutoff || !createdAt) {
+          return true;
+        }
+
+        return new Date(createdAt).getTime() < new Date(cutoff).getTime();
       }
 
       function isRecordReadOnly(record) {
@@ -4831,6 +4859,10 @@
           .slice()
           .sort(sortVisibleRecords)
           .filter(function (record) {
+            if (isRecordHiddenByTemporaryPrivacy(record)) {
+              return false;
+            }
+
             if (state.filter === "completed") {
               if (!isVisuallyCompleted(record)) {
                 return false;

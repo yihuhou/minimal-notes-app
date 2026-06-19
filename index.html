@@ -1863,33 +1863,29 @@
           className: "code-inline-journal-food",
           words: [
             "早餐", "早饭", "午餐", "午饭", "中饭", "晚餐", "晚饭", "夜宵", "宵夜", "下午茶",
-            "蒙古包桌餐", "桌餐", "羊肉", "鸡肉", "土豆", "咸奶茶", "奶茶",
-            "碱水小面包", "小面包", "干脆面", "果冻", "卷子", "鸡蛋", "粥",
-            "饼干", "薯片", "樱桃", "烤鸭", "外卖", "单人餐", "猪肉白菜水饺", "水饺", "饺子",
-            "板栗肉粽", "蛋黄肉粽", "肉粽", "粽子", "小炒黄牛肉盖饭", "小炒黄牛肉", "盖饭",
-            "榴莲", "好吃", "难吃", "凑活", "太硬"
+            "外卖", "奶茶", "咖啡", "面包", "饼干", "薯片", "粽子", "水饺", "饺子",
+            "盖饭", "榴莲", "好吃", "难吃", "凑活"
           ]
         },
         {
           label: "补剂/睡眠",
           className: "code-inline-journal-health",
           words: [
-            "B12", "D3", "鱼油", "镁", "早睡", "睡觉", "睡到", "才醒", "睡得不错",
-            "睡得好", "睡了一会儿", "缺觉", "耳塞", "眼罩", "能睡", "有点累",
-            "挺累", "口渴", "肚子疼", "上厕所", "满血复活", "舒服"
+            "B12", "D3", "鱼油", "镁", "早睡", "缺觉", "口渴", "肚子疼",
+            "上厕所", "满血复活", "舒服", "耳塞", "眼罩", "能睡"
           ]
         },
         {
           label: "工作研究",
           className: "code-inline-journal-work",
-          words: ["research", "section 4", "本子", "每天记录", "记录", "办公室", "工作", "改完"]
+          words: ["research", "section 4", "论文", "文章", "证明", "设计", "主线", "主线梳理", "本子", "记录", "办公室"]
         },
         {
           label: "出行/露营",
           className: "code-inline-journal-movement",
           words: [
-            "蒙古包", "水边天幕", "天幕", "露营椅", "露营", "走完", "途中",
-            "大巴车", "堵车", "车上", "出来玩", "单人住", "农家院", "徒步", "出发", "回家"
+            "蒙古包", "水边天幕", "天幕", "露营椅", "露营", "大巴车", "堵车",
+            "车上", "农家院", "徒步", "回家"
           ]
         },
         {
@@ -1898,13 +1894,40 @@
           words: [
             "完全不在意外貌", "专注事业", "副产品", "女性处境", "思考", "修心",
             "不化妆", "标榜", "立场", "个性", "隐形站队", "站队", "体面", "松弛", "悟到",
-            "脱胎换骨", "异性", "关照", "波澜", "吝啬"
+            "脱胎换骨", "异性", "关照", "波澜", "吝啬", "情感生活", "付出感", "偏爱"
           ]
         },
         {
           label: "摘句",
           className: "code-inline-journal-quote",
           words: ["巧言令色", "去伪存真"]
+        }
+      ];
+      const JOURNAL_PATTERN_RULES = [
+        {
+          label: "饮食",
+          className: "code-inline-journal-food",
+          pattern: "(?:吃(?:了|的|得|过|起来)|多吃(?:了)?|少吃(?:了)?|喝(?:了|的|过|不下去)|当水喝|点(?:了)?外卖)"
+        },
+        {
+          label: "补剂/睡眠",
+          className: "code-inline-journal-health",
+          pattern: "(?:睡(?:觉|到|得(?:不错|好)?|了(?:一会儿)?)|能睡|才醒|醒了?|休息|有点累|挺累|累|困|口渴|肚子疼|上厕所|舒服|不舒服|太热|热了|觉得热|缺觉|饿了?)"
+        },
+        {
+          label: "工作研究",
+          className: "code-inline-journal-work",
+          pattern: "(?:论文|文章|证明|设计|主线(?:梳理)?|梳理|写(?:完|了|的时候|进去)?|改(?:完|了|的)?|工作|研究|功课)"
+        },
+        {
+          label: "出行/露营",
+          className: "code-inline-journal-movement",
+          pattern: "(?:走(?:完|着|了)?|途中|路上|出发|出来玩|单人住|堵车|徒步|露营|海拔\\s*\\d+(?:\\.\\d+)?\\s*(?:m|米)?|\\d+(?:\\.\\d+)?\\s*(?:公里|km|爬升))"
+        },
+        {
+          label: "反思",
+          className: "code-inline-journal-reflection",
+          pattern: "(?:悟(?:了|到)?|希望|付出感|情感生活|好处|变化|在意|松弛|体面|波澜)"
         }
       ];
       const SUPPORTS_FILE_SYNC = Boolean(
@@ -5075,6 +5098,7 @@
       function highlightJournalRecordText(text) {
         const source = String(text || "");
         const keywordPattern = getJournalKeywordPatternSource();
+        const rulePattern = getJournalPatternRuleSource();
         const locationPattern = getJournalLocationPatternSource();
         const journalLocationPattern = locationPattern ? "(?:[在去到]\\s*)?(?:" + locationPattern + ")" : "";
         const journalTimePattern = getJournalTimePatternSource();
@@ -5083,6 +5107,7 @@
         const journalTrailMetricPattern = getJournalTrailMetricPatternSource();
         const tokenSources = [
           keywordPattern,
+          rulePattern,
           journalTrailMetricPattern,
           journalClockPattern,
           journalBareClockPattern,
@@ -5110,6 +5135,13 @@
         const keywordInfo = getJournalKeywordTokenInfo(token);
         if (keywordInfo) {
           return '<span class="' + keywordInfo.className + '" title="日记关键词：' + escapeHtml(keywordInfo.label) + '">'
+            + escapeHtml(token)
+            + "</span>";
+        }
+
+        const patternInfo = getJournalPatternTokenInfo(token);
+        if (patternInfo) {
+          return '<span class="' + patternInfo.className + '" title="日记关键词：' + escapeHtml(patternInfo.label) + '">'
             + escapeHtml(token)
             + "</span>";
         }
@@ -5320,6 +5352,27 @@
 
       function getJournalKeywordTokenInfo(token) {
         return getJournalGroupedTokenInfo(JOURNAL_KEYWORD_GROUPS, token);
+      }
+
+      function getJournalPatternRuleSource() {
+        return JOURNAL_PATTERN_RULES.map(function(rule) {
+          return rule.pattern;
+        }).join("|");
+      }
+
+      function getJournalPatternTokenInfo(token) {
+        const source = String(token || "").trim();
+        for (let index = 0; index < JOURNAL_PATTERN_RULES.length; index += 1) {
+          const rule = JOURNAL_PATTERN_RULES[index];
+          if (new RegExp("^" + rule.pattern + "$", "i").test(source)) {
+            return {
+              label: rule.label,
+              className: rule.className
+            };
+          }
+        }
+
+        return null;
       }
 
       function getJournalGroupedTokenInfo(groups, token) {

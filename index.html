@@ -1022,7 +1022,15 @@
     .code-inline-keyword,
     .code-inline-location,
     .code-inline-structure,
-    .code-inline-meal {
+    .code-inline-meal,
+    .code-inline-journal-food,
+    .code-inline-journal-health,
+    .code-inline-journal-work,
+    .code-inline-journal-movement,
+    .code-inline-journal-reflection,
+    .code-inline-journal-quote,
+    .code-inline-journal-place,
+    .code-inline-journal-time {
       border-radius: 4px;
       padding: 0 2px;
     }
@@ -1056,6 +1064,46 @@
     .code-inline-meal {
       color: #765b63;
       background: rgba(118, 91, 99, 0.08);
+    }
+
+    .code-inline-journal-food {
+      color: #7a4b23;
+      background: rgba(184, 104, 37, 0.1);
+    }
+
+    .code-inline-journal-health {
+      color: #2f655d;
+      background: rgba(47, 101, 93, 0.1);
+    }
+
+    .code-inline-journal-work {
+      color: #3f5f8d;
+      background: rgba(63, 95, 141, 0.1);
+    }
+
+    .code-inline-journal-movement {
+      color: #5a663d;
+      background: rgba(90, 102, 61, 0.1);
+    }
+
+    .code-inline-journal-reflection {
+      color: #73527d;
+      background: rgba(115, 82, 125, 0.1);
+    }
+
+    .code-inline-journal-quote {
+      color: #6f5527;
+      background: rgba(111, 85, 39, 0.1);
+    }
+
+    .code-inline-journal-place {
+      color: #4f6253;
+      background: rgba(79, 98, 83, 0.1);
+    }
+
+    .code-inline-journal-time {
+      color: #59636e;
+      background: rgba(89, 99, 110, 0.08);
     }
 
     .code-inline-weekday-mismatch {
@@ -1809,60 +1857,54 @@
       const LOCATION_ALIASES = {
         "北三": "北区食堂三楼"
       };
-      const JOURNAL_STRUCTURE_WORD_GROUPS = [
+      const JOURNAL_KEYWORD_GROUPS = [
         {
-          label: "转折",
-          words: ["但是", "不过", "然而", "可是", "只是", "反而", "相反", "否则", "不是", "而是"]
+          label: "饮食",
+          className: "code-inline-journal-food",
+          words: [
+            "早餐", "早饭", "午餐", "午饭", "中饭", "晚餐", "晚饭", "夜宵", "宵夜", "下午茶",
+            "蒙古包桌餐", "桌餐", "羊肉", "鸡肉", "土豆", "咸奶茶", "奶茶",
+            "碱水小面包", "小面包", "干脆面", "果冻", "卷子", "鸡蛋", "粥",
+            "饼干", "薯片", "樱桃", "烤鸭", "外卖", "单人餐", "猪肉白菜水饺", "水饺", "饺子",
+            "板栗肉粽", "蛋黄肉粽", "肉粽", "粽子", "小炒黄牛肉盖饭", "小炒黄牛肉", "盖饭",
+            "榴莲", "好吃", "难吃", "凑活", "太硬"
+          ]
         },
         {
-          label: "因果",
-          words: ["因为", "由于", "所以", "因此", "于是", "导致", "以至于", "既然"]
+          label: "补剂/睡眠",
+          className: "code-inline-journal-health",
+          words: [
+            "B12", "D3", "鱼油", "镁", "早睡", "睡觉", "睡到", "才醒", "睡得不错",
+            "睡得好", "睡了一会儿", "缺觉", "耳塞", "眼罩", "能睡", "有点累",
+            "挺累", "口渴", "肚子疼", "上厕所", "满血复活", "舒服"
+          ]
         },
         {
-          label: "递进",
-          words: ["而且", "另外", "并且", "同时", "甚至", "尤其", "更重要的是", "不但", "不仅"]
+          label: "工作研究",
+          className: "code-inline-journal-work",
+          words: ["research", "section 4", "本子", "每天记录", "记录", "办公室", "工作", "改完"]
         },
         {
-          label: "条件",
-          words: ["如果", "假如", "只要", "除非", "无论", "不管"]
+          label: "出行/露营",
+          className: "code-inline-journal-movement",
+          words: [
+            "蒙古包", "水边天幕", "天幕", "露营椅", "露营", "走完", "途中",
+            "大巴车", "堵车", "车上", "出来玩", "单人住", "农家院", "徒步", "出发", "回家"
+          ]
         },
         {
-          label: "让步",
-          words: ["虽然", "尽管", "即使", "哪怕"]
+          label: "反思",
+          className: "code-inline-journal-reflection",
+          words: [
+            "完全不在意外貌", "专注事业", "副产品", "女性处境", "思考", "修心",
+            "不化妆", "标榜", "立场", "个性", "隐形站队", "站队", "体面", "松弛", "悟到",
+            "脱胎换骨", "异性", "关照", "波澜", "吝啬"
+          ]
         },
         {
-          label: "顺序",
-          words: ["一开始", "首先", "其次", "然后", "接着", "后来", "再后来", "最后"]
-        },
-        {
-          label: "举例",
-          words: ["比如说", "比如", "例如", "像是", "包括"]
-        },
-        {
-          label: "对照",
-          words: ["一方面", "另一方面", "相比之下", "与此同时"]
-        },
-        {
-          label: "总结",
-          words: ["总之", "总体来说", "简单说", "换句话说", "也就是说"]
-        }
-      ];
-      const JOURNAL_MEAL_WORD_GROUPS = [
-        {
-          label: "餐次",
-          words: ["早餐", "早饭", "午餐", "午饭", "中饭", "晚餐", "晚饭", "夜宵", "宵夜", "早午餐", "下午茶", "饭点", "饭前", "饭后"]
-        },
-        {
-          label: "用餐",
-          words: ["吃饭", "吃早饭", "吃午饭", "吃晚饭", "吃夜宵", "做饭", "下厨", "点外卖", "外卖", "打包", "堂食", "加餐", "聚餐", "约饭", "蹭饭", "请客", "买菜"]
-        },
-        {
-          label: "菜品",
-          words: ["火锅", "烤肉", "烧烤", "炒菜", "小炒", "砂锅", "麻辣烫", "冒菜", "炸鸡", "寿司", "咖喱", "沙拉", "拉面", "米线", "螺蛳粉", "小面", "牛肉面", "鸡腿", "盖饭", "炒饭", "饺子", "包子", "馄饨", "披萨", "汉堡", "三明治"]
-        },
-        {
-          label: "饮品/甜点",
-          words: ["奶茶", "咖啡", "果汁", "酸奶", "甜品", "蛋糕", "面包", "冰淇淋"]
+          label: "摘句",
+          className: "code-inline-journal-quote",
+          words: ["巧言令色", "去伪存真"]
         }
       ];
       const SUPPORTS_FILE_SYNC = Boolean(
@@ -4598,7 +4640,7 @@
 
       function renderDisplayTextHtml(record) {
         if (record && record.type === "journal") {
-          return highlightRecordText(getJournalPreviewText(getDisplayText(record)), { structure: true });
+          return highlightJournalRecordText(getJournalPreviewText(getDisplayText(record)));
         }
 
         const mismatchInfo = getWeekdayMismatchInfo(record);
@@ -5030,9 +5072,115 @@
         return source.slice(0, insertAt) + suffix + source.slice(insertAt);
       }
 
+      function highlightJournalRecordText(text) {
+        const source = String(text || "");
+        const keywordPattern = getJournalKeywordPatternSource();
+        const locationPattern = getJournalLocationPatternSource();
+        const journalLocationPattern = locationPattern ? "(?:[在去到]\\s*)?(?:" + locationPattern + ")" : "";
+        const journalTimePattern = getJournalTimePatternSource();
+        const journalClockPattern = journalTimePattern + "\\s*" + getTimeFragmentPatternSource();
+        const journalBareClockPattern = getJournalBareClockPatternSource();
+        const journalTrailMetricPattern = getJournalTrailMetricPatternSource();
+        const tokenSources = [
+          keywordPattern,
+          journalTrailMetricPattern,
+          journalClockPattern,
+          journalBareClockPattern,
+          journalTimePattern,
+          journalLocationPattern
+        ].filter(Boolean);
+        const tokenPattern = new RegExp("(" + tokenSources.join("|") + ")", "gi");
+        let lastIndex = 0;
+        let html = "";
+        let match;
+
+        while ((match = tokenPattern.exec(source)) !== null) {
+          const token = match[0];
+          const index = match.index;
+          html += escapeHtml(source.slice(lastIndex, index));
+          html += wrapJournalHighlightedToken(token);
+          lastIndex = index + token.length;
+        }
+
+        html += escapeHtml(source.slice(lastIndex));
+        return html;
+      }
+
+      function wrapJournalHighlightedToken(token) {
+        const keywordInfo = getJournalKeywordTokenInfo(token);
+        if (keywordInfo) {
+          return '<span class="' + keywordInfo.className + '" title="日记关键词：' + escapeHtml(keywordInfo.label) + '">'
+            + escapeHtml(token)
+            + "</span>";
+        }
+
+        const locationWithPrefix = splitJournalLocationPrefix(token);
+        if (locationWithPrefix) {
+          return escapeHtml(locationWithPrefix.prefix)
+            + renderJournalLocationTokenHtml(locationWithPrefix.location);
+        }
+
+        if (isJournalLocationToken(token)) {
+          return renderJournalLocationTokenHtml(token);
+        }
+
+        if (isJournalTrailMetricToken(token)) {
+          return '<span class="code-inline-journal-movement" title="日记关键词：出行/露营">' + escapeHtml(token) + "</span>";
+        }
+
+        if (isJournalTimeToken(token)) {
+          return '<span class="code-inline-journal-time" title="时间线索">' + escapeHtml(token) + "</span>";
+        }
+
+        return escapeHtml(token);
+      }
+
+      function isJournalTimeToken(token) {
+        const source = String(token || "").trim();
+        const pointPattern = getJournalBareClockPatternSource();
+        const periodPattern = getJournalTimePatternSource();
+        return new RegExp("^" + periodPattern + "\\s*" + getTimeFragmentPatternSource() + "$").test(source)
+          || new RegExp("^" + pointPattern + "$").test(source)
+          || new RegExp("^" + periodPattern + "$").test(source);
+      }
+
+      function isJournalTrailMetricToken(token) {
+        return new RegExp("^" + getJournalTrailMetricPatternSource() + "$", "i").test(String(token || "").trim());
+      }
+
+      function isJournalLocationToken(token) {
+        const source = String(token || "").trim();
+        return Boolean(getLocationAliasLabel(source)) || isDiningHallFloorToken(source);
+      }
+
+      function splitJournalLocationPrefix(token) {
+        const source = String(token || "");
+        if (!/^[在去到]/.test(source)) {
+          return null;
+        }
+
+        const location = source.slice(1).trim();
+        if (!isJournalLocationToken(location)) {
+          return null;
+        }
+
+        return {
+          prefix: source.slice(0, source.indexOf(location)),
+          location: location
+        };
+      }
+
+      function renderJournalLocationTokenHtml(location) {
+        const source = String(location || "").trim();
+        const locationLabel = getLocationAliasLabel(source) || getDiningHallFloorLabel(source);
+        const title = locationLabel ? "日记地点：" + locationLabel : "日记地点";
+        return '<span class="code-inline-journal-place" title="' + escapeHtml(title) + '">'
+          + escapeHtml(location)
+          + "</span>";
+      }
+
       function highlightRecordText(text, options) {
         const source = String(text || "");
-        const shouldHighlightStructure = Boolean(options && options.structure);
         const timePeriodPattern = getTimePeriodPatternSource();
         const timeFragmentPattern = getTimeFragmentPatternSource();
         const periodTimePattern = timePeriodPattern + "(?:\\s*" + timeFragmentPattern + ")?";
@@ -5040,15 +5188,13 @@
         const deadlinePattern = "截止|截至|过期|到期|失效|期满|有效期|DDL|ddl|deadline|之前|前";
         const locationAliasPattern = getLocationAliasPatternSource();
         const diningHallFloorPattern = getDiningHallFloorPatternSource();
-        const structurePattern = shouldHighlightStructure ? getJournalStructurePatternSource() : "";
-        const mealPattern = shouldHighlightStructure ? getJournalMealPatternSource() : "";
         const knownLocationPattern = (locationAliasPattern ? locationAliasPattern + "|" : "")
           + diningHallFloorPattern + "|"
           + "[\\u4e00-\\u9fa5]{2,3}\\s*[A-Za-z]?\\d{3,4}|[A-Za-z]?\\d{2,4}\\s*(?:会议室|教室|报告厅|办公室|实验室|研讨室|活动室|房间|室|厅)|[\\u4e00-\\u9fa5]{1,8}(?:食堂|餐厅|饭店|咖啡馆|图书馆|办公室|实验室|会议室|教室|报告厅|礼堂|体育馆|活动室|研讨室|中心|校区|广场|大厦|酒店|宾馆)";
         const locationPattern = "(?:[在去到]\\s*)?(?:" + knownLocationPattern + ")(?!\\d|\\s*(?:字|词|页|元|块|个|人|次|篇|本|分钟|小时|天|周|月|年|%))";
         const calendarDatePattern = "\\d{4}(?:年|[\\/.-])\\d{1,2}(?:月|[\\/.-])\\d{1,2}|\\d{1,2}(?:月|[\\/.-])\\d{1,2}(?:日|号)?|\\d{1,2}(?:日|号)";
         const tokenPattern = new RegExp(
-          "((?:想法|记录|日记)[:：]?|" + (mealPattern ? mealPattern + "|" : "") + periodTimePattern + "|" + relativeDatePattern + "|" + deadlinePattern + "|" + locationPattern + "|" + timeFragmentPattern + "|" + calendarDatePattern + (structurePattern ? "|" + structurePattern : "") + ")",
+          "((?:想法|记录|日记)[:：]?|" + periodTimePattern + "|" + relativeDatePattern + "|" + deadlinePattern + "|" + locationPattern + "|" + timeFragmentPattern + "|" + calendarDatePattern + ")",
           "g"
         );
         let lastIndex = 0;
@@ -5088,16 +5234,6 @@
 
         if (isTimeHighlightToken(token)) {
           return '<span class="code-inline-time">' + escapeHtml(token) + "</span>";
-        }
-
-        const mealLabel = options && options.structure ? getJournalMealTokenLabel(token) : "";
-        if (mealLabel) {
-          return '<span class="code-inline-meal" title="餐食：' + escapeHtml(mealLabel) + '">' + escapeHtml(token) + "</span>";
-        }
-
-        const structureLabel = options && options.structure ? getJournalStructureTokenLabel(token) : "";
-        if (structureLabel) {
-          return '<span class="code-inline-structure" title="结构词：' + escapeHtml(structureLabel) + '">' + escapeHtml(token) + "</span>";
         }
 
         if (String(token || "").trim() === "前") {
@@ -5160,22 +5296,6 @@
         return "[\\u4e00-\\u9fa5]{1,8}区\\s*(?:食堂\\s*)?[0-9一二两三四五六七八九十]{1,3}\\s*(?:楼|层)";
       }
 
-      function getJournalStructurePatternSource() {
-        return getJournalGroupedWordPatternSource(JOURNAL_STRUCTURE_WORD_GROUPS);
-      }
-
-      function getJournalStructureTokenLabel(token) {
-        return getJournalGroupedTokenLabel(JOURNAL_STRUCTURE_WORD_GROUPS, token);
-      }
-
-      function getJournalMealPatternSource() {
-        return getJournalGroupedWordPatternSource(JOURNAL_MEAL_WORD_GROUPS);
-      }
-
-      function getJournalMealTokenLabel(token) {
-        return getJournalGroupedTokenLabel(JOURNAL_MEAL_WORD_GROUPS, token);
-      }
-
       function getJournalGroupedWordPatternSource(groups) {
         const words = [];
         groups.forEach(function(group) {
@@ -5194,16 +5314,48 @@
           .join("|");
       }
 
-      function getJournalGroupedTokenLabel(groups, token) {
-        const source = String(token || "").trim();
+      function getJournalKeywordPatternSource() {
+        return getJournalGroupedWordPatternSource(JOURNAL_KEYWORD_GROUPS);
+      }
+
+      function getJournalKeywordTokenInfo(token) {
+        return getJournalGroupedTokenInfo(JOURNAL_KEYWORD_GROUPS, token);
+      }
+
+      function getJournalGroupedTokenInfo(groups, token) {
+        const source = String(token || "").trim().toLowerCase();
         for (let index = 0; index < groups.length; index += 1) {
           const group = groups[index];
-          if (group.words.includes(source)) {
-            return group.label;
+          const hasWord = group.words.some(function(word) {
+            return String(word || "").trim().toLowerCase() === source;
+          });
+          if (hasWord) {
+            return {
+              label: group.label,
+              className: group.className
+            };
           }
         }
 
-        return "";
+        return null;
+      }
+
+      function getJournalTimePatternSource() {
+        return "(?:凌晨|半夜|早上|今早|今晨|上午|中午|下午|傍晚|晚上|今晚)";
+      }
+
+      function getJournalBareClockPatternSource() {
+        return "(?:\\d{1,2}\\s*[:：]\\s*\\d{1,2}|\\d{1,2}\\s*点(?:\\s*(?:半|一刻|三刻|\\d{1,2}\\s*分?))?)";
+      }
+
+      function getJournalTrailMetricPatternSource() {
+        return "(?:海拔\\s*\\d+(?:\\.\\d+)?\\s*(?:m|米)?|\\d+(?:\\.\\d+)?\\s*(?:公里|km|爬升))";
+      }
+
+      function getJournalLocationPatternSource() {
+        return [getLocationAliasPatternSource(), getDiningHallFloorPatternSource()]
+          .filter(Boolean)
+          .join("|");
       }
 
       function escapeRegExp(value) {

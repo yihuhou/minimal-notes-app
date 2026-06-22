@@ -4250,7 +4250,30 @@
           return !isRecordHiddenByTemporaryPrivacy(record);
         }).length;
         openCount.textContent = String(unfinishedCount);
+
+        if (state.filter === "journal") {
+          const journalRecords = state.records.filter(function (record) {
+            return record.type === "journal" && !isRecordHiddenByTemporaryPrivacy(record);
+          });
+          const journalWordCount = journalRecords.reduce(function (total, record) {
+            return total + countTextCharacters(record.text);
+          }, 0);
+          const countText = visible.length === journalRecords.length
+            ? "日记 " + formatSummaryNumber(journalRecords.length) + " 条"
+            : "日记共 " + formatSummaryNumber(journalRecords.length) + " 条，当前显示 " + formatSummaryNumber(visible.length) + " 条";
+          summaryText.textContent = countText + " · 总字数 " + formatSummaryNumber(journalWordCount) + " 字";
+          return;
+        }
+
         summaryText.textContent = "共 " + totalVisibleCount + " 条，当前显示 " + visible.length + " 条";
+      }
+
+      function countTextCharacters(text) {
+        return Array.from(String(text || "").replace(/\s+/g, "")).length;
+      }
+
+      function formatSummaryNumber(value) {
+        return Number(value || 0).toLocaleString("zh-CN");
       }
 
       function renderList(visible) {

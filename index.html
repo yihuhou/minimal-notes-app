@@ -5755,6 +5755,10 @@
         const sortEventAt = getCarryForwardRecurringSortEventAt(record, nowTime);
         const startAt = getTimedSortStartAt(record, sortEventAt);
         const endAt = getTimedSortEndAt(record, sortEventAt);
+        const priorityLimitAt = getScheduledPriorityLimitAt(nowTime);
+        if (startAt > priorityLimitAt) {
+          return { bucket: 4, value: startAt };
+        }
 
         if (record.type === "deadline") {
           return { bucket: 1, value: startAt - nowTime };
@@ -5823,6 +5827,11 @@
         }
 
         return null;
+      }
+
+      function getScheduledPriorityLimitAt(nowTime) {
+        const now = isValidDate(nowTime) ? new Date(nowTime) : new Date();
+        return addMonthsClamped(now, 3, now.getDate()).getTime();
       }
 
       function isUntimedDateRecord(record) {

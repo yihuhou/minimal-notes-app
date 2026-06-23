@@ -4831,7 +4831,9 @@
       }
 
       function findDateWeekdayMatch(source) {
-        const relativePattern = /(大前天|前天|昨天|昨日|今天|今日|明天|后天|大后天)(\s*)((?:周|星期)[一二三四五六日天])/;
+        const relativePattern = new RegExp(
+          "(" + getRelativeDayPatternSource() + "|" + getCompactRelativePeriodDatePatternSource() + ")(\\s*)((?:周|星期)[一二三四五六日天])"
+        );
         const relativeMatch = String(source || "").match(relativePattern);
         if (relativeMatch && relativeMatch.index != null) {
           return {
@@ -4874,12 +4876,18 @@
       }
 
       function replaceDynamicRelativeDateText(source, eventAt) {
+        if (hasCompactRelativePeriodDateToken(source)) {
+          return replaceDynamicCompactRelativePeriodDateText(source, eventAt);
+        }
+
         const datePrefix = formatRelativeDatePrefix(eventAt) || formatDotDateWithWeekday(eventAt);
         if (!datePrefix) {
           return source;
         }
 
-        const relativeWithWeekdayPattern = /(大前天|前天|昨天|昨日|今天|今日|明天|后天|大后天)\s*(?:(?:周|星期)[一二三四五六日天])?/;
+        const relativeWithWeekdayPattern = new RegExp(
+          "(" + getRelativeDayPatternSource() + ")\\s*(?:(?:周|星期)[一二三四五六日天])?"
+        );
         if (relativeWithWeekdayPattern.test(source)) {
           return source.replace(relativeWithWeekdayPattern, datePrefix);
         }
@@ -4890,6 +4898,20 @@
         }
 
         return source;
+      }
+
+      function replaceDynamicCompactRelativePeriodDateText(source, eventAt) {
+        const compactPeriodPattern = new RegExp(
+          "(" + getCompactRelativePeriodDatePatternSource() + ")\\s*(?:(?:周|星期)[一二三四五六日天])?"
+        );
+        return String(source || "").replace(compactPeriodPattern, function (full, token) {
+          const replacement = formatCompactRelativePeriodDatePrefix(eventAt, token);
+          return replacement && replacement !== token ? replacement : full;
+        });
+      }
+
+      function hasCompactRelativePeriodDateToken(text) {
+        return new RegExp(getCompactRelativePeriodDatePatternSource()).test(String(text || ""));
       }
 
       function getRecurringDisplayText(record, rawText) {
@@ -4980,8 +5002,16 @@
         return getDisplayDateTokenPattern().test(String(text || ""));
       }
 
+      function getRelativeDayPatternSource() {
+        return "今天|今日|昨天|昨日|前天|大前天|明天|明日|后天|大后天";
+      }
+
+      function getCompactRelativePeriodDatePatternSource() {
+        return "今早|今晨|今午|今晚|今夜|明早|明晨|明午|明晚|明夜";
+      }
+
       function getDisplayDatePatternSource() {
-        return "(?:今天|今日|昨天|昨日|前天|大前天|明天|后天|大后天|今晚|今早|明早|明晚|下周[一二三四五六日天]|上周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]|\\d{4}\\s*(?:年|[\\/.-])\\s*\\d{1,2}\\s*(?:月|[\\/.-])\\s*\\d{1,2}\\s*(?:日|号)?|\\d{1,2}\\s*(?:月|[\\/.-])\\s*\\d{1,2}\\s*(?:日|号)?)";
+        return "(?:" + getRelativeDayPatternSource() + "|" + getCompactRelativePeriodDatePatternSource() + "|下周[一二三四五六日天]|上周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]|\\d{4}\\s*(?:年|[\\/.-])\\s*\\d{1,2}\\s*(?:月|[\\/.-])\\s*\\d{1,2}\\s*(?:日|号)?|\\d{1,2}\\s*(?:月|[\\/.-])\\s*\\d{1,2}\\s*(?:日|号)?)";
       }
 
       function formatRecurringDisplayDatePrefix(record, rawText) {
@@ -5032,6 +5062,57 @@
         return "";
       }
 
+      function formatCompactRelativePeriodDatePrefix(value, token) {
+        if (!isValidDate(value)) {
+          return "";
+        }
+
+        const periodInfo = getCompactRelativePeriodInfo(token);
+        if (!periodInfo) {
+          return "";
+        }
+
+        const target = new Date(value);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const targetDay = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+        const dayMs = 24 * 60 * 60 * 1000;
+        const diffDays = Math.round((targetDay.getTime() - today.getTime()) / dayMs);
+
+        if (diffDays === 0) {
+          return periodInfo.today;
+        }
+        if (diffDays === 1) {
+          return periodInfo.tomorrow;
+        }
+        if (diffDays === 2) {
+          return "后天" + periodInfo.label;
+        }
+
+        const datePrefix = formatRelativeDatePrefix(value) || formatDotDateWithWeekday(value);
+        return datePrefix ? datePrefix + periodInfo.label : "";
+      }
+
+      function getCompactRelativePeriodInfo(token) {
+        const source = String(token || "");
+        if (/晨/.test(source)) {
+          return { today: "今晨", tomorrow: "明晨", label: "清晨" };
+        }
+        if (/早/.test(source)) {
+          return { today: "今早", tomorrow: "明早", label: "早上" };
+        }
+        if (/午/.test(source)) {
+          return { today: "今午", tomorrow: "明午", label: "中午" };
+        }
+        if (/夜/.test(source)) {
+          return { today: "今夜", tomorrow: "明夜", label: "夜里" };
+        }
+        if (/晚/.test(source)) {
+          return { today: "今晚", tomorrow: "明晚", label: "晚上" };
+        }
+        return null;
+      }
+
       function getLocalWeekStart(value) {
         const date = new Date(value);
         date.setHours(0, 0, 0, 0);
@@ -5067,7 +5148,7 @@
           return monthDayText;
         }
 
-        return insertWeekdayAfterPattern(source, /(大后天|后天|明天|今天|今日)/, weekday);
+        return insertWeekdayAfterPattern(source, /(大后天|后天|明天|明日|今天|今日)/, weekday);
       }
 
       function injectWeekdayRangeIntoText(source, startValue) {
@@ -5316,7 +5397,7 @@
         const timePeriodPattern = getTimePeriodPatternSource();
         const timeFragmentPattern = getTimeFragmentPatternSource();
         const periodTimePattern = timePeriodPattern + "(?:\\s*" + timeFragmentPattern + ")?";
-        const relativeDatePattern = "今天|明天|后天|大后天|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]";
+        const relativeDatePattern = getRelativeDayPatternSource() + "|" + getCompactRelativePeriodDatePatternSource() + "|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]";
         const deadlinePattern = "截止|截至|过期|到期|失效|期满|有效期|DDL|ddl|deadline|之前|前";
         const locationAliasPattern = getLocationAliasPatternSource();
         const diningHallFloorPattern = getDiningHallFloorPatternSource();
@@ -5494,7 +5575,7 @@
       }
 
       function getJournalTimePatternSource() {
-        return "(?:凌晨|半夜|早上|今早|今晨|上午|中午|下午|傍晚|晚上|今晚)";
+        return "(?:凌晨|半夜|早上|今早|今晨|今午|今晚|今夜|明早|明晨|明午|明晚|明夜|上午|中午|下午|傍晚|晚上)";
       }
 
       function getJournalBareClockPatternSource() {
@@ -5550,7 +5631,7 @@
           return false;
         }
 
-        const dateOrTimePattern = "(?:今天|明天|后天|大后天|今晚|今早|明早|明晚|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]|\\d{4}(?:年|[\\/.-])\\d{1,2}(?:月|[\\/.-])\\d{1,2}|\\d{1,2}(?:月|[\\/.-])\\d{1,2}(?:日|号)?|" + getTimeFragmentPatternSource() + ")";
+        const dateOrTimePattern = "(?:" + getDisplayDatePatternSource() + "|" + getTimeFragmentPatternSource() + ")";
         return new RegExp(dateOrTimePattern + "\\s*$").test(String(source || "").slice(0, index));
       }
 
@@ -6138,7 +6219,7 @@
       }
 
       function getTimePeriodPatternSource() {
-        return "(?:凌晨|今早|明早|早上|今晨|上午|中午|今午|下午|傍晚|晚上|今晚|明晚)";
+        return "(?:凌晨|今早|今晨|今午|今晚|今夜|明早|明晨|明午|明晚|明夜|早上|上午|中午|下午|傍晚|晚上)";
       }
 
       function getTimeNumberPatternSource() {
@@ -6455,7 +6536,7 @@
           return true;
         }
 
-        const dateOrTimePattern = "(?:今天|明天|后天|大后天|今晚|今早|明早|明晚|周[一二三四五六日天]|星期[一二三四五六日天]|\\d{4}(?:年|[\\/.-])\\d{1,2}(?:月|[\\/.-])\\d{1,2}|\\d{1,2}(?:月|[\\/.-])\\d{1,2}(?:日|号)?|" + getTimeFragmentPatternSource() + ")";
+        const dateOrTimePattern = "(?:" + getDisplayDatePatternSource() + "|" + getTimeFragmentPatternSource() + ")";
         return new RegExp(dateOrTimePattern + "\\s*(?:前|之前)").test(source);
       }
 
@@ -7128,8 +7209,8 @@
           { pattern: /昨天|昨日/, offset: -1 },
           { pattern: /大后天/, offset: 3 },
           { pattern: /后天/, offset: 2 },
-          { pattern: /明天|明早|明晚/, offset: 1 },
-          { pattern: /今天|今日|今晚|今早|今晨|今午/, offset: 0 }
+          { pattern: /明天|明日|明早|明晨|明午|明晚|明夜/, offset: 1 },
+          { pattern: /今天|今日|今早|今晨|今午|今晚|今夜/, offset: 0 }
         ];
 
         for (let index = 0; index < relativeMap.length; index += 1) {
@@ -7191,7 +7272,8 @@
       }
 
       function hasDateLikeToken(text) {
-        return /(?:今天|今日|昨天|昨日|前天|大前天|明天|后天|大后天|下周[一二三四五六日天]|上周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]|\d{4}\s*(?:年|[\/.-])\s*\d{1,2}\s*(?:月|[\/.-])\s*\d{1,2}|\d{1,2}\s*(?:月|[\/.-])\s*\d{1,2}|[0-9一二两三四五六七八九十]{1,3}\s*(?:日|号))/.test(String(text || ""));
+        const datePattern = "(?:" + getDisplayDatePatternSource() + "|[0-9一二两三四五六七八九十]{1,3}\\s*(?:日|号))";
+        return new RegExp(datePattern).test(String(text || ""));
       }
 
       function hasExplicitCalendarDateToken(text) {
@@ -7227,7 +7309,7 @@
           return "";
         }
 
-        const datePattern = "(?:今天|今日|昨天|昨日|前天|大前天|明天|后天|大后天|今晚|今早|明早|明晚|下周[一二三四五六日天]|上周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]|\\d{4}\\s*(?:年|[\\/.-])\\s*\\d{1,2}\\s*(?:月|[\\/.-])\\s*\\d{1,2}\\s*(?:日|号)?|\\d{1,2}\\s*(?:月|[\\/.-])\\s*\\d{1,2}\\s*(?:日|号)?|[0-9一二两三四五六七八九十]{1,3}\\s*(?:日|号))";
+        const datePattern = "(?:" + getDisplayDatePatternSource() + "|[0-9一二两三四五六七八九十]{1,3}\\s*(?:日|号))";
         const patterns = [
           new RegExp("[，,。；;、\\s]*(?:第一次|首次|首回|第一回|第一期|首期|首个)[^，,。；;、\\n]{0,28}?(?:是|在|从|为)?\\s*" + datePattern + "\\s*(?:开始|执行)?", "g"),
           new RegExp("[，,。；;、\\s]*(?:上一次|上次|上回|上一回|上一期|上期|最近一次|最近一回|最近一期|上轮|上一轮|上个周期|上一周期|上次完成|上次执行|上次做|上次是)[^，,。；;、\\n]{0,28}?(?:是|在|为)?\\s*" + datePattern, "g"),
@@ -7489,7 +7571,7 @@
 
         const dateInfo = parseDateFromText(source, referenceNow);
         const timeInfo = parseTimeFromText(source);
-        const hasTemporalHint = dateInfo.matched || timeInfo.matched || /(?:今天|明天|后天|大后天|今晚|今早|明早|明晚|周[一二三四五六日天]|星期[一二三四五六日天]|\d{4}(?:年|[\/.-])\d{1,2}(?:月|[\/.-])\d{1,2}|\d{1,2}(?:月|[\/.-])\d{1,2})/.test(source);
+        const hasTemporalHint = dateInfo.matched || timeInfo.matched || hasDisplayDateToken(source);
 
         if (!hasTemporalHint) {
           return { hasTemporalHint: false, eventAt: "", date: null };
@@ -7668,8 +7750,8 @@
         const relativeMap = [
           { pattern: /大后天/, offset: 3 },
           { pattern: /后天/, offset: 2 },
-          { pattern: /明天|明早|明晚/, offset: 1 },
-          { pattern: /今天|今日|今晚|今早|今晨|今午/, offset: 0 }
+          { pattern: /明天|明日|明早|明晨|明午|明晚|明夜/, offset: 1 },
+          { pattern: /今天|今日|今早|今晨|今午|今晚|今夜/, offset: 0 }
         ];
 
         for (let i = 0; i < relativeMap.length; i += 1) {
@@ -7747,7 +7829,7 @@
       }
 
       function extractTimePeriodLabel(text) {
-        const match = text.match(/凌晨|今早|明早|早上|今晨|上午|中午|今午|下午|傍晚|晚上|今晚|明晚/);
+        const match = text.match(/凌晨|今早|今晨|今午|今晚|今夜|明早|明晨|明午|明晚|明夜|早上|上午|中午|下午|傍晚|晚上/);
         return match ? match[0] : "";
       }
 
@@ -7756,13 +7838,13 @@
         if (/凌晨/.test(text)) {
           return { hours: 1, minutes: 0 };
         }
-        if (/早上|今早|明早|今晨|上午/.test(text)) {
+        if (/早上|今早|今晨|明早|明晨|上午/.test(text)) {
           return { hours: 9, minutes: 0 };
         }
-        if (/午饭|午餐/.test(text) || (isMealText && /中午|今午/.test(text))) {
+        if (/午饭|午餐/.test(text) || (isMealText && /中午|今午|明午/.test(text))) {
           return { hours: 12, minutes: 0 };
         }
-        if (/晚饭|晚餐/.test(text) || (isMealText && /傍晚|晚上|今晚|明晚/.test(text))) {
+        if (/晚饭|晚餐/.test(text) || (isMealText && /傍晚|晚上|今晚|今夜|明晚|明夜/.test(text))) {
           return { hours: 18, minutes: 0 };
         }
         if (/下午/.test(text)) {
@@ -7771,7 +7853,7 @@
         if (/傍晚/.test(text)) {
           return { hours: 18, minutes: 0 };
         }
-        if (/晚上|今晚|明晚/.test(text)) {
+        if (/晚上|今晚|今夜|明晚|明夜/.test(text)) {
           return { hours: 20, minutes: 0 };
         }
         return null;
@@ -7786,18 +7868,18 @@
           return hours === 12 ? 0 : hours;
         }
 
-        if (/今早|明早|早上|今晨|上午/.test(label)) {
+        if (/今早|今晨|明早|明晨|早上|上午/.test(label)) {
           return hours === 12 ? 0 : hours;
         }
 
-        if (/中午|今午/.test(label)) {
+        if (/中午|今午|明午/.test(label)) {
           if (hours < 11) {
             return hours + 12;
           }
           return hours;
         }
 
-        if (/下午|傍晚|晚上|今晚|明晚/.test(label)) {
+        if (/下午|傍晚|晚上|今晚|今夜|明晚|明夜/.test(label)) {
           if (hours < 12) {
             return hours + 12;
           }

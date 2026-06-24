@@ -89,6 +89,8 @@
     .item-text,
     .item-meta,
     .badge,
+    .health-summary-label,
+    .health-summary-metric,
     .segmented button,
     .ghost,
     .primary,
@@ -336,6 +338,114 @@
 
     body.journal-focus .counter {
       background: rgba(247, 246, 242, 0.84);
+    }
+
+    .health-summary {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 7px;
+      margin: 12px 24px 0;
+      padding: 11px 13px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: #fcfcfb;
+    }
+
+    .health-summary[hidden],
+    .health-summary-advice[hidden],
+    .health-summary-metrics[hidden] {
+      display: none !important;
+    }
+
+    .health-summary-main {
+      min-width: 0;
+    }
+
+    .health-summary-label {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--text-faint);
+      font-size: 11px;
+      line-height: 1.3;
+    }
+
+    .health-summary-text {
+      margin: 0;
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .health-summary-metrics {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-start;
+      gap: 5px 12px;
+      max-width: none;
+    }
+
+    .health-summary-metric {
+      display: inline-flex;
+      min-width: 0;
+      gap: 4px;
+      align-items: baseline;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      text-align: left;
+    }
+
+    .health-summary-metric-label,
+    .health-summary-metric-value {
+      display: block;
+    }
+
+    .health-summary-metric-label {
+      color: var(--text-faint);
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    .health-summary-metric-label::after {
+      content: ":";
+    }
+
+    .health-summary-metric-value {
+      margin-top: 0;
+      color: var(--text-soft);
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    .health-summary-advice {
+      grid-column: 1 / -1;
+      display: grid;
+      gap: 4px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .health-summary-advice li {
+      position: relative;
+      max-width: 100%;
+      padding: 0 0 0 12px;
+      color: var(--text-soft);
+      font-size: 12.5px;
+      line-height: 1.55;
+    }
+
+    .health-summary-advice li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.72em;
+      width: 4px;
+      height: 4px;
+      border-radius: 999px;
+      background: var(--text-faint);
     }
 
     .composer {
@@ -1474,6 +1584,11 @@
         padding: 9px 11px;
       }
 
+      .health-summary {
+        margin: 10px 12px 0;
+        padding: 9px 10px;
+      }
+
       .counter strong {
         font-size: 21px;
       }
@@ -1748,6 +1863,15 @@
         </div>
       </header>
 
+      <section id="healthSummary" class="health-summary" aria-label="健康小结" hidden>
+        <div class="health-summary-main">
+          <span id="healthSummaryLabel" class="health-summary-label">健康小结</span>
+          <p id="healthSummaryText" class="health-summary-text"></p>
+        </div>
+        <div id="healthSummaryMetrics" class="health-summary-metrics" aria-label="健康指标" hidden></div>
+        <ul id="healthSummaryAdvice" class="health-summary-advice" aria-label="健康建议" hidden></ul>
+      </section>
+
       <section class="composer" aria-label="快速输入区">
         <div class="composer-card">
           <label class="sr-only" for="quickInput">记录内容</label>
@@ -1862,6 +1986,7 @@
       const DEFAULT_REMOTE_REPO = "yihuhou/minimal-notes";
       const DEFAULT_REMOTE_BRANCH = "main";
       const DEFAULT_REMOTE_PATH = "minimal-notes-records.json";
+      const HEALTH_SUMMARY_PATH = "minimal-notes-health-summary.json";
       const REMOTE_SYNC_INTERVAL = 15000;
       const REMOTE_WRITE_MAX_ATTEMPTS = 5;
       const JOURNAL_ROLLOVER_HOUR = 5;
@@ -2081,6 +2206,11 @@
       const openCount = document.getElementById("openCount");
       const summaryText = document.getElementById("summaryText");
       const statusText = document.getElementById("statusText");
+      const healthSummary = document.getElementById("healthSummary");
+      const healthSummaryLabel = document.getElementById("healthSummaryLabel");
+      const healthSummaryText = document.getElementById("healthSummaryText");
+      const healthSummaryMetrics = document.getElementById("healthSummaryMetrics");
+      const healthSummaryAdvice = document.getElementById("healthSummaryAdvice");
       const syncActionButton = document.getElementById("syncActionButton");
       const backupAuthButton = document.getElementById("backupAuthButton");
       const cloudRestoreButton = document.getElementById("cloudRestoreButton");
@@ -2107,6 +2237,7 @@
       let syncWriteTimer = null;
       let remotePollTimer = null;
       let remoteWriteTimer = null;
+      let healthSummaryLoadId = 0;
       let deleteDialogResolve = null;
       let deleteDialogPreviousFocus = null;
 
@@ -2116,7 +2247,9 @@
       render();
       updateStorageStatus();
       restoreStoredSyncFile({ readRecords: !state.remote.enabled }).then(function () {
-        startRemoteSync(true);
+        startRemoteSync(true).then(function () {
+          loadHealthSummary();
+        });
       });
       focusQuickInput();
 
@@ -3610,6 +3743,7 @@
         populateRemoteSyncPanel();
         updateStorageStatus();
         await startRemoteSync(true);
+        await loadHealthSummary();
         setStatus(state.remote.temporary ? "已开启临时同步，过往日记已隐藏。" : "已保存 GitHub 同步。");
       }
 
@@ -3623,6 +3757,7 @@
         saveRemoteSyncSettingsToLocal();
         populateRemoteSyncPanel();
         updateStorageStatus();
+        loadHealthSummary();
         setStatus("已关闭 GitHub 同步。");
       }
 
@@ -3682,6 +3817,7 @@
         toggleComposerAdvanced(false);
         render();
         updateStorageStatus();
+        loadHealthSummary();
         setStatus("已安全退出，本浏览器记录和 token 已清除。");
       }
 
@@ -3878,6 +4014,234 @@
         };
       }
 
+      async function loadHealthSummary() {
+        const loadId = healthSummaryLoadId + 1;
+        healthSummaryLoadId = loadId;
+        clearHealthSummary();
+        if (!window.fetch) {
+          return;
+        }
+
+        try {
+          const payload = await fetchHealthSummaryPayload();
+          if (loadId !== healthSummaryLoadId) {
+            return;
+          }
+
+          const summary = normalizeHealthSummaryPayload(payload);
+          if (!summary) {
+            clearHealthSummary();
+            return;
+          }
+
+          renderHealthSummary(summary);
+        } catch (error) {
+          if (loadId === healthSummaryLoadId) {
+            clearHealthSummary();
+          }
+          console.warn("Health summary unavailable", error);
+        }
+      }
+
+      function clearHealthSummary() {
+        if (!healthSummary) {
+          return;
+        }
+
+        healthSummary.hidden = true;
+        healthSummaryLabel.textContent = "健康小结";
+        healthSummaryLabel.title = "";
+        healthSummaryText.textContent = "";
+        healthSummaryMetrics.innerHTML = "";
+        healthSummaryMetrics.hidden = true;
+        healthSummaryAdvice.innerHTML = "";
+        healthSummaryAdvice.hidden = true;
+      }
+
+      async function fetchHealthSummaryPayload() {
+        const remotePayload = await fetchRemoteHealthSummaryPayload();
+        if (remotePayload) {
+          return remotePayload;
+        }
+
+        return fetchLocalHealthSummaryPayload();
+      }
+
+      async function fetchRemoteHealthSummaryPayload() {
+        if (!state.remote.enabled || !state.remote.token || !state.remote.repo) {
+          return null;
+        }
+
+        try {
+          const response = await fetch(getRemotePathContentsUrl(HEALTH_SUMMARY_PATH, true), {
+            headers: getRemoteHeaders(false),
+            cache: "no-store"
+          });
+
+          if (response.status === 404) {
+            return null;
+          }
+
+          if (!response.ok) {
+            return null;
+          }
+
+          const data = await response.json();
+          const text = decodeBase64Utf8(String(data.content || ""));
+          return JSON.parse(text);
+        } catch (error) {
+          console.warn("Remote health summary unavailable", error);
+          return null;
+        }
+      }
+
+      async function fetchLocalHealthSummaryPayload() {
+        if (isLocalFilePage()) {
+          return null;
+        }
+
+        try {
+          const response = await fetch(HEALTH_SUMMARY_PATH + "?t=" + encodeURIComponent(String(Date.now())), {
+            cache: "no-store"
+          });
+
+          if (!response.ok) {
+            return null;
+          }
+
+          return response.json();
+        } catch (error) {
+          console.warn("Local health summary unavailable", error);
+          return null;
+        }
+      }
+
+      function normalizeHealthSummaryPayload(value) {
+        if (!value || typeof value !== "object") {
+          return null;
+        }
+
+        const summary = normalizeHealthSummaryText(value.summary || value.text || "", 180);
+        if (!summary) {
+          return null;
+        }
+
+        return {
+          label: normalizeHealthSummaryText(value.label || value.title || "健康小结", 28) || "健康小结",
+          updatedText: formatHealthSummaryUpdatedAt(value.generatedAt || value.updatedAt || value.savedAt),
+          updatedTitle: formatHealthSummaryFullDate(value.generatedAt || value.updatedAt || value.savedAt),
+          summary: summary,
+          advice: normalizeHealthSummaryList(value.advice || value.suggestions).slice(0, 2),
+          metrics: normalizeHealthSummaryMetrics(value.metrics).slice(0, 3)
+        };
+      }
+
+      function renderHealthSummary(summary) {
+        healthSummaryLabel.textContent = summary.updatedText
+          ? summary.label + " · " + summary.updatedText
+          : summary.label;
+        healthSummaryLabel.title = summary.updatedTitle
+          ? "更新时间：" + summary.updatedTitle
+          : "";
+        healthSummaryText.textContent = summary.summary;
+
+        healthSummaryMetrics.innerHTML = "";
+        summary.metrics.forEach(function (metric) {
+          const item = document.createElement("span");
+          const label = document.createElement("span");
+          const value = document.createElement("strong");
+          item.className = "health-summary-metric";
+          if (metric.note) {
+            item.title = metric.note;
+          }
+          label.className = "health-summary-metric-label";
+          label.textContent = metric.label;
+          value.className = "health-summary-metric-value";
+          value.textContent = metric.value;
+          item.appendChild(label);
+          item.appendChild(value);
+          healthSummaryMetrics.appendChild(item);
+        });
+        healthSummaryMetrics.hidden = !summary.metrics.length;
+
+        healthSummaryAdvice.innerHTML = "";
+        summary.advice.forEach(function (text) {
+          const item = document.createElement("li");
+          item.textContent = text;
+          healthSummaryAdvice.appendChild(item);
+        });
+        healthSummaryAdvice.hidden = !summary.advice.length;
+        healthSummary.hidden = false;
+      }
+
+      function normalizeHealthSummaryText(value, maxLength) {
+        const text = String(value || "").replace(/\s+/g, " ").trim();
+        const limit = maxLength || 120;
+        const chars = Array.from(text);
+        if (chars.length <= limit) {
+          return text;
+        }
+
+        return chars.slice(0, Math.max(0, limit - 3)).join("") + "...";
+      }
+
+      function normalizeHealthSummaryList(value) {
+        if (!Array.isArray(value)) {
+          return [];
+        }
+
+        return value.map(function (item) {
+          return normalizeHealthSummaryText(item, 90);
+        }).filter(Boolean);
+      }
+
+      function normalizeHealthSummaryMetrics(value) {
+        if (!Array.isArray(value)) {
+          return [];
+        }
+
+        return value.map(function (item) {
+          if (!item || typeof item !== "object") {
+            return null;
+          }
+
+          const label = normalizeHealthSummaryText(item.label || item.name || "", 18);
+          const metricValue = normalizeHealthSummaryText(item.value || item.text || "", 24);
+          const note = normalizeHealthSummaryText(item.note || item.detail || "", 80);
+          if (!label || !metricValue) {
+            return null;
+          }
+
+          return {
+            label: label,
+            value: metricValue,
+            note: note
+          };
+        }).filter(Boolean);
+      }
+
+      function formatHealthSummaryUpdatedAt(value) {
+        if (!isValidDate(value)) {
+          return "";
+        }
+
+        const date = new Date(value);
+        return (date.getMonth() + 1) + "月" + date.getDate() + "日更新";
+      }
+
+      function formatHealthSummaryFullDate(value) {
+        if (!isValidDate(value)) {
+          return "";
+        }
+
+        const date = new Date(value);
+        const minutes = String(date.getMinutes()).padStart(2, "0");
+        return date.getFullYear() + "年"
+          + (date.getMonth() + 1) + "月"
+          + date.getDate() + "日 "
+          + date.getHours() + ":" + minutes;
+      }
+
       async function writeCurrentRecordsToRemote() {
         if (!state.remote.enabled) {
           return false;
@@ -3997,10 +4361,14 @@
       }
 
       function getRemoteContentsUrl(withRef) {
+        return getRemotePathContentsUrl(state.remote.path, withRef);
+      }
+
+      function getRemotePathContentsUrl(pathValue, withRef) {
         const parts = state.remote.repo.split("/");
         const owner = encodeURIComponent(parts[0]);
         const repo = encodeURIComponent(parts[1]);
-        const path = encodeRemotePath(state.remote.path);
+        const path = encodeRemotePath(pathValue);
         const base = "https://api.github.com/repos/" + owner + "/" + repo + "/contents/" + path;
         if (!withRef) {
           return base;

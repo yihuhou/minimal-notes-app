@@ -1987,6 +1987,7 @@
       const DEFAULT_REMOTE_BRANCH = "main";
       const DEFAULT_REMOTE_PATH = "minimal-notes-records.json";
       const HEALTH_SUMMARY_PATH = "minimal-notes-health-summary.json";
+      const HEALTH_SUMMARY_CACHE_KEY = "minimal-notes-health-summary-cache-v1";
       const REMOTE_SYNC_INTERVAL = 15000;
       const REMOTE_WRITE_MAX_ATTEMPTS = 5;
       const JOURNAL_ROLLOVER_HOUR = 5;
@@ -2244,6 +2245,7 @@
       bindEvents();
       loadRemoteSyncSettings();
       populateRemoteSyncPanel();
+      loadCachedHealthSummary();
       render();
       updateStorageStatus();
       restoreStoredSyncFile({ readRecords: !state.remote.enabled }).then(function () {
@@ -3812,12 +3814,13 @@
         remoteTokenInput.value = "";
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(REMOTE_SYNC_STORAGE_KEY);
+        localStorage.removeItem(HEALTH_SUMMARY_CACHE_KEY);
         await deleteStoredSyncFileHandle();
         populateRemoteSyncPanel();
         toggleComposerAdvanced(false);
         render();
         updateStorageStatus();
-        loadHealthSummary();
+        clearHealthSummary({ clearCache: true });
         setStatus("已安全退出，本浏览器记录和 token 已清除。");
       }
 
@@ -4017,7 +4020,6 @@
       async function loadHealthSummary() {
         const loadId = healthSummaryLoadId + 1;
         healthSummaryLoadId = loadId;
-        clearHealthSummary();
         if (!window.fetch) {
           return;
         }
@@ -4030,20 +4032,19 @@
 
           const summary = normalizeHealthSummaryPayload(payload);
           if (!summary) {
-            clearHealthSummary();
+            clearHealthSummary({ clearCache: true });
             return;
           }
 
+          saveHealthSummaryCache(payload);
           renderHealthSummary(summary);
         } catch (error) {
-          if (loadId === healthSummaryLoadId) {
-            clearHealthSummary();
-          }
           console.warn("Health summary unavailable", error);
         }
       }
 
-      function clearHealthSummary() {
+      function clearHealthSummary(options) {
+        const opts = options || {};
         if (!healthSummary) {
           return;
         }
@@ -4056,6 +4057,52 @@
         healthSummaryMetrics.hidden = true;
         healthSummaryAdvice.innerHTML = "";
         healthSummaryAdvice.hidden = true;
+        if (opts.clearCache) {
+          clearHealthSummaryCache();
+        }
+      }
+
+      function loadCachedHealthSummary() {
+        try {
+          const raw = localStorage.getItem(HEALTH_SUMMARY_CACHE_KEY);
+          if (!raw) {
+            return false;
+          }
+
+          const payload = JSON.parse(raw);
+          const summary = normalizeHealthSummaryPayload(payload);
+          if (!summary) {
+            clearHealthSummary({ clearCache: true });
+            return false;
+          }
+
+          renderHealthSummary(summary);
+          return true;
+        } catch (error) {
+          console.warn("Cached health summary unavailable", error);
+          clearHealthSummary({ clearCache: true });
+          return false;
+        }
+      }
+
+      function saveHealthSummaryCache(payload) {
+        if (state.sessionOnly || state.remote.temporary) {
+          return;
+        }
+
+        try {
+          localStorage.setItem(HEALTH_SUMMARY_CACHE_KEY, JSON.stringify(payload));
+        } catch (error) {
+          console.warn("Health summary cache unavailable", error);
+        }
+      }
+
+      function clearHealthSummaryCache() {
+        try {
+          localStorage.removeItem(HEALTH_SUMMARY_CACHE_KEY);
+        } catch (error) {
+          console.warn("Health summary cache cleanup failed", error);
+        }
       }
 
       async function fetchHealthSummaryPayload() {
@@ -4083,7 +4130,7 @@
           }
 
           if (!response.ok) {
-            return null;
+            throw await createRemoteHttpError(response, "健康摘要读取失败");
           }
 
           const data = await response.json();
@@ -4091,7 +4138,7 @@
           return JSON.parse(text);
         } catch (error) {
           console.warn("Remote health summary unavailable", error);
-          return null;
+          throw error;
         }
       }
 
@@ -4105,14 +4152,18 @@
             cache: "no-store"
           });
 
-          if (!response.ok) {
+          if (response.status === 404) {
             return null;
+          }
+
+          if (!response.ok) {
+            throw new Error("健康摘要读取失败：" + response.status);
           }
 
           return response.json();
         } catch (error) {
           console.warn("Local health summary unavailable", error);
-          return null;
+          throw error;
         }
       }
 

@@ -4168,23 +4168,101 @@
       }
 
       function normalizeHealthSummaryPayload(value) {
-        if (!value || typeof value !== "object") {
+        const entry = selectLatestHealthSummaryEntry(value);
+        if (!entry) {
           return null;
         }
 
-        const summary = normalizeHealthSummaryText(value.summary || value.text || "", 180);
+        const updatedAt = entry.generatedAt || entry.updatedAt || entry.savedAt || entry.date
+          || (entry.window && entry.window.endDate);
+        const summary = normalizeHealthSummaryText(entry.summary || entry.text || "", 180);
         if (!summary) {
           return null;
         }
 
         return {
-          label: normalizeHealthSummaryText(value.label || value.title || "健康小结", 28) || "健康小结",
-          updatedText: formatHealthSummaryUpdatedAt(value.generatedAt || value.updatedAt || value.savedAt),
-          updatedTitle: formatHealthSummaryFullDate(value.generatedAt || value.updatedAt || value.savedAt),
+          label: normalizeHealthSummaryText(entry.label || entry.title || "健康小结", 28) || "健康小结",
+          updatedText: formatHealthSummaryUpdatedAt(updatedAt),
+          updatedTitle: formatHealthSummaryFullDate(updatedAt),
           summary: summary,
-          advice: normalizeHealthSummaryList(value.advice || value.suggestions).slice(0, 2),
-          metrics: normalizeHealthSummaryMetrics(value.metrics).slice(0, 3)
+          advice: normalizeHealthSummaryList(entry.advice || entry.suggestions).slice(0, 2),
+          metrics: normalizeHealthSummaryMetrics(entry.metrics).slice(0, 3)
         };
+      }
+
+      function selectLatestHealthSummaryEntry(value) {
+        if (!value || typeof value !== "object") {
+          return null;
+        }
+
+        const candidates = [];
+        ["entries", "summaries", "history", "days"].forEach(function (key) {
+          if (Array.isArray(value[key])) {
+            value[key].forEach(function (entry) {
+              if (entry && typeof entry === "object") {
+                candidates.push(entry);
+              }
+            });
+          }
+        });
+
+        if (value.summary || value.text) {
+          candidates.push(value);
+        }
+
+        let latest = null;
+        let latestTime = -Infinity;
+        candidates.forEach(function (entry, index) {
+          if (!entry.summary && !entry.text) {
+            return;
+          }
+
+          const time = getHealthSummaryEntryTime(entry);
+          if (!latest || time > latestTime || (time === latestTime && index > 0)) {
+            latest = entry;
+            latestTime = time;
+          }
+        });
+
+        return latest;
+      }
+
+      function getHealthSummaryEntryTime(entry) {
+        const values = [
+          entry.generatedAt,
+          entry.updatedAt,
+          entry.savedAt,
+          entry.date,
+          entry.window && entry.window.endDate
+        ];
+
+        for (let index = 0; index < values.length; index += 1) {
+          const time = parseHealthSummaryDateTime(values[index]);
+          if (Number.isFinite(time)) {
+            return time;
+          }
+        }
+
+        return 0;
+      }
+
+      function parseHealthSummaryDateTime(value) {
+        if (typeof value !== "string" || !value.trim()) {
+          return NaN;
+        }
+
+        const text = value.trim();
+        const dateOnly = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (dateOnly) {
+          return new Date(
+            Number(dateOnly[1]),
+            Number(dateOnly[2]) - 1,
+            Number(dateOnly[3])
+          ).getTime();
+        }
+
+        const date = new Date(text);
+        return date.getTime();
       }
 
       function renderHealthSummary(summary) {

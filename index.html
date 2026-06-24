@@ -4277,7 +4277,27 @@
         }
 
         const date = new Date(value);
+        const dayOffset = getHealthSummaryCalendarDayOffset(date, new Date());
+        if (dayOffset === 0) {
+          return "今天更新";
+        }
+
+        if (dayOffset === 1) {
+          return "昨天更新";
+        }
+
         return (date.getMonth() + 1) + "月" + date.getDate() + "日更新";
+      }
+
+      function getHealthSummaryCalendarDayOffset(date, referenceDate) {
+        const dayMs = 24 * 60 * 60 * 1000;
+        const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+        const referenceStart = new Date(
+          referenceDate.getFullYear(),
+          referenceDate.getMonth(),
+          referenceDate.getDate()
+        ).getTime();
+        return Math.round((referenceStart - dateStart) / dayMs);
       }
 
       function formatHealthSummaryFullDate(value) {

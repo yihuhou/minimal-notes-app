@@ -8527,6 +8527,18 @@
         return !isSameLocalCalendarDay(currentEventAt, inferredEventAt);
       }
 
+      function shouldRepairRecurringStoredEventAt(text, currentEventAt, inferredEventAt, referenceNow) {
+        if (!parseRecurrenceAnchorInfo(text, referenceNow)) {
+          return false;
+        }
+
+        if (!inferredEventAt) {
+          return false;
+        }
+
+        return !currentEventAt || !isSameLocalCalendarDay(currentEventAt, inferredEventAt);
+      }
+
       function getTextResolutionReferenceAt(record, text, type) {
         const history = Array.isArray(record && record.history)
           ? normalizeHistoryEntries(record.history)
@@ -8811,7 +8823,14 @@
           const naturalInfo = extractNaturalDateInfo(text, createdAt);
           eventAt = resolveRecurringEventAt(type, "", naturalInfo, recurrence, text, createdAt);
         }
-        if (isTimedType(type)) {
+        if (recurrence && isTimedType(type)) {
+          const repairReferenceAt = getTextResolutionReferenceAt(record, text, type);
+          const naturalInfo = extractNaturalDateInfo(text, repairReferenceAt);
+          const inferredEventAt = resolveRecurringEventAt(type, "", naturalInfo, recurrence, text, repairReferenceAt);
+          if (shouldRepairRecurringStoredEventAt(text, eventAt, inferredEventAt, repairReferenceAt)) {
+            eventAt = inferredEventAt;
+          }
+        } else if (isTimedType(type)) {
           const repairReferenceAt = getTextResolutionReferenceAt(record, text, type);
           const naturalInfo = extractNaturalDateInfo(text, repairReferenceAt);
           const inferredEventAt = resolveTimedEventAt(type, "", naturalInfo);

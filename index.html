@@ -1086,6 +1086,12 @@
       border-color: rgba(76, 102, 87, 0.16);
     }
 
+    .token-future-year {
+      color: #6f4b1f;
+      background: rgba(172, 111, 27, 0.1);
+      border-color: rgba(172, 111, 27, 0.18);
+    }
+
     .token-warning {
       color: #b42318;
       background: rgba(180, 35, 24, 0.08);
@@ -4849,6 +4855,10 @@
         if (isRecurringRecord(record)) {
           parts.push('<span class="code-token token-repeat">' + escapeHtml(formatRecurrenceLabel(record.recurrence)) + "</span>");
         }
+        const futureYearTag = formatFutureYearTag(record);
+        if (futureYearTag) {
+          parts.push('<span class="code-token token-future-year">' + escapeHtml(futureYearTag) + "</span>");
+        }
         if (record.eventAt) {
           parts.push('<span class="code-token token-time">' + escapeHtml(formatRecordTimeToken(record)) + "</span>");
         }
@@ -5103,6 +5113,26 @@
         }
 
         return formatCompactDateTime(record.eventAt);
+      }
+
+      function formatFutureYearTag(record) {
+        if (!record || !isValidDate(record.eventAt)) {
+          return "";
+        }
+
+        const now = new Date();
+        const eventAt = new Date(record.eventAt);
+        const diff = eventAt.getFullYear() - now.getFullYear();
+        if (diff === 1) {
+          return "明年";
+        }
+        if (diff === 2) {
+          return "后年";
+        }
+        if (diff > 2) {
+          return String(eventAt.getFullYear()) + "年";
+        }
+        return "";
       }
 
       function formatCompactDateTime(value) {
@@ -8527,18 +8557,6 @@
         return !isSameLocalCalendarDay(currentEventAt, inferredEventAt);
       }
 
-      function shouldRepairRecurringStoredEventAt(text, currentEventAt, inferredEventAt, referenceNow) {
-        if (!parseRecurrenceAnchorInfo(text, referenceNow)) {
-          return false;
-        }
-
-        if (!inferredEventAt) {
-          return false;
-        }
-
-        return !currentEventAt || !isSameLocalCalendarDay(currentEventAt, inferredEventAt);
-      }
-
       function getTextResolutionReferenceAt(record, text, type) {
         const history = Array.isArray(record && record.history)
           ? normalizeHistoryEntries(record.history)
@@ -8823,14 +8841,7 @@
           const naturalInfo = extractNaturalDateInfo(text, createdAt);
           eventAt = resolveRecurringEventAt(type, "", naturalInfo, recurrence, text, createdAt);
         }
-        if (recurrence && isTimedType(type)) {
-          const repairReferenceAt = getTextResolutionReferenceAt(record, text, type);
-          const naturalInfo = extractNaturalDateInfo(text, repairReferenceAt);
-          const inferredEventAt = resolveRecurringEventAt(type, "", naturalInfo, recurrence, text, repairReferenceAt);
-          if (shouldRepairRecurringStoredEventAt(text, eventAt, inferredEventAt, repairReferenceAt)) {
-            eventAt = inferredEventAt;
-          }
-        } else if (isTimedType(type)) {
+        if (isTimedType(type)) {
           const repairReferenceAt = getTextResolutionReferenceAt(record, text, type);
           const naturalInfo = extractNaturalDateInfo(text, repairReferenceAt);
           const inferredEventAt = resolveTimedEventAt(type, "", naturalInfo);

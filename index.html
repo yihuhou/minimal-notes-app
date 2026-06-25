@@ -3369,17 +3369,22 @@
         }
 
         const payload = parseRecordsEnvelope(raw);
-        state.records = payload.records;
-        state.deletedRecords = payload.deletedRecords;
-        state.recurrenceCompletionArchive = payload.recurrenceCompletionArchive;
-        state.localPayloadAt = payload.payloadAt || state.localPayloadAt;
+        const mergedPayload = mergeRecordsPayloads(getRecordsPayloadSnapshot(), payload);
+        const fileNeedsMergedWrite = !recordsPayloadContentEqual(payload, mergedPayload);
+        state.records = mergedPayload.records;
+        state.deletedRecords = mergedPayload.deletedRecords;
+        state.recurrenceCompletionArchive = mergedPayload.recurrenceCompletionArchive;
+        state.localPayloadAt = fileNeedsMergedWrite ? state.localPayloadAt : (payload.payloadAt || state.localPayloadAt);
         state.editingId = null;
         state.sync.permissionNeeded = false;
         state.sync.error = "";
-        saveLocalRecords({
+        saveLocalRecords(fileNeedsMergedWrite ? {} : {
           payloadSavedAt: payload.savedAt,
           payloadSyncedAt: payload.syncedAt
         });
+        if (fileNeedsMergedWrite) {
+          queueSyncFileWrite();
+        }
         render();
         updateStorageStatus();
         return "loaded";
@@ -3938,13 +3943,12 @@
             return;
           }
 
-          state.remote.sha = result.sha;
-          state.remote.lastSyncAt = new Date().toISOString();
-          state.remote.lastPayloadAt = result.payloadAt || state.remote.lastPayloadAt;
-          state.remote.staleSha = "";
-          state.remote.error = "";
-
           if (!recordsChanged && !deletedRecordsChanged && !archiveChanged) {
+            state.remote.sha = result.sha;
+            state.remote.lastSyncAt = new Date().toISOString();
+            state.remote.lastPayloadAt = result.payloadAt || state.remote.lastPayloadAt;
+            state.remote.staleSha = "";
+            state.remote.error = "";
             saveRemoteSyncSettingsToLocal();
             updateStorageStatus();
             if (!opts.silent) {
@@ -3957,23 +3961,51 @@
             && !state.remote.lastSyncAt
             && state.records.length
             && result.records.length
-            && !window.confirm("GitHub 数据会覆盖当前本地内容，是否继续？")) {
+            && !window.confirm("GitHub 数据会与当前本地内容合并，是否继续？")) {
             setStatus("已取消 GitHub 同步。");
             return;
           }
 
-          state.records = result.records;
-          state.deletedRecords = result.deletedRecords;
-          state.recurrenceCompletionArchive = result.recurrenceCompletionArchive;
-          state.editingId = null;
-          saveLocalRecords({
-            payloadSavedAt: result.savedAt,
-            payloadSyncedAt: result.syncedAt
-          });
-          queueSyncFileWrite();
+          const localPayload = getRecordsPayloadSnapshot();
+          const mergedPayload = mergeRecordsPayloads(localPayload, result);
+          const localNeedsMerge = !recordsPayloadContentEqual(localPayload, mergedPayload);
+          const remoteNeedsMerge = !recordsPayloadContentEqual(result, mergedPayload);
+
+          state.remote.sha = result.sha;
+          state.remote.lastSyncAt = new Date().toISOString();
+          state.remote.lastPayloadAt = remoteNeedsMerge
+            ? new Date().toISOString()
+            : (result.payloadAt || state.remote.lastPayloadAt);
+          state.remote.staleSha = "";
+          state.remote.error = "";
+
+          if (localNeedsMerge) {
+            state.records = mergedPayload.records;
+            state.deletedRecords = mergedPayload.deletedRecords;
+            state.recurrenceCompletionArchive = mergedPayload.recurrenceCompletionArchive;
+            state.editingId = null;
+            saveLocalRecords(remoteNeedsMerge ? {} : {
+              payloadSavedAt: result.savedAt,
+              payloadSyncedAt: result.syncedAt
+            });
+            queueSyncFileWrite();
+          }
+
           saveRemoteSyncSettingsToLocal();
-          render();
+          if (localNeedsMerge) {
+            render();
+          }
           updateStorageStatus();
+
+          if (remoteNeedsMerge) {
+            state.remote.pushLocalNext = true;
+            saveRemoteSyncSettingsToLocal();
+            queueRemoteWrite();
+            if (!opts.silent) {
+              setStatus("已合并 GitHub 和本地记录，并准备写回 GitHub。");
+            }
+            return;
+          }
 
           if (!opts.silent) {
             setStatus("已从 GitHub 同步。");
@@ -4403,21 +4435,45 @@
         }
 
         const revisionAtWriteStart = state.recordsRevision;
-        const recordsSnapshot = getRecordsPayloadSnapshot();
-        const baseSha = state.remote.sha;
-        const syncedAt = new Date().toISOString();
-        const payload = buildRecordsPayload({ syncedAt: syncedAt }, recordsSnapshot);
-        const payloadAt = getPayloadTimestamp(payload) || syncedAt;
+        let recordsSnapshot = getRecordsPayloadSnapshot();
+        let baseSha = state.remote.sha;
+        let payloadAt = "";
 
         state.remote.writeInFlight = true;
         updateStorageStatus();
 
         try {
+          const latestBeforeWrite = await fetchRemoteRecords();
+          if (latestBeforeWrite.missing) {
+            baseSha = "";
+          } else {
+            baseSha = latestBeforeWrite.sha || baseSha;
+            state.remote.sha = latestBeforeWrite.sha || state.remote.sha;
+            recordsSnapshot = mergeRecordsPayloads(latestBeforeWrite, recordsSnapshot);
+            if (state.recordsRevision === revisionAtWriteStart
+              && !state.remote.writeQueued
+              && !recordsPayloadContentEqual(getRecordsPayloadSnapshot(), recordsSnapshot)) {
+              state.records = recordsSnapshot.records;
+              state.deletedRecords = recordsSnapshot.deletedRecords;
+              state.recurrenceCompletionArchive = recordsSnapshot.recurrenceCompletionArchive;
+              state.editingId = null;
+              saveLocalRecords();
+              queueSyncFileWrite();
+              render();
+            }
+          }
+
           const body = {
             message: "Update minimal notes records",
-            content: encodeBase64Utf8(JSON.stringify(payload, null, 2)),
             branch: state.remote.branch || DEFAULT_REMOTE_BRANCH
           };
+          const refreshBodyContent = function () {
+            const syncedAt = new Date().toISOString();
+            const payload = buildRecordsPayload({ syncedAt: syncedAt }, recordsSnapshot);
+            payloadAt = getPayloadTimestamp(payload) || syncedAt;
+            body.content = encodeBase64Utf8(JSON.stringify(payload, null, 2));
+          };
+          refreshBodyContent();
 
           let response = null;
           for (let attempt = 0; attempt < REMOTE_WRITE_MAX_ATTEMPTS; attempt += 1) {
@@ -4445,6 +4501,21 @@
 
             const latest = await fetchRemoteRecords();
             state.remote.sha = latest.sha || "";
+            if (!latest.missing) {
+              recordsSnapshot = mergeRecordsPayloads(latest, recordsSnapshot);
+              if (state.recordsRevision === revisionAtWriteStart
+                && !state.remote.writeQueued
+                && !recordsPayloadContentEqual(getRecordsPayloadSnapshot(), recordsSnapshot)) {
+                state.records = recordsSnapshot.records;
+                state.deletedRecords = recordsSnapshot.deletedRecords;
+                state.recurrenceCompletionArchive = recordsSnapshot.recurrenceCompletionArchive;
+                state.editingId = null;
+                saveLocalRecords();
+                queueSyncFileWrite();
+                render();
+              }
+              refreshBodyContent();
+            }
             await waitForRemoteWriteRetry(attempt);
           }
 
@@ -4648,6 +4719,180 @@
           bytes[index] = binary.charCodeAt(index);
         }
         return new TextDecoder().decode(bytes);
+      }
+
+      function recordsPayloadContentEqual(left, right) {
+        return recordsEqual(left && left.records, right && right.records)
+          && deletedRecordsEqual(left && left.deletedRecords, right && right.deletedRecords)
+          && recurrenceCompletionArchivesEqual(
+            left && left.recurrenceCompletionArchive,
+            right && right.recurrenceCompletionArchive
+          );
+      }
+
+      function mergeRecordsPayloads(localPayload, incomingPayload) {
+        const deletedRecords = mergeDeletedRecordEntries(
+          localPayload && localPayload.deletedRecords,
+          incomingPayload && incomingPayload.deletedRecords
+        );
+        const deletedById = mapDeletedRecordsById(deletedRecords);
+        const recordsById = new Map();
+        const recordOrder = [];
+
+        mergeRecordListIntoMap(localPayload && localPayload.records, recordsById, recordOrder);
+        mergeRecordListIntoMap(incomingPayload && incomingPayload.records, recordsById, recordOrder);
+
+        const records = recordOrder
+          .map(function (id) {
+            return recordsById.get(id);
+          })
+          .filter(function (record) {
+            return record && !isRecordRemovedByDeleteEntry(record, deletedById.get(record.id));
+          })
+          .sort(sortRecords);
+
+        return {
+          records: records,
+          deletedRecords: deletedRecords,
+          recurrenceCompletionArchive: mergeRecurrenceCompletionArchiveEntries(
+            localPayload && localPayload.recurrenceCompletionArchive,
+            incomingPayload && incomingPayload.recurrenceCompletionArchive
+          )
+        };
+      }
+
+      function mergeRecordListIntoMap(records, recordsById, recordOrder) {
+        if (!Array.isArray(records)) {
+          return;
+        }
+
+        records.forEach(function (record) {
+          const normalized = normalizeImportedRecord(record);
+          if (!normalized || !normalized.id) {
+            return;
+          }
+
+          if (!recordsById.has(normalized.id)) {
+            recordOrder.push(normalized.id);
+          }
+          recordsById.set(normalized.id, mergeRecordVersions(recordsById.get(normalized.id), normalized));
+        });
+      }
+
+      function mergeRecordVersions(left, right) {
+        if (!left) {
+          return cloneRecordForMerge(right);
+        }
+        if (!right) {
+          return cloneRecordForMerge(left);
+        }
+
+        const winner = getRecordMergeTimestamp(right) > getRecordMergeTimestamp(left) ? right : left;
+        const merged = cloneRecordForMerge(winner);
+        merged.history = mergeHistoryEntryLists(left.history, right.history, merged);
+        merged.recurrenceCompletions = mergeRecurrenceCompletionEntries(
+          left.recurrenceCompletions,
+          right.recurrenceCompletions
+        );
+        return normalizeImportedRecord(merged) || merged;
+      }
+
+      function cloneRecordForMerge(record) {
+        return JSON.parse(JSON.stringify(record || {}));
+      }
+
+      function mergeHistoryEntryLists(left, right, fallbackRecord) {
+        const entriesByKey = new Map();
+        normalizeHistoryEntries([].concat(left || [], right || []), fallbackRecord).forEach(function (entry) {
+          entriesByKey.set(JSON.stringify([
+            entry.action,
+            entry.at,
+            entry.text,
+            entry.type,
+            entry.eventAt,
+            entry.recurrence,
+            entry.prepared,
+            entry.completed
+          ]), entry);
+        });
+        return Array.from(entriesByKey.values()).sort(function (a, b) {
+          return new Date(a.at).getTime() - new Date(b.at).getTime();
+        });
+      }
+
+      function mergeRecurrenceCompletionEntries(left, right) {
+        const entriesByKey = new Map();
+        normalizeRecurrenceCompletionEntries([].concat(left || [], right || [])).forEach(function (entry) {
+          entriesByKey.set(JSON.stringify(entry), entry);
+        });
+        return Array.from(entriesByKey.values()).sort(function (a, b) {
+          return new Date(a.completedAt).getTime() - new Date(b.completedAt).getTime();
+        });
+      }
+
+      function mergeDeletedRecordEntries(left, right) {
+        const entriesById = new Map();
+        normalizeDeletedRecordEntries([].concat(left || [], right || [])).forEach(function (entry) {
+          const existing = entriesById.get(entry.recordId);
+          if (!existing
+            || new Date(entry.deletedAt).getTime() > new Date(existing.deletedAt).getTime()
+            || (entry.deletedAt === existing.deletedAt
+              && getRecordMergeTimestamp(entry.record) >= getRecordMergeTimestamp(existing.record))) {
+            entriesById.set(entry.recordId, entry);
+          }
+        });
+        return Array.from(entriesById.values()).sort(function (a, b) {
+          return new Date(a.deletedAt).getTime() - new Date(b.deletedAt).getTime();
+        });
+      }
+
+      function mergeRecurrenceCompletionArchiveEntries(left, right) {
+        const entriesByKey = new Map();
+        normalizeRecurrenceCompletionArchiveEntries([].concat(left || [], right || [])).forEach(function (entry) {
+          entriesByKey.set(JSON.stringify(entry), entry);
+        });
+        return Array.from(entriesByKey.values()).sort(function (a, b) {
+          return new Date(a.deletedAt).getTime() - new Date(b.deletedAt).getTime();
+        });
+      }
+
+      function mapDeletedRecordsById(entries) {
+        const result = new Map();
+        normalizeDeletedRecordEntries(entries).forEach(function (entry) {
+          result.set(entry.recordId, entry);
+        });
+        return result;
+      }
+
+      function isRecordRemovedByDeleteEntry(record, deleteEntry) {
+        if (!record || !deleteEntry || !isValidDate(deleteEntry.deletedAt)) {
+          return false;
+        }
+
+        return new Date(deleteEntry.deletedAt).getTime() >= getRecordMergeTimestamp(record);
+      }
+
+      function getRecordMergeTimestamp(record) {
+        if (!record || typeof record !== "object") {
+          return 0;
+        }
+
+        const times = [record.createdAt, record.updatedAt]
+          .concat((Array.isArray(record.history) ? record.history : []).map(function (entry) {
+            return entry && entry.at;
+          }))
+          .concat((Array.isArray(record.recurrenceCompletions) ? record.recurrenceCompletions : []).map(function (entry) {
+            return entry && entry.completedAt;
+          }))
+          .filter(isValidDate)
+          .map(function (value) {
+            return new Date(value).getTime();
+          });
+        if (!times.length) {
+          return 0;
+        }
+
+        return Math.max.apply(null, times);
       }
 
       function recordsEqual(left, right) {

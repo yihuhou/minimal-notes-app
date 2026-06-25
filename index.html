@@ -5499,7 +5499,7 @@
 
       function stripRecurrenceOccurrencePhrase(text) {
         let source = String(text || "");
-        const datePattern = getDisplayDatePatternSource();
+        const datePattern = "(?:" + getDisplayDatePatternSource() + "|[0-9一二两三四五六七八九十]{1,3}\\s*(?:日|号))";
         const patterns = [
           new RegExp("[，,。；;、\\s]*(?:下次|下一次|下回|下一回|下一期|下期|下轮|下一轮|下个周期|下一周期|本次|这次|本期|这一期)[^，,。；;、\\n]{0,28}?(?:是|在|为|安排在)?\\s*" + datePattern + "\\s*(?:开始|执行)?", "g"),
           new RegExp("[，,。；;、\\s]*(?:下次|下一次|下回|下一回|下一期|下期|下轮|下一轮|下个周期|下一周期|本次|这次|本期|这一期)\\s*(?:是|在|为)?\\s*", "g")
@@ -6348,6 +6348,14 @@
 
         if (isAutoCompletionPending(record)) {
           return { bucket: 2, value: Number.MAX_SAFE_INTEGER };
+        }
+
+        const upcomingAt = getUpcomingComparisonAt(record);
+        if (upcomingAt) {
+          const diff = upcomingAt.getTime() - nowTime;
+          if (isOverdueUrgencyRecord(record, diff)) {
+            return { bucket: 1, value: diff };
+          }
         }
 
         const sortEventAt = getCarryForwardRecurringSortEventAt(record, nowTime);
@@ -7617,6 +7625,9 @@
         if (anchorInfo) {
           const anchorDate = new Date(anchorInfo.date.getTime());
           const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          if (anchorInfo.relation === "occurrence" || anchorInfo.relation === "first") {
+            return anchorDate;
+          }
           if (anchorInfo.relation === "previous") {
             return getNextOccurrenceFromAnchor(recurrence, anchorDate, today, false);
           }
@@ -7674,6 +7685,18 @@
         }
 
         const now = isValidDate(referenceNow) ? new Date(referenceNow) : new Date();
+        const occurrencePattern = /(?:下次|下一次|下回|下一回|下一期|下期|下轮|下一轮|下个周期|下一周期|本次|这次|本期|这一期)/g;
+        const occurrenceContext = getRecurrenceAnchorContext(source, occurrencePattern);
+        if (occurrenceContext) {
+          const occurrenceDate = parseAnchorDateFromText(occurrenceContext, now, "occurrence");
+          if (occurrenceDate) {
+            return {
+              relation: "occurrence",
+              date: occurrenceDate
+            };
+          }
+        }
+
         const previousPattern = /(?:上一次|上次|上回|上一回|上一期|上期|最近一次|最近一回|最近一期|上轮|上一轮|上个周期|上一周期|上次完成|上次执行|上次做|上次是)/g;
         const previousContext = getRecurrenceAnchorContext(source, previousPattern);
         if (previousContext) {
@@ -7686,7 +7709,19 @@
           }
         }
 
-        const startPattern = /(?:第一次|首次|首回|第一回|第一期|首期|首个|从|自|自从|开始|起始|起始日期|开始日期|开始于|起于|起)/g;
+        const firstPattern = /(?:第一次|首次|首回|第一回|第一期|首期|首个)/g;
+        const firstContext = getRecurrenceAnchorContext(source, firstPattern);
+        if (firstContext) {
+          const firstDate = parseAnchorDateFromText(firstContext, now, "first");
+          if (firstDate) {
+            return {
+              relation: "first",
+              date: firstDate
+            };
+          }
+        }
+
+        const startPattern = /(?:从|自|自从|开始|起始|起始日期|开始日期|开始于|起于|起)/g;
         const startContext = getRecurrenceAnchorContext(source, startPattern);
         if (startContext) {
           const startDate = parseAnchorDateFromText(startContext, now, "start");
@@ -7837,6 +7872,8 @@
         patterns.forEach(function (pattern) {
           source = source.replace(pattern, "");
         });
+
+        source = stripRecurrenceOccurrencePhrase(source);
 
         source = source
           .replace(/\s{2,}/g, " ")

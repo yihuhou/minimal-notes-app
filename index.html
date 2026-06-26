@@ -5949,7 +5949,7 @@
 
       function renderDisplayTextHtml(record) {
         if (record && record.type === "journal") {
-          return highlightJournalRecordText(getJournalPreviewText(getDisplayText(record)));
+          return highlightJournalRecordText(getDisplayText(record));
         }
 
         const mismatchInfo = getWeekdayMismatchInfo(record);
@@ -5965,16 +5965,6 @@
           + "</span>"
           + highlightRecordText(mismatchInfo.expectedWeekday)
           + highlightRecordText(mismatchInfo.after);
-      }
-
-      function getJournalPreviewText(text) {
-        const source = String(text || "");
-        const limit = 200;
-        if (source.length <= limit) {
-          return source;
-        }
-
-        return source.slice(0, limit).replace(/\s+$/, "") + "...";
       }
 
       function getWeekdayMismatchInfo(record) {

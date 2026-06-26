@@ -7216,7 +7216,7 @@
         if (upcomingAt) {
           const diff = upcomingAt.getTime() - nowTime;
           if (isOverdueUrgencyRecord(record, diff)) {
-            return { bucket: 1, value: diff };
+            return { bucket: 0, value: diff };
           }
         }
 
@@ -7777,7 +7777,7 @@
       }
 
       function isOverdueUrgencyRecord(record, diff) {
-        return diff < 0 && (record.type === "deadline" || isRecurringRecord(record));
+        return diff < 0 && (record.type === "deadline" || record.type === "todo" || isRecurringRecord(record));
       }
 
       function getUpcomingComparisonAt(record) {
@@ -7786,6 +7786,10 @@
         }
 
         const start = new Date(record.eventAt);
+        if (record.type === "todo" && !isUntimedDateRecord(record) && start.getTime() <= Date.now()) {
+          return getDefaultEventEndAt(record) || start;
+        }
+
         if (isUntimedDateRecord(record) && start.getTime() <= Date.now()) {
           return getDefaultEventEndAt(record) || start;
         }

@@ -1011,7 +1011,7 @@
     .item-main {
       min-width: 0;
       display: flex;
-      align-items: flex-start;
+      align-items: center;
     }
 
     .item-line {
@@ -1254,14 +1254,9 @@
       margin: 0;
       font-size: 14px;
       line-height: 1.5;
-      white-space: normal;
+      white-space: nowrap;
       overflow: hidden;
-      text-overflow: clip;
-      display: -webkit-box;
-      -webkit-line-clamp: 3;
-      -webkit-box-orient: vertical;
-      overflow-wrap: anywhere;
-      word-break: break-word;
+      text-overflow: ellipsis;
       min-width: 0;
       flex: 1 1 auto;
     }
@@ -1521,7 +1516,7 @@
         overflow: hidden;
         text-overflow: clip;
         display: -webkit-box;
-        -webkit-line-clamp: 4;
+        -webkit-line-clamp: 3;
         -webkit-box-orient: vertical;
         overflow-wrap: anywhere;
         word-break: break-word;
@@ -1854,7 +1849,7 @@
       }
 
       .item-text {
-        -webkit-line-clamp: 3;
+        -webkit-line-clamp: 2;
       }
     }
   </style>

@@ -2718,7 +2718,7 @@
         const text = rawText.trim();
         const explicitEventAt = normalizeDateTime(quickEventAt.value);
         const manualType = quickType.value;
-        const contextualType = manualType === "auto" && state.filter === "journal" ? "journal" : "";
+        const contextualType = manualType === "auto" && (state.filter === "idea" || state.filter === "journal") ? state.filter : "";
         const now = new Date().toISOString();
 
         if (!text) {
@@ -2756,7 +2756,7 @@
         toggleComposerAdvanced(false);
         render();
         focusQuickInput();
-        setStatus(parsed.type === "journal" ? "已收入日记。" : "已保存。");
+        setStatus(parsed.type === "journal" ? "已收入日记。" : (parsed.type === "idea" ? "已收入想法。" : "已保存。"));
       }
 
       function toggleRecord(id) {
@@ -7710,6 +7710,15 @@
           return {
             text: journalText,
             type: "journal",
+            eventAt: "",
+            recurrence: null
+          };
+        }
+
+        if (contextualType === "idea") {
+          return {
+            text: text,
+            type: "idea",
             eventAt: "",
             recurrence: null
           };

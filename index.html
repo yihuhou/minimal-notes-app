@@ -5264,9 +5264,13 @@
         }
 
         const times = [record.createdAt, record.updatedAt]
-          .concat((Array.isArray(record.history) ? record.history : []).map(function (entry) {
-            return entry && entry.at;
-          }))
+          .concat((Array.isArray(record.history) ? record.history : [])
+            .filter(function (entry) {
+              return !isSyntheticMergeOnlyHistoryAction(entry && entry.action);
+            })
+            .map(function (entry) {
+              return entry && entry.at;
+            }))
           .concat((Array.isArray(record.recurrenceCompletions) ? record.recurrenceCompletions : []).map(function (entry) {
             return entry && entry.completedAt;
           }))
@@ -5279,6 +5283,10 @@
         }
 
         return Math.max.apply(null, times);
+      }
+
+      function isSyntheticMergeOnlyHistoryAction(action) {
+        return action === "auto_completed";
       }
 
       function recordsEqual(left, right) {

@@ -9762,7 +9762,49 @@
         if (typeLock) {
           normalizedRecord.typeLock = typeLock;
         }
+        reconcileNonRecurringCompletionState(normalizedRecord);
         return normalizedRecord;
+      }
+
+      function reconcileNonRecurringCompletionState(record) {
+        if (!record || record.type === "journal" || isRecurringRecord(record)) {
+          return;
+        }
+
+        if (record.completed) {
+          record.prepared = false;
+          clearAutoCompleteState(record);
+          return;
+        }
+
+        const history = normalizeHistoryEntries(record.history, record);
+        for (let index = history.length - 1; index >= 0; index -= 1) {
+          const entry = history[index];
+          if (isSyntheticMergeOnlyHistoryAction(entry.action)) {
+            continue;
+          }
+
+          if (entry.completed) {
+            record.prepared = false;
+            record.completed = true;
+            clearAutoCompleteState(record);
+            if (isValidDate(entry.at)
+              && (!isValidDate(record.updatedAt) || new Date(record.updatedAt).getTime() < new Date(entry.at).getTime())) {
+              record.updatedAt = entry.at;
+            }
+            return;
+          }
+
+          if (entry.action === "completed") {
+            record.prepared = false;
+            record.completed = true;
+            clearAutoCompleteState(record);
+            record.updatedAt = isValidDate(entry.at) ? entry.at : record.updatedAt;
+            return;
+          }
+
+          return;
+        }
       }
 
       function focusQuickInput() {

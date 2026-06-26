@@ -1994,13 +1994,15 @@
       const DEFAULT_REMOTE_PATH = "minimal-notes-records.json";
       const HEALTH_SUMMARY_PATH = "minimal-notes-health-summary.json";
       const HEALTH_SUMMARY_CACHE_KEY = "minimal-notes-health-summary-cache-v1";
+      const JOURNAL_PRIVATE_HIGHLIGHTS_PATH = "minimal-notes-journal-private-highlights.json";
+      const JOURNAL_PRIVATE_HIGHLIGHTS_CACHE_KEY = "minimal-notes-journal-private-highlights-cache-v1";
       const REMOTE_SYNC_INTERVAL = 15000;
       const REMOTE_WRITE_MAX_ATTEMPTS = 5;
       const JOURNAL_ROLLOVER_HOUR = 5;
       const JOURNAL_EDIT_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
       const LOCATION_ALIASES = {
-        "北三": "北区食堂三楼"
       };
+      // Public baseline only. Personal journal terms are loaded from JOURNAL_PRIVATE_HIGHLIGHTS_PATH.
       const JOURNAL_KEYWORD_GROUPS = [
         {
           label: "饮食",
@@ -2037,11 +2039,9 @@
           label: "工作研究",
           className: "code-inline-journal-work",
           words: [
-            "research", "section 4", "论文", "文章", "文献", "模型", "机制", "命题", "证明",
-            "推导", "定理", "假设", "结论", "主线", "主线梳理", "结构", "框架", "故事",
-            "设计", "数据", "代码", "模拟", "实验", "回归", "计量",
-            "写作", "初稿", "改稿", "修改", "润色", "扩写", "精简", "引用", "投稿",
-            "审稿", "返修", "报告", "展示", "讲稿", "PPT", "会议", "讨论", "办公室",
+            "论文", "文章", "文献", "模型", "证明", "设计", "数据", "代码", "实验",
+            "写作", "初稿", "改稿", "修改", "润色", "引用",
+            "报告", "展示", "讲稿", "PPT", "会议", "讨论", "办公室",
             "工作", "研究", "学习", "读书", "教材", "课程", "学生", "老师",
             "复盘", "计划", "任务", "进度", "效率", "专注"
           ]
@@ -2063,12 +2063,12 @@
           className: "code-inline-journal-emotion",
           words: [
             "男人", "女人", "男性", "女性", "异性", "同性", "朋友", "同事", "家人", "父母",
-            "伴侣", "对象", "恋爱", "婚姻", "关系", "亲密关系", "情感生活", "社交", "聊天",
+            "伴侣", "对象", "恋爱", "婚姻", "关系", "亲密关系", "社交", "聊天",
             "关照", "吸引", "喜欢", "讨厌", "厌恶", "生气", "愤怒", "委屈", "难过",
             "开心", "快乐", "舒服", "不爽", "焦虑", "压力", "内耗", "紧张", "害怕",
             "失望", "期待", "波澜", "嫉妒", "羡慕", "羞耻", "自尊", "自信", "自卑", "安全感",
             "平静", "放松", "满足", "不安", "担心", "烦躁", "崩溃", "激动", "震撼",
-            "边界", "需求", "匮乏", "配得感", "松弛感"
+            "边界", "需求"
           ]
         },
         {
@@ -2076,11 +2076,11 @@
           className: "code-inline-journal-reflection",
           words: [
             "思考", "体面", "松弛", "悟到",
-            "脱胎换骨", "吝啬", "付出感", "偏爱", "主观", "客观", "好处", "变化",
+            "好处", "变化",
             "成长", "自我", "自洽", "自省", "意识", "认知", "判断", "选择", "决定",
             "原则", "底线", "习惯", "模式",
-            "经验", "教训", "意义", "价值", "主线", "核心", "本质",
-            "清醒", "清晰", "混乱", "外貌", "处境"
+            "经验", "教训", "意义", "价值", "核心", "本质",
+            "清醒", "清晰", "混乱"
           ]
         },
         {
@@ -2089,17 +2089,12 @@
           words: [
             "花钱", "省钱", "小钱", "账单", "付款", "支付", "退款", "报销", "预算",
             "续费", "会员", "银行卡", "信用卡", "工资", "奖金", "房租", "押金",
-            "淘宝", "美团", "抖音", "京东", "拼多多", "微信", "支付宝", "QQ音乐",
+            "淘宝", "美团", "抖音", "京东", "拼多多", "微信", "支付宝",
             "推荐算法", "算法", "手机", "电脑", "耳机",
             "家里", "家务", "房间", "衣服", "物品", "收拾", "整理", "清理", "洗澡", "洗头", "洗衣服", "打扫", "搬家", "快递",
             "扔掉", "丢掉", "扔了", "丢了",
-            "kommon", "购物", "团购", "订单", "优惠券", "麻烦"
+            "购物", "团购", "订单", "优惠券", "麻烦"
           ]
-        },
-        {
-          label: "摘句",
-          className: "code-inline-journal-quote",
-          words: ["巧言令色", "去伪存真"]
         }
       ];
       const JOURNAL_PATTERN_RULES = [
@@ -2116,12 +2111,12 @@
         {
           label: "工作研究",
           className: "code-inline-journal-work",
-          pattern: "(?:论文|文章|文献|模型|证明|设计|主线(?:梳理)?|梳理|写(?:完|了|的时候|进去|出来|不出来)?|改(?:完|了|的|出来)?|读(?:了|完|论文|文章|书)?|看(?:论文|文章|书)|工作|研究|开会|讨论|汇报|投稿|返修|消极怠工|怠工|拖延(?:了|着|下去)?|磨蹭(?:了(?:一下)?)?)"
+          pattern: "(?:论文|文章|文献|模型|证明|设计|梳理|写(?:完|了|的时候|进去|出来|不出来)?|改(?:完|了|的|出来)?|读(?:了|完|论文|文章|书)?|看(?:论文|文章|书)|工作|研究|开会|讨论|汇报|拖延(?:了|着|下去)?|磨蹭(?:了(?:一下)?)?)"
         },
         {
           label: "出行/露营",
           className: "code-inline-journal-movement",
-          pattern: "(?:走(?:完|着|了|到)?|公交(?!教工卡|卡)|爬(?:完|了)?|途中|路上|出发|到达|出来玩|堵车|徒步|露营|海拔\\s*\\d+(?:\\.\\d+)?\\s*(?:m|米)?|\\d+(?:\\.\\d+)?\\s*(?:公里|km|爬升|米))"
+          pattern: "(?:走(?:完|着|了|到)?|公交(?![\\u4e00-\\u9fff]{0,4}卡)|爬(?:完|了)?|途中|路上|出发|到达|出来玩|堵车|徒步|露营|海拔\\s*\\d+(?:\\.\\d+)?\\s*(?:m|米)?|\\d+(?:\\.\\d+)?\\s*(?:公里|km|爬升|米))"
         },
         {
           label: "关系/情绪",
@@ -2131,7 +2126,7 @@
         {
           label: "反思",
           className: "code-inline-journal-reflection",
-          pattern: "(?:(?:不|没|没有|不太)(?:在意|明白|确定|想)|悟(?:了|到)?|意识到|想到|明白|付出感|情感生活|好处|变化|在意|松弛|体面|本质|主线|模式|选择)"
+          pattern: "(?:(?:不|没|没有|不太)(?:在意|明白|确定|想)|悟(?:了|到)?|意识到|想到|明白|好处|变化|在意|松弛|体面|本质|模式|选择)"
         },
         {
           label: "生活/金钱",
@@ -2196,6 +2191,13 @@
           temporaryStartedAt: "",
           panelOpen: false,
           error: ""
+        },
+        journalPrivateHighlights: {
+          locationAliases: {},
+          keywordGroups: [],
+          patternRules: [],
+          signature: "",
+          error: ""
         }
       };
 
@@ -2251,9 +2253,13 @@
       bindEvents();
       loadRemoteSyncSettings();
       populateRemoteSyncPanel();
+      loadCachedJournalPrivateHighlights();
       loadCachedHealthSummary();
       render();
       updateStorageStatus();
+      if (!state.remote.enabled) {
+        loadJournalPrivateHighlights();
+      }
       restoreStoredSyncFile({ readRecords: !state.remote.enabled }).then(function () {
         startRemoteSync(true).then(function () {
           loadHealthSummary();
@@ -3670,6 +3676,10 @@
           if (!repo || !path || !token) {
             return;
           }
+          if (isProtectedRemoteWritePath(path)) {
+            console.warn("Stored GitHub sync path points to a protected private file and was ignored.");
+            return;
+          }
 
           state.remote.enabled = true;
           state.remote.repo = repo;
@@ -3730,6 +3740,10 @@
           setStatus("请填写 GitHub 仓库、路径和 token。");
           return;
         }
+        if (isProtectedRemoteWritePath(path)) {
+          setStatus("私有词表不能作为主数据同步文件。");
+          return;
+        }
 
         state.remote.enabled = true;
         state.remote.repo = repo;
@@ -3770,6 +3784,8 @@
         saveRemoteSyncSettingsToLocal();
         populateRemoteSyncPanel();
         updateStorageStatus();
+        clearJournalPrivateHighlights({ clearCache: true });
+        loadJournalPrivateHighlights();
         loadHealthSummary();
         setStatus("已关闭 GitHub 同步。");
       }
@@ -3826,12 +3842,14 @@
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(REMOTE_SYNC_STORAGE_KEY);
         localStorage.removeItem(HEALTH_SUMMARY_CACHE_KEY);
+        localStorage.removeItem(JOURNAL_PRIVATE_HIGHLIGHTS_CACHE_KEY);
         await deleteStoredSyncFileHandle();
         populateRemoteSyncPanel();
         toggleComposerAdvanced(false);
         render();
         updateStorageStatus();
         clearHealthSummary({ clearCache: true });
+        clearJournalPrivateHighlights();
         setStatus("已安全退出，本浏览器记录和 token 已清除。");
       }
 
@@ -4020,6 +4038,9 @@
           if (opts.refreshHealthSummary !== false && state.remote.enabled) {
             await loadHealthSummary();
           }
+          if (opts.refreshJournalPrivateHighlights !== false) {
+            await loadJournalPrivateHighlights();
+          }
         }
       }
 
@@ -4056,6 +4077,272 @@
           syncedAt: payload.syncedAt,
           payloadAt: payload.payloadAt
         };
+      }
+
+      async function loadJournalPrivateHighlights() {
+        if (!window.fetch) {
+          return;
+        }
+
+        try {
+          const payload = await fetchJournalPrivateHighlightsPayload();
+          if (!payload) {
+            clearJournalPrivateHighlights({ clearCache: true });
+            return;
+          }
+
+          const normalized = normalizeJournalPrivateHighlightsPayload(payload);
+          const signature = getJournalPrivateHighlightsSignature(normalized);
+          if (!signature) {
+            clearJournalPrivateHighlights({ clearCache: true });
+            return;
+          }
+
+          if (signature === state.journalPrivateHighlights.signature) {
+            state.journalPrivateHighlights.error = "";
+            saveJournalPrivateHighlightsCache(payload);
+            return;
+          }
+
+          state.journalPrivateHighlights = Object.assign({}, normalized, {
+            signature: signature,
+            error: ""
+          });
+          saveJournalPrivateHighlightsCache(payload);
+          render();
+        } catch (error) {
+          console.warn("Private journal highlights unavailable", error);
+          state.journalPrivateHighlights.error = formatRemoteError("私有词表读取失败", error);
+        }
+      }
+
+      function loadCachedJournalPrivateHighlights() {
+        try {
+          const raw = localStorage.getItem(JOURNAL_PRIVATE_HIGHLIGHTS_CACHE_KEY);
+          if (!raw) {
+            return false;
+          }
+
+          const payload = JSON.parse(raw);
+          const normalized = normalizeJournalPrivateHighlightsPayload(payload);
+          const signature = getJournalPrivateHighlightsSignature(normalized);
+          if (!signature) {
+            clearJournalPrivateHighlights({ clearCache: true });
+            return false;
+          }
+
+          state.journalPrivateHighlights = Object.assign({}, normalized, {
+            signature: signature,
+            error: ""
+          });
+          return true;
+        } catch (error) {
+          console.warn("Cached private journal highlights unavailable", error);
+          clearJournalPrivateHighlights({ clearCache: true });
+          return false;
+        }
+      }
+
+      function saveJournalPrivateHighlightsCache(payload) {
+        if (state.sessionOnly || state.remote.temporary) {
+          return;
+        }
+
+        try {
+          localStorage.setItem(JOURNAL_PRIVATE_HIGHLIGHTS_CACHE_KEY, JSON.stringify(payload));
+        } catch (error) {
+          console.warn("Private journal highlights cache unavailable", error);
+        }
+      }
+
+      function clearJournalPrivateHighlights(options) {
+        const opts = options || {};
+        const hadHighlights = Boolean(state.journalPrivateHighlights.signature);
+        state.journalPrivateHighlights = {
+          locationAliases: {},
+          keywordGroups: [],
+          patternRules: [],
+          signature: "",
+          error: ""
+        };
+        if (opts.clearCache) {
+          try {
+            localStorage.removeItem(JOURNAL_PRIVATE_HIGHLIGHTS_CACHE_KEY);
+          } catch (error) {
+            console.warn("Private journal highlights cache cleanup failed", error);
+          }
+        }
+        if (hadHighlights && !opts.skipRender) {
+          render();
+        }
+      }
+
+      async function fetchJournalPrivateHighlightsPayload() {
+        const remotePayload = await fetchRemoteJournalPrivateHighlightsPayload();
+        if (remotePayload) {
+          return remotePayload;
+        }
+
+        return fetchLocalJournalPrivateHighlightsPayload();
+      }
+
+      async function fetchRemoteJournalPrivateHighlightsPayload() {
+        if (!state.remote.enabled || !state.remote.token || !state.remote.repo) {
+          return null;
+        }
+
+        const response = await fetch(getRemotePathContentsUrl(JOURNAL_PRIVATE_HIGHLIGHTS_PATH, true), {
+          headers: getRemoteHeaders(false),
+          cache: "no-store"
+        });
+
+        if (response.status === 404) {
+          return null;
+        }
+
+        if (!response.ok) {
+          throw await createRemoteHttpError(response, "私有词表读取失败");
+        }
+
+        const data = await response.json();
+        const text = decodeBase64Utf8(String(data.content || ""));
+        return JSON.parse(text);
+      }
+
+      async function fetchLocalJournalPrivateHighlightsPayload() {
+        if (isLocalFilePage()) {
+          return null;
+        }
+
+        const response = await fetch(JOURNAL_PRIVATE_HIGHLIGHTS_PATH + "?t=" + encodeURIComponent(String(Date.now())), {
+          cache: "no-store"
+        });
+
+        if (response.status === 404) {
+          return null;
+        }
+
+        if (!response.ok) {
+          throw new Error("私有词表读取失败：" + response.status);
+        }
+
+        return response.json();
+      }
+
+      function normalizeJournalPrivateHighlightsPayload(value) {
+        const source = value && typeof value === "object" ? value : {};
+        return {
+          locationAliases: normalizeJournalLocationAliases(source.locationAliases),
+          keywordGroups: normalizeJournalKeywordGroups(source.keywordGroups),
+          patternRules: normalizeJournalPatternRules(source.patternRules)
+        };
+      }
+
+      function normalizeJournalLocationAliases(value) {
+        const aliases = {};
+        if (!value || typeof value !== "object" || Array.isArray(value)) {
+          return aliases;
+        }
+
+        Object.keys(value).forEach(function (key) {
+          const source = String(key || "").trim();
+          const label = String(value[key] || "").trim();
+          if (source && label) {
+            aliases[source] = label;
+          }
+        });
+        return aliases;
+      }
+
+      function normalizeJournalKeywordGroups(value) {
+        if (!Array.isArray(value)) {
+          return [];
+        }
+
+        return value.map(function (group) {
+          if (!group || typeof group !== "object") {
+            return null;
+          }
+
+          const label = String(group.label || "").trim();
+          const className = String(group.className || "").trim();
+          const words = normalizeJournalWords(group.words);
+          if (!label || !className || !words.length) {
+            return null;
+          }
+
+          return {
+            label: label,
+            className: className,
+            words: words
+          };
+        }).filter(Boolean);
+      }
+
+      function normalizeJournalWords(value) {
+        if (!Array.isArray(value)) {
+          return [];
+        }
+
+        const words = [];
+        value.forEach(function (item) {
+          const word = String(item || "").trim();
+          if (word && words.indexOf(word) === -1) {
+            words.push(word);
+          }
+        });
+        return words;
+      }
+
+      function normalizeJournalPatternRules(value) {
+        if (!Array.isArray(value)) {
+          return [];
+        }
+
+        return value.map(function (rule) {
+          if (!rule || typeof rule !== "object") {
+            return null;
+          }
+
+          const label = String(rule.label || "").trim();
+          const className = String(rule.className || "").trim();
+          const pattern = String(rule.pattern || "").trim();
+          if (!label || !className || !pattern) {
+            return null;
+          }
+
+          try {
+            new RegExp(pattern, "i");
+          } catch (error) {
+            console.warn("Invalid private journal pattern ignored", pattern, error);
+            return null;
+          }
+
+          return {
+            label: label,
+            className: className,
+            pattern: pattern
+          };
+        }).filter(Boolean);
+      }
+
+      function getJournalPrivateHighlightsSignature(value) {
+        if (!value) {
+          return "";
+        }
+
+        const hasAliases = Object.keys(value.locationAliases || {}).length > 0;
+        const hasGroups = Array.isArray(value.keywordGroups) && value.keywordGroups.length > 0;
+        const hasRules = Array.isArray(value.patternRules) && value.patternRules.length > 0;
+        if (!hasAliases && !hasGroups && !hasRules) {
+          return "";
+        }
+
+        return JSON.stringify({
+          locationAliases: value.locationAliases || {},
+          keywordGroups: value.keywordGroups || [],
+          patternRules: value.patternRules || []
+        });
       }
 
       async function loadHealthSummary() {
@@ -4436,6 +4723,13 @@
         if (!state.remote.enabled) {
           return false;
         }
+        if (isProtectedRemoteWritePath(state.remote.path)) {
+          state.remote.error = "GitHub 同步路径不能指向私有词表";
+          state.remote.writeInFlight = false;
+          state.remote.writeQueued = false;
+          updateStorageStatus();
+          return false;
+        }
 
         const revisionAtWriteStart = state.recordsRevision;
         let recordsSnapshot = getRecordsPayloadSnapshot();
@@ -4700,6 +4994,12 @@
 
       function normalizeRemotePath(value) {
         return String(value || "").trim().replace(/^\/+/, "") || DEFAULT_REMOTE_PATH;
+      }
+
+      function isProtectedRemoteWritePath(value) {
+        const path = normalizeRemotePath(value).replace(/\\/g, "/").toLowerCase();
+        return path === JOURNAL_PRIVATE_HIGHLIGHTS_PATH.toLowerCase()
+          || path === HEALTH_SUMMARY_PATH.toLowerCase();
       }
 
       function encodeRemotePath(path) {
@@ -6280,13 +6580,14 @@
 
       function getLocationAliasLabel(location) {
         const source = String(location || "").trim();
-        return Object.prototype.hasOwnProperty.call(LOCATION_ALIASES, source)
-          ? LOCATION_ALIASES[source]
+        const aliases = getJournalLocationAliases();
+        return Object.prototype.hasOwnProperty.call(aliases, source)
+          ? aliases[source]
           : "";
       }
 
       function getLocationAliasPatternSource() {
-        return Object.keys(LOCATION_ALIASES).map(escapeRegExp).join("|");
+        return Object.keys(getJournalLocationAliases()).map(escapeRegExp).join("|");
       }
 
       function isDiningHallFloorToken(token) {
@@ -6307,6 +6608,9 @@
       function getJournalGroupedWordPatternSource(groups) {
         const words = [];
         groups.forEach(function(group) {
+          if (!group || !Array.isArray(group.words)) {
+            return;
+          }
           group.words.forEach(function(word) {
             if (!words.includes(word)) {
               words.push(word);
@@ -6323,23 +6627,24 @@
       }
 
       function getJournalKeywordPatternSource() {
-        return getJournalGroupedWordPatternSource(JOURNAL_KEYWORD_GROUPS);
+        return getJournalGroupedWordPatternSource(getJournalKeywordGroups());
       }
 
       function getJournalKeywordTokenInfo(token) {
-        return getJournalGroupedTokenInfo(JOURNAL_KEYWORD_GROUPS, token);
+        return getJournalGroupedTokenInfo(getJournalKeywordGroups(), token);
       }
 
       function getJournalPatternRuleSource() {
-        return JOURNAL_PATTERN_RULES.map(function(rule) {
+        return getJournalPatternRules().map(function(rule) {
           return rule.pattern;
         }).join("|");
       }
 
       function getJournalPatternTokenInfo(token) {
         const source = String(token || "").trim();
-        for (let index = 0; index < JOURNAL_PATTERN_RULES.length; index += 1) {
-          const rule = JOURNAL_PATTERN_RULES[index];
+        const rules = getJournalPatternRules();
+        for (let index = 0; index < rules.length; index += 1) {
+          const rule = rules[index];
           if (new RegExp("^" + rule.pattern + "$", "i").test(source)) {
             return {
               label: rule.label,
@@ -6355,6 +6660,9 @@
         const source = String(token || "").trim().toLowerCase();
         for (let index = 0; index < groups.length; index += 1) {
           const group = groups[index];
+          if (!group || !Array.isArray(group.words)) {
+            continue;
+          }
           const hasWord = group.words.some(function(word) {
             return String(word || "").trim().toLowerCase() === source;
           });
@@ -6367,6 +6675,60 @@
         }
 
         return null;
+      }
+
+      function getJournalLocationAliases() {
+        return Object.assign({}, LOCATION_ALIASES, state.journalPrivateHighlights.locationAliases || {});
+      }
+
+      function getJournalKeywordGroups() {
+        return mergeJournalKeywordGroups(JOURNAL_KEYWORD_GROUPS, state.journalPrivateHighlights.keywordGroups);
+      }
+
+      function getJournalPatternRules() {
+        return JOURNAL_PATTERN_RULES.concat(state.journalPrivateHighlights.patternRules || []);
+      }
+
+      function mergeJournalKeywordGroups(publicGroups, privateGroups) {
+        const merged = [];
+        const groupIndexes = {};
+
+        function addGroup(group) {
+          if (!group || !Array.isArray(group.words)) {
+            return;
+          }
+
+          const label = String(group.label || "").trim();
+          const className = String(group.className || "").trim();
+          if (!label || !className) {
+            return;
+          }
+
+          const key = label + "\n" + className;
+          let target = null;
+          if (Object.prototype.hasOwnProperty.call(groupIndexes, key)) {
+            target = merged[groupIndexes[key]];
+          } else {
+            target = {
+              label: label,
+              className: className,
+              words: []
+            };
+            groupIndexes[key] = merged.length;
+            merged.push(target);
+          }
+
+          group.words.forEach(function (word) {
+            const source = String(word || "").trim();
+            if (source && target.words.indexOf(source) === -1) {
+              target.words.push(source);
+            }
+          });
+        }
+
+        (publicGroups || []).forEach(addGroup);
+        (privateGroups || []).forEach(addGroup);
+        return merged;
       }
 
       function getJournalTimePatternSource() {

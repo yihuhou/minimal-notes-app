@@ -2150,6 +2150,13 @@
         idea: "想法",
         journal: "日记"
       };
+      const CREATE_STATUS_MESSAGES = {
+        todo: "已保存为待办。",
+        meeting: "已保存为日程。",
+        deadline: "已保存为截止。",
+        idea: "已收入想法。",
+        journal: "已收入日记。"
+      };
       const initialLocalPayload = loadLocalRecordsEnvelope();
 
       const state = {
@@ -2718,7 +2725,7 @@
         const text = rawText.trim();
         const explicitEventAt = normalizeDateTime(quickEventAt.value);
         const manualType = quickType.value;
-        const contextualType = manualType === "auto" && (state.filter === "idea" || state.filter === "journal") ? state.filter : "";
+        const contextualType = manualType === "auto" && ["todo", "meeting", "deadline", "idea", "journal"].includes(state.filter) ? state.filter : "";
         const now = new Date().toISOString();
 
         if (!text) {
@@ -2756,7 +2763,7 @@
         toggleComposerAdvanced(false);
         render();
         focusQuickInput();
-        setStatus(parsed.type === "journal" ? "已收入日记。" : (parsed.type === "idea" ? "已收入想法。" : "已保存。"));
+        setStatus(CREATE_STATUS_MESSAGES[parsed.type] || "已保存。");
       }
 
       function toggleRecord(id) {
@@ -7734,6 +7741,18 @@
             type: "journal",
             eventAt: "",
             recurrence: null
+          };
+        }
+
+        if (isTimedType(contextualType)) {
+          const resolvedContextualEventAt = recurrenceInfo
+            ? resolveRecurringEventAt(contextualType, explicitEventAt, naturalInfo, recurrenceInfo, text)
+            : resolveTimedEventAt(contextualType, explicitEventAt, naturalInfo);
+          return {
+            text: text,
+            type: contextualType,
+            eventAt: resolvedContextualEventAt,
+            recurrence: recurrenceInfo
           };
         }
 

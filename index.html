@@ -2852,6 +2852,10 @@
           setStatus("删除归档失败，记录未删除。");
           return;
         }
+        if (deleteMode === "purge" && !archivePurgedRecord(record, deletedAt)) {
+          setStatus("删除标记失败，记录未删除。");
+          return;
+        }
 
         state.records = state.records.filter(function (item) {
           return item.id !== id;
@@ -2861,7 +2865,7 @@
         }
         persist();
         render();
-        setStatus(deleteMode === "archive" ? "已删除；完整记录已保留在 JSON。" : "已从 JSON 完全删除。");
+        setStatus(deleteMode === "archive" ? "已删除；完整记录已保留在 JSON。" : "已删除；仅保留无正文删除标记用于同步。");
       }
 
       function chooseDeleteMode() {
@@ -8050,6 +8054,26 @@
         return true;
       }
 
+      function archivePurgedRecord(record, deletedAt) {
+        if (!record || typeof record.id !== "string" || !record.id || !isValidDate(deletedAt)) {
+          return false;
+        }
+
+        const entry = normalizeDeletedRecordEntry({
+          recordId: record.id,
+          deletedAt: deletedAt,
+          purged: true
+        });
+        if (!entry) {
+          return false;
+        }
+
+        const entries = normalizeDeletedRecordEntries(state.deletedRecords);
+        entries.push(entry);
+        state.deletedRecords = entries;
+        return true;
+      }
+
       function normalizeDeletedRecordEntries(value) {
         if (!Array.isArray(value)) {
           return [];
@@ -8068,7 +8092,21 @@
           return null;
         }
 
-        const fallbackId = typeof value.recordId === "string" && value.recordId ? value.recordId : "";
+        const fallbackId = typeof value.recordId === "string" && value.recordId
+          ? value.recordId
+          : (value.record && typeof value.record.id === "string" ? value.record.id : "");
+        const deletedAt = new Date(value.deletedAt).toISOString();
+        if (value.purged) {
+          if (!fallbackId) {
+            return null;
+          }
+          return {
+            recordId: fallbackId,
+            deletedAt: deletedAt,
+            purged: true
+          };
+        }
+
         const sourceRecord = value.record && typeof value.record === "object" ? value.record : value;
         const recordSource = fallbackId && (!sourceRecord.id || typeof sourceRecord.id !== "string")
           ? Object.assign({}, sourceRecord, { id: fallbackId })
@@ -8080,7 +8118,7 @@
 
         return {
           recordId: fallbackId || record.id,
-          deletedAt: new Date(value.deletedAt).toISOString(),
+          deletedAt: deletedAt,
           record: record
         };
       }

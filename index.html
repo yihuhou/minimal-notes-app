@@ -2150,6 +2150,7 @@
         idea: "想法",
         journal: "日记"
       };
+      const RECORD_TYPES = Object.keys(TYPE_LABELS);
       const CREATE_STATUS_MESSAGES = {
         todo: "已保存为待办。",
         meeting: "已保存为日程。",
@@ -2752,6 +2753,11 @@
           completed: false,
           updatedAt: now
         };
+        const typeLock = normalizeRecordType(parsed.typeLock)
+          || resolveNewRecordTypeLock(parsed.type, manualType, contextualType);
+        if (typeLock) {
+          record.typeLock = typeLock;
+        }
         pushHistory(record, "created", now);
 
         state.records.unshift(record);
@@ -3021,11 +3027,17 @@
         const changed = record.text !== updated.text
           || record.type !== updated.type
           || record.eventAt !== updated.eventAt
-          || !recurrencesEqual(record.recurrence, updated.recurrence);
+          || !recurrencesEqual(record.recurrence, updated.recurrence)
+          || getRecordTypeLock(record) !== normalizeRecordType(updated.typeLock);
         record.text = updated.text;
         record.type = updated.type;
         record.eventAt = updated.eventAt;
         record.recurrence = updated.recurrence;
+        if (normalizeRecordType(updated.typeLock)) {
+          record.typeLock = normalizeRecordType(updated.typeLock);
+        } else {
+          delete record.typeLock;
+        }
         record.ignoredConflictKeys = [];
         clearAutoCompleteState(record);
         if (updated.type === "journal") {
@@ -6864,34 +6876,158 @@
       }
 
       function parseJournalCommandText(text) {
+        const command = parseRecordTypeCommandText(text);
+        return command && command.type === "journal" ? command.text : null;
+      }
+
+      function parseRecordTypeCommandText(text) {
         const source = String(text || "").trim();
-        const match = source.match(/^\s*(?:记录|日记)\s*[:：]\s*(.*)$/);
-        if (!match) {
+        const commands = [
+          { type: "idea", pattern: /^\s*(?:想法|idea)\s*(?:[:：]\s*)?(.*)$/i },
+          { type: "journal", pattern: /^\s*(?:记录|日记|journal)\s*[:：]\s*(.*)$/i },
+          { type: "todo", pattern: /^\s*(?:待办|todo)\s*[:：]\s*(.*)$/i },
+          { type: "meeting", pattern: /^\s*(?:日程|meeting|schedule)\s*[:：]\s*(.*)$/i },
+          { type: "deadline", pattern: /^\s*(?:截止|deadline|ddl)\s*[:：]\s*(.*)$/i }
+        ];
+
+        for (let index = 0; index < commands.length; index += 1) {
+          const command = commands[index];
+          const match = source.match(command.pattern);
+          if (match) {
+            return {
+              type: command.type,
+              text: (match[1] || "").trim() || source
+            };
+          }
+        }
+
+        return null;
+      }
+
+      function buildTypeCommandResult(command, explicitEventAt, fallbackRecord) {
+        if (!command || !normalizeRecordType(command.type)) {
           return null;
         }
 
-        return (match[1] || "").trim() || source;
+        const text = command.text;
+        const type = command.type;
+        if (type === "idea") {
+          return {
+            text: text,
+            type: "idea",
+            eventAt: "",
+            recurrence: null,
+            typeLock: "idea"
+          };
+        }
+
+        if (type === "journal") {
+          return {
+            text: text,
+            type: "journal",
+            eventAt: "",
+            recurrence: null,
+            typeLock: "journal"
+          };
+        }
+
+        const naturalInfo = extractNaturalDateInfo(text);
+        const recurrenceInfo = extractRecurrenceInfo(text);
+        const fallbackEventAt = normalizeDateTime(fallbackRecord && fallbackRecord.eventAt);
+        const eventAt = recurrenceInfo
+          ? resolveRecurringEventAt(type, explicitEventAt, naturalInfo, recurrenceInfo, text) || fallbackEventAt
+          : resolveTimedEventAt(type, explicitEventAt, naturalInfo) || fallbackEventAt;
+
+        return {
+          text: text,
+          type: type,
+          eventAt: eventAt,
+          recurrence: recurrenceInfo,
+          typeLock: type
+        };
+      }
+
+      function normalizeRecordType(value) {
+        return typeof value === "string" && RECORD_TYPES.includes(value) ? value : "";
+      }
+
+      function resolveNewRecordTypeLock(parsedType, manualType, contextualType) {
+        const type = normalizeRecordType(parsedType);
+        if (!type) {
+          return "";
+        }
+
+        if (manualType && manualType !== "auto") {
+          return type;
+        }
+
+        if (normalizeRecordType(contextualType)) {
+          return type;
+        }
+
+        return "";
+      }
+
+      function getRecordTypeLock(record) {
+        return normalizeRecordType(record && record.typeLock) || inferLegacyTypeLock(record);
+      }
+
+      function inferLegacyTypeLock(record) {
+        if (!record || typeof record !== "object" || normalizeRecordType(record.typeLock)) {
+          return "";
+        }
+
+        const currentType = normalizeRecordType(record.type);
+        if (currentType === "idea" || currentType === "journal") {
+          return "";
+        }
+
+        const history = Array.isArray(record.history) ? record.history : [];
+        for (let index = 0; index < history.length; index += 1) {
+          const entry = history[index];
+          const entryType = normalizeRecordType(entry && entry.type);
+          if (!entry
+            || entry.action !== "created"
+            || entryType !== "todo"
+            || !normalizeDateTime(entry.eventAt)
+            || normalizeRecurrenceInfo(entry.recurrence)) {
+            continue;
+          }
+
+          return entryType;
+        }
+
+        return "";
       }
 
       function inferUpdateFromText(text, record) {
         const source = String(text || "").trim();
-        const ideaMatch = source.match(/^\s*(?:想法|idea)\s*(?:[:：]\s*)?(.*)$/i);
-        if (ideaMatch) {
+        const typeCommand = parseRecordTypeCommandText(source);
+        if (typeCommand) {
+          const commandResult = buildTypeCommandResult(typeCommand, "", record);
+          if (commandResult) {
+            return commandResult;
+          }
+        }
+
+        const typeLock = getRecordTypeLock(record);
+        if (typeLock === "idea") {
           return {
-            text: (ideaMatch[1] || "").trim() || source,
+            text: source,
             type: "idea",
             eventAt: "",
-            recurrence: null
+            recurrence: null,
+            typeLock: typeLock
           };
         }
 
-        const journalText = parseJournalCommandText(source);
-        if (journalText) {
+        if (typeLock === "journal") {
           return {
-            text: journalText,
+            text: source,
             type: "journal",
             eventAt: "",
-            recurrence: null
+            recurrence: null,
+            typeLock: typeLock
           };
         }
 
@@ -6900,7 +7036,8 @@
             text: source,
             type: "journal",
             eventAt: "",
-            recurrence: null
+            recurrence: null,
+            typeLock: typeLock
           };
         }
 
@@ -6911,9 +7048,11 @@
           const shouldResolveEventAt = recurrenceChanged
             || Boolean(parseRecurrenceAnchorInfo(source))
             || (recurrenceInfo.mode === "sliding" && hasExplicitCalendarDateToken(source));
-          const inferredType = isDeadlineHintText(source)
-            ? "deadline"
-            : (record && record.type === "meeting" ? "meeting" : "todo");
+          const inferredType = isTimedType(typeLock)
+            ? typeLock
+            : (isDeadlineHintText(source)
+              ? "deadline"
+              : (record && record.type === "meeting" ? "meeting" : "todo"));
           const resolvedEventAt = shouldResolveEventAt
             ? resolveRecurringEventAt(inferredType, "", naturalInfo, recurrenceInfo, source)
             : normalizeDateTime(record && record.eventAt)
@@ -6923,26 +7062,30 @@
             text: source,
             type: inferredType,
             eventAt: resolvedEventAt,
-            recurrence: recurrenceInfo
+            recurrence: recurrenceInfo,
+            typeLock: typeLock
           };
         }
 
         const naturalInfo = extractNaturalDateInfo(source);
         if (naturalInfo.hasTemporalHint) {
-          const inferredType = inferTimedTypeFromText(source);
+          const inferredType = isTimedType(typeLock) ? typeLock : inferTimedTypeFromText(source);
           return {
             text: source,
             type: inferredType,
             eventAt: resolveTimedEventAt(inferredType, "", naturalInfo) || record.eventAt || "",
-            recurrence: null
+            recurrence: null,
+            typeLock: typeLock
           };
         }
 
+        const fallbackType = normalizeRecordType(typeLock) || record.type;
         return {
           text: source,
-          type: record.type,
-          eventAt: isTimedType(record.type) ? record.eventAt || "" : "",
-          recurrence: null
+          type: fallbackType,
+          eventAt: isTimedType(fallbackType) ? record.eventAt || "" : "",
+          recurrence: null,
+          typeLock: typeLock
         };
       }
 
@@ -7706,24 +7849,12 @@
           };
         }
 
-        const ideaMatch = text.match(/^\s*(?:想法|idea)\s*(?:[:：]\s*)?(.*)$/i);
-        if (ideaMatch) {
-          return {
-            text: (ideaMatch[1] || "").trim() || text.trim(),
-            type: "idea",
-            eventAt: "",
-            recurrence: null
-          };
-        }
-
-        const journalText = parseJournalCommandText(text);
-        if (journalText) {
-          return {
-            text: journalText,
-            type: "journal",
-            eventAt: "",
-            recurrence: null
-          };
+        const typeCommand = parseRecordTypeCommandText(text);
+        if (typeCommand) {
+          const commandResult = buildTypeCommandResult(typeCommand, explicitEventAt, null);
+          if (commandResult) {
+            return commandResult;
+          }
         }
 
         if (contextualType === "idea") {
@@ -9552,13 +9683,20 @@
           return null;
         }
 
-        let type = ["todo", "meeting", "deadline", "idea", "journal"].includes(record.type) ? record.type : "todo";
+        let type = normalizeRecordType(record.type) || "todo";
+        let typeLock = normalizeRecordType(record.typeLock) || inferLegacyTypeLock(record);
         const journalText = parseJournalCommandText(text);
         if (journalText) {
           text = journalText;
           type = "journal";
+          if (typeLock !== "journal") {
+            typeLock = "";
+          }
         }
-        if (type === "meeting" && isDeadlineHintText(text)) {
+        if (typeLock) {
+          type = typeLock;
+        }
+        if (!typeLock && type === "meeting" && isDeadlineHintText(text)) {
           type = "deadline";
         }
         const createdAt = isValidDate(record.createdAt) ? new Date(record.createdAt).toISOString() : new Date().toISOString();
@@ -9567,7 +9705,7 @@
         const inferredRecurrence = isPassiveRecord({ type: type }) ? null : extractRecurrenceInfo(text);
         const recurrence = importedRecurrence || inferredRecurrence;
         let eventAt = isPassiveRecord({ type: type }) ? "" : normalizeDateTime(record.eventAt);
-        if (type === "todo" && !recurrence && !eventAt) {
+        if (!typeLock && type === "todo" && !recurrence && !eventAt) {
           const naturalInfo = extractNaturalDateInfo(text, createdAt);
           if (naturalInfo.hasTemporalHint) {
             type = inferTimedTypeFromText(text);
@@ -9587,7 +9725,7 @@
           }
         }
 
-        return {
+        const normalizedRecord = {
           id: typeof record.id === "string" && record.id ? record.id : createId(),
           text: text,
           type: type,
@@ -9613,6 +9751,10 @@
           completed: type === "journal" ? false : Boolean(record.completed),
           updatedAt: updatedAt
         };
+        if (typeLock) {
+          normalizedRecord.typeLock = typeLock;
+        }
+        return normalizedRecord;
       }
 
       function focusQuickInput() {

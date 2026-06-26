@@ -901,19 +901,17 @@
       background: #fafaf8;
     }
 
-    .item.idea .toggle,
-    .item.journal .toggle {
+    .item.idea .toggle {
       opacity: 0.42;
     }
 
     .item.idea:hover .toggle,
-    .item.idea:focus-within .toggle,
-    .item.journal:hover .toggle,
-    .item.journal:focus-within .toggle {
+    .item.idea:focus-within .toggle {
       opacity: 0.82;
     }
 
     .item.journal {
+      grid-template-columns: minmax(0, 1fr) auto;
       background: #fffdf8;
       box-shadow: inset 2px 0 0 rgba(121, 91, 24, 0.18);
     }
@@ -1484,6 +1482,10 @@
         grid-template-columns: 24px minmax(0, 1fr) 32px;
         align-items: start;
         gap: 8px;
+      }
+
+      .item.journal {
+        grid-template-columns: minmax(0, 1fr) 32px;
       }
 
       .toggle {
@@ -5453,6 +5455,7 @@
         const toggleDisabled = isRecordToggleDisabled(record);
         const editing = state.editingId === record.id && !readOnly;
         const urgent = hasUrgencyTag(record);
+        const showToggle = record.type !== "journal";
         const classes = [
           "item",
           record.type,
@@ -5462,13 +5465,14 @@
           isAutoCompletionPending(record) ? "auto-completed" : "",
           urgent ? "upcoming" : ""
         ].filter(Boolean).join(" ");
-        const toggleMeta = getToggleMeta(record);
+        const toggleMeta = showToggle ? getToggleMeta(record) : null;
+        const toggleHtml = showToggle
+          ? '<button type="button" class="toggle ' + escapeHtml(toggleMeta.className) + '" data-action="toggle" data-id="' + escapeHtml(record.id) + '" aria-label="' + escapeHtml(toggleMeta.ariaLabel) + '" title="' + escapeHtml(toggleMeta.title) + '"' + (toggleDisabled ? ' disabled aria-disabled="true"' : "") + '>' + toggleMeta.symbol + "</button>"
+          : "";
 
         return [
           '<article class="' + classes + '" data-id="' + escapeHtml(record.id) + '">',
-          '<button type="button" class="toggle ' + escapeHtml(toggleMeta.className) + '" data-action="toggle" data-id="' + escapeHtml(record.id) + '" aria-label="' + escapeHtml(toggleMeta.ariaLabel) + '" title="' + escapeHtml(toggleMeta.title) + '"' + (toggleDisabled ? ' disabled aria-disabled="true"' : "") + '>',
-          toggleMeta.symbol,
-          "</button>",
+          toggleHtml,
           '<div class="item-main">',
           editing ? renderInlineEdit(record) : renderDisplay(record, urgent, conflicts),
           "</div>",

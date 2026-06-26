@@ -7336,7 +7336,8 @@
           return true;
         }
 
-        const dateOrTimePattern = "(?:" + getDisplayDatePatternSource() + "|" + getTimeFragmentPatternSource() + ")";
+        const timePeriodPattern = getTimePeriodPatternSource();
+        const dateOrTimePattern = "(?:" + getDisplayDatePatternSource() + "(?:\\s*" + timePeriodPattern + ")?|" + timePeriodPattern + "|" + getTimeFragmentPatternSource() + ")";
         return new RegExp(dateOrTimePattern + "\\s*(?:前|之前)").test(source);
       }
 

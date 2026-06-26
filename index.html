@@ -3851,6 +3851,7 @@
       }
 
       async function syncRemoteRecords(options) {
+        const opts = options || {};
         if (!state.remote.enabled) {
           toggleRemoteSyncPanel(true);
           setStatus("请先设置 GitHub 同步。");
@@ -3861,8 +3862,6 @@
           setStatus("GitHub 同步正在进行。");
           return;
         }
-
-        const opts = options || {};
 
         try {
           state.remote.error = "";
@@ -4016,6 +4015,10 @@
           updateStorageStatus();
           if (!opts.silent) {
             setStatus(state.remote.error + "。");
+          }
+        } finally {
+          if (opts.refreshHealthSummary !== false && state.remote.enabled) {
+            await loadHealthSummary();
           }
         }
       }

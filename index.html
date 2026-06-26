@@ -1987,6 +1987,8 @@
       const SYNC_DB_STORE = "handles";
       const SYNC_FILE_HANDLE_KEY = "records";
       const DEFAULT_SYNC_FILE_NAME = "minimal-notes-records.json";
+      const SYNC_FILE_PICKER_ID = "minimal-notes-records-sync-file";
+      const GENERATED_SYNC_COPY_FILE_NAME_PATTERN = /^minimal-notes-records(?:\s+\d+|\s*\(\d+\))\.json$/i;
       const SYNC_POLL_INTERVAL = 12000;
       const REMOTE_SYNC_STORAGE_KEY = "minimal-notes-github-sync-v1";
       const DEFAULT_REMOTE_REPO = "yihuhou/minimal-notes";
@@ -3119,11 +3121,21 @@
             return;
           }
 
+          if (state.remote.enabled) {
+            setStatus("为避免云盘生成编号副本，请用“连接备份”选择已有的 " + DEFAULT_SYNC_FILE_NAME + "。");
+            return;
+          }
+
           const handle = await window.showSaveFilePicker({
+            id: SYNC_FILE_PICKER_ID,
             suggestedName: DEFAULT_SYNC_FILE_NAME,
             types: getJsonFilePickerTypes(),
             excludeAcceptAllOption: false
           });
+
+          if (await rejectInvalidSyncHandle(handle)) {
+            return;
+          }
 
           await setSyncHandle(handle, false);
           const permissionGranted = await requestSyncPermission("readwrite");
@@ -3167,12 +3179,16 @@
           }
 
           const handles = await window.showOpenFilePicker({
+            id: SYNC_FILE_PICKER_ID,
             multiple: false,
             types: getJsonFilePickerTypes(),
             excludeAcceptAllOption: false
           });
           const handle = handles && handles[0];
           if (!handle) {
+            return;
+          }
+          if (await rejectInvalidSyncHandle(handle, { preserveExistingHandle: true })) {
             return;
           }
 
@@ -3281,6 +3297,9 @@
           const handle = await readStoredSyncHandle();
           if (!handle) {
             updateStorageStatus();
+            return;
+          }
+          if (await rejectInvalidSyncHandle(handle, { clearStoredHandle: true })) {
             return;
           }
 
@@ -3400,6 +3419,9 @@
         if (!state.sync.handle) {
           return false;
         }
+        if (await rejectInvalidSyncHandle(state.sync.handle, { clearStoredHandle: true })) {
+          return false;
+        }
 
         const hasPermission = await querySyncPermission("readwrite");
         if (!hasPermission) {
@@ -3457,6 +3479,9 @@
           state.sync.writeQueued = false;
           const ok = await writeCurrentRecordsToSyncFile();
           if (!ok) {
+            if (!state.sync.handle) {
+              return;
+            }
             setStatus("同步文件写入失败，已保存在当前浏览器。");
             return;
           }
@@ -3524,6 +3549,41 @@
             "application/json": [".json"]
           }
         }];
+      }
+
+      function getSyncHandleFileName(handle) {
+        return handle && typeof handle.name === "string" ? handle.name : "";
+      }
+
+      function isCanonicalSyncFileHandle(handle) {
+        return getSyncHandleFileName(handle).toLowerCase() === DEFAULT_SYNC_FILE_NAME.toLowerCase();
+      }
+
+      function getInvalidSyncFileMessage(fileName) {
+        const name = fileName || "未命名文件";
+        if (GENERATED_SYNC_COPY_FILE_NAME_PATTERN.test(name)) {
+          return "已拒绝编号副本：" + name + "。请先把云盘里唯一的备份整理为 " + DEFAULT_SYNC_FILE_NAME + "，再用“连接备份”选择它。";
+        }
+
+        return "备份文件名必须是 " + DEFAULT_SYNC_FILE_NAME + "，当前选择的是：" + name + "。";
+      }
+
+      async function rejectInvalidSyncHandle(handle, options) {
+        if (isCanonicalSyncFileHandle(handle)) {
+          return false;
+        }
+
+        const opts = options || {};
+        const fileName = getSyncHandleFileName(handle);
+        if (!opts.preserveExistingHandle) {
+          resetFileSyncState();
+        }
+        if (opts.clearStoredHandle) {
+          await deleteStoredSyncFileHandle();
+        }
+        updateStorageStatus();
+        setStatus(getInvalidSyncFileMessage(fileName));
+        return true;
       }
 
       async function querySyncPermission(mode) {
@@ -9563,17 +9623,25 @@
         if (connectSyncButton) {
           if (state.sync.handle && state.sync.permissionNeeded) {
             connectSyncButton.textContent = state.remote.enabled ? "授权备份" : "授权同步文件";
+            connectSyncButton.title = state.remote.enabled ? "重新授权已连接的云盘备份文件" : "重新授权已连接的同步文件";
           } else {
             connectSyncButton.textContent = state.remote.enabled ? "连接备份" : "连接同步文件";
+            connectSyncButton.title = state.remote.enabled
+              ? "选择唯一的 minimal-notes-records.json，不要选择编号副本"
+              : "选择 minimal-notes-records.json 同步文件";
           }
         }
 
         if (createSyncButton) {
-          createSyncButton.disabled = !state.sync.supported;
+          createSyncButton.disabled = !state.sync.supported || (state.remote.enabled && !state.sync.handle);
           if (state.sync.handle) {
             createSyncButton.textContent = state.remote.enabled ? "覆盖备份" : "覆盖同步文件";
+            createSyncButton.title = state.remote.enabled ? "覆盖已连接的云盘备份文件" : "覆盖已连接的同步文件";
           } else {
-            createSyncButton.textContent = state.remote.enabled ? "新建备份" : "新建同步文件";
+            createSyncButton.textContent = state.remote.enabled ? "先连接备份" : "新建同步文件";
+            createSyncButton.title = state.remote.enabled
+              ? "请用“连接备份”选择唯一的 minimal-notes-records.json，避免生成编号副本"
+              : "新建并连接同步文件";
           }
         }
 

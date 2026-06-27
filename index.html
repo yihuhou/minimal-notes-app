@@ -7757,6 +7757,10 @@
           return false;
         }
 
+        if (isOngoingMeetingRecord(record)) {
+          return true;
+        }
+
         const upcomingAt = getUpcomingComparisonAt(record);
         if (!upcomingAt) {
           return false;
@@ -7768,6 +7772,17 @@
 
       function isOverdueUrgencyRecord(record, diff) {
         return diff < 0 && (record.type === "deadline" || record.type === "todo" || isRecurringRecord(record));
+      }
+
+      function isOngoingMeetingRecord(record, nowTime) {
+        if (!record || record.type !== "meeting" || !isValidDate(record.eventAt)) {
+          return false;
+        }
+
+        const start = new Date(record.eventAt).getTime();
+        const end = getMeetingEndAt(record);
+        const now = isValidDate(nowTime) ? new Date(nowTime).getTime() : Date.now();
+        return Boolean(end) && start <= now && now < end.getTime();
       }
 
       function getUpcomingComparisonAt(record) {
@@ -7788,12 +7803,16 @@
       }
 
       function getUpcomingLabel(record) {
+        const nowTime = Date.now();
+        if (isOngoingMeetingRecord(record, nowTime)) {
+          return "进行中";
+        }
+
         const upcomingAt = getUpcomingComparisonAt(record);
         if (!upcomingAt) {
           return "";
         }
 
-        const nowTime = Date.now();
         const diff = upcomingAt.getTime() - nowTime;
         const startsIn = new Date(record.eventAt).getTime() - nowTime;
         const hours = diff / (60 * 60 * 1000);

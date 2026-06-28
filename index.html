@@ -7667,10 +7667,17 @@
           return null;
         }
 
+        const periodLabel = pointMatch[1] || fallbackPeriodLabel || "";
         return {
-          hours: clampHour(applyTimePeriod(hours, pointMatch[1] || fallbackPeriodLabel || "")),
-          minutes: minutes
+          hours: clampHour(applyTimePeriod(hours, periodLabel)),
+          minutes: minutes,
+          ambiguousMeridiem: isAmbiguousMeridiemTime(hours, periodLabel)
         };
+      }
+
+      function isAmbiguousMeridiemTime(hours, periodLabel) {
+        const hour = Number(hours);
+        return !periodLabel && Number.isFinite(hour) && hour >= 1 && hour <= 11;
       }
 
       function parseTimeFragment(text, fallbackPeriodLabel) {
@@ -9054,6 +9061,7 @@
           const now = isValidDate(referenceNow) ? new Date(referenceNow) : new Date();
           const date = new Date(now.getFullYear(), now.getMonth(), now.getDate());
           date.setHours(timeInfo.hours, timeInfo.minutes, 0, 0);
+          adjustAmbiguousSameDayMeridiem(date, now, timeInfo);
           return { hasTemporalHint: true, eventAt: date.toISOString(), date: new Date(now.getFullYear(), now.getMonth(), now.getDate()) };
         }
 
@@ -9073,6 +9081,23 @@
         }
 
         return { hasTemporalHint: true, eventAt: "", date: dateInfo.date };
+      }
+
+      function adjustAmbiguousSameDayMeridiem(date, referenceNow, timeInfo) {
+        if (!timeInfo || !timeInfo.ambiguousMeridiem || !isValidDate(date) || !isValidDate(referenceNow)) {
+          return;
+        }
+
+        const now = new Date(referenceNow);
+        if (date.getTime() >= now.getTime()) {
+          return;
+        }
+
+        const pmDate = new Date(date.getTime());
+        pmDate.setHours(pmDate.getHours() + 12);
+        if (isSameLocalCalendarDay(date, pmDate) && pmDate.getTime() > now.getTime()) {
+          date.setTime(pmDate.getTime());
+        }
       }
 
       function parseExplicitCalendarDate(text, referenceNow) {
@@ -9279,7 +9304,8 @@
           return {
             matched: true,
             hours: clampHour(applyTimePeriod(hours, periodLabel)),
-            minutes: clampMinute(minutes)
+            minutes: clampMinute(minutes),
+            ambiguousMeridiem: isAmbiguousMeridiemTime(hours, periodLabel)
           };
         }
 
@@ -9288,7 +9314,8 @@
           return {
             matched: true,
             hours: pointTime.hours,
-            minutes: pointTime.minutes
+            minutes: pointTime.minutes,
+            ambiguousMeridiem: Boolean(pointTime.ambiguousMeridiem)
           };
         }
 

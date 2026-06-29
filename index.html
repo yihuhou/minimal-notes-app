@@ -6576,7 +6576,8 @@
         const relativeDatePattern = getRelativeDayPatternSource() + "|" + getCompactRelativePeriodDatePatternSource() + "|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]";
         const deadlinePattern = "截止|截至|过期|到期|失效|期满|有效期|DDL|ddl|deadline|之前|前";
         const knownLocationPattern = getKnownLocationPatternSource();
-        const locationPattern = "(?:[在去到]\\s*)?(?:" + knownLocationPattern + ")(?!\\d|\\s*(?:字|词|页|元|块|个|人|次|篇|本|分钟|小时|天|周|月|年|%))";
+        const roomLocationPattern = "[在去到]\\s*" + getBareRoomLocationPatternSource();
+        const locationPattern = "(?:" + roomLocationPattern + "|(?:[在去到]\\s*)?(?:" + knownLocationPattern + "))(?!\\d|\\s*(?:字|词|页|元|块|个|人|次|篇|本|分钟|小时|天|周|月|年|%))";
         const calendarDatePattern = "\\d{4}(?:年|[\\/.-])\\d{1,2}(?:月|[\\/.-])\\d{1,2}|\\d{1,2}(?:月|[\\/.-])\\d{1,2}(?:日|号)?|\\d{1,2}(?:日|号)";
         const tokenPattern = new RegExp(
           "((?:想法|记录|日记)[:：]?|" + periodTimePattern + "|" + relativeDatePattern + "|" + deadlinePattern + "|" + locationPattern + "|" + timeFragmentPattern + "|" + calendarDatePattern + ")",
@@ -6644,9 +6645,10 @@
         return Boolean(getLocationAliasLabel(source))
           || isDiningHallFloorToken(source)
           || isBuildingLocationToken(source)
+          || new RegExp("^" + getBareRoomLocationPatternSource() + "$").test(source)
           || /^[\u4e00-\u9fa5]{2,3}\s*[A-Za-z]?\d{3,4}$/.test(source)
           || /^(?:[\u4e00-\u9fa5]{1,8}\s*)?[A-Za-z]?\d{2,4}\s*(?:会议室|教室|报告厅|办公室|实验室|研讨室|活动室|房间|室|厅)$/.test(source)
-          || /^[\u4e00-\u9fa5]{1,8}(?:食堂|餐厅|饭店|咖啡馆|图书馆|办公室|实验室|会议室|教室|报告厅|礼堂|体育馆|活动室|研讨室|中心|校区|广场|大厦|酒店|宾馆)$/.test(source);
+          || new RegExp("^" + getNamedLocationPatternSource() + "$").test(source);
       }
 
       function renderLocationTokenHtml(location) {
@@ -6675,8 +6677,16 @@
           getBuildingLocationPatternSource(),
           "[\\u4e00-\\u9fa5]{2,3}\\s*[A-Za-z]?\\d{3,4}",
           "[A-Za-z]?\\d{2,4}\\s*(?:会议室|教室|报告厅|办公室|实验室|研讨室|活动室|房间|室|厅)",
-          "[\\u4e00-\\u9fa5]{1,8}(?:食堂|餐厅|饭店|咖啡馆|图书馆|办公室|实验室|会议室|教室|报告厅|礼堂|体育馆|活动室|研讨室|中心|校区|广场|大厦|酒店|宾馆)"
+          getNamedLocationPatternSource()
         ].filter(Boolean).join("|");
+      }
+
+      function getBareRoomLocationPatternSource() {
+        return "(?:会议室|教室|报告厅|办公室|实验室|研讨室|活动室)";
+      }
+
+      function getNamedLocationPatternSource() {
+        return "[\\u4e00-\\u522f\\u5231-\\u53ba\\u53bc-\\u5727\\u5729-\\u9fa5]{1,8}(?:食堂|餐厅|饭店|咖啡馆|图书馆|办公室|实验室|会议室|教室|报告厅|礼堂|体育馆|活动室|研讨室|中心|校区|广场|大厦|酒店|宾馆)";
       }
 
       function isDiningHallFloorToken(token) {

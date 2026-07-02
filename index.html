@@ -1368,11 +1368,6 @@
       text-align: right;
     }
 
-    .journal-flower-line {
-      display: block;
-      margin-top: 3px;
-    }
-
     .journal-flower-count {
       display: inline-flex;
       align-items: baseline;
@@ -5456,11 +5451,9 @@
 
       function renderJournalSummaryText(countText, journalDayCount, journalFlowerCount, journalWordCount) {
         const flowerText = formatSummaryNumber(journalFlowerCount) + " 朵小红花";
-        const flowerLine = document.createElement("span");
         const flower = document.createElement("span");
         const icon = document.createElement("span");
 
-        flowerLine.className = "journal-flower-line";
         flower.className = "journal-flower-count";
         flower.title = "小红花：截至 2026/6/17 已有 746 朵，2026/6/18 起按自然日 0 点累加";
         icon.className = "journal-flower-icon";
@@ -5469,11 +5462,11 @@
 
         flower.appendChild(icon);
         flower.appendChild(document.createTextNode(flowerText));
-        flowerLine.appendChild(flower);
 
         summaryText.textContent = "";
-        summaryText.appendChild(document.createTextNode(countText + " · " + formatSummaryNumber(journalDayCount) + " 天 · 总字数 " + formatSummaryNumber(journalWordCount) + " 字"));
-        summaryText.appendChild(flowerLine);
+        summaryText.appendChild(document.createTextNode(countText + " · " + formatSummaryNumber(journalDayCount) + " 天 · "));
+        summaryText.appendChild(flower);
+        summaryText.appendChild(document.createTextNode(" · 总字数 " + formatSummaryNumber(journalWordCount) + " 字"));
       }
 
       function countJournalDays(records) {

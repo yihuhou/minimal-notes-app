@@ -353,7 +353,8 @@
 
     .health-summary[hidden],
     .health-summary-advice[hidden],
-    .health-summary-metrics[hidden] {
+    .health-summary-metrics[hidden],
+    .health-summary-notices[hidden] {
       display: none !important;
     }
 
@@ -446,6 +447,23 @@
       height: 4px;
       border-radius: 999px;
       background: var(--text-faint);
+    }
+
+    .health-summary-notices {
+      display: grid;
+      gap: 4px;
+      margin: 0;
+      padding: 7px 9px;
+      border: 1px solid rgba(169, 128, 45, 0.22);
+      border-radius: 8px;
+      background: rgba(255, 249, 231, 0.72);
+      list-style: none;
+    }
+
+    .health-summary-notices li {
+      color: #6d5a27;
+      font-size: 12px;
+      line-height: 1.55;
     }
 
     .composer {
@@ -1894,6 +1912,7 @@
         </div>
         <div id="healthSummaryMetrics" class="health-summary-metrics" aria-label="健康指标" hidden></div>
         <ul id="healthSummaryAdvice" class="health-summary-advice" aria-label="健康建议" hidden></ul>
+        <ul id="healthSummaryNotices" class="health-summary-notices" aria-label="健康状态提示" hidden></ul>
       </section>
 
       <section class="composer" aria-label="快速输入区">
@@ -2249,6 +2268,7 @@
       const healthSummaryText = document.getElementById("healthSummaryText");
       const healthSummaryMetrics = document.getElementById("healthSummaryMetrics");
       const healthSummaryAdvice = document.getElementById("healthSummaryAdvice");
+      const healthSummaryNotices = document.getElementById("healthSummaryNotices");
       const syncActionButton = document.getElementById("syncActionButton");
       const backupAuthButton = document.getElementById("backupAuthButton");
       const cloudRestoreButton = document.getElementById("cloudRestoreButton");
@@ -4498,6 +4518,8 @@
         healthSummaryMetrics.hidden = true;
         healthSummaryAdvice.innerHTML = "";
         healthSummaryAdvice.hidden = true;
+        healthSummaryNotices.innerHTML = "";
+        healthSummaryNotices.hidden = true;
         if (opts.clearCache) {
           clearHealthSummaryCache();
         }
@@ -4620,6 +4642,7 @@
         if (!summary) {
           return null;
         }
+        const notices = Array.isArray(entry.notices) ? entry.notices : value.notices;
 
         return {
           label: normalizeHealthSummaryText(entry.label || entry.title || "健康小结", 28) || "健康小结",
@@ -4627,7 +4650,8 @@
           updatedTitle: formatHealthSummaryFullDate(updatedAt),
           summary: summary,
           advice: normalizeHealthSummaryList(entry.advice || entry.suggestions).slice(0, 2),
-          metrics: normalizeHealthSummaryMetrics(entry.metrics).slice(0, 3)
+          metrics: normalizeHealthSummaryMetrics(entry.metrics).slice(0, 3),
+          notices: normalizeHealthSummaryList(notices, 120).slice(0, 3)
         };
       }
 
@@ -4741,6 +4765,14 @@
           healthSummaryAdvice.appendChild(item);
         });
         healthSummaryAdvice.hidden = !summary.advice.length;
+
+        healthSummaryNotices.innerHTML = "";
+        summary.notices.forEach(function (text) {
+          const item = document.createElement("li");
+          item.textContent = text;
+          healthSummaryNotices.appendChild(item);
+        });
+        healthSummaryNotices.hidden = !summary.notices.length;
         healthSummary.hidden = false;
       }
 
@@ -4755,13 +4787,13 @@
         return chars.slice(0, Math.max(0, limit - 3)).join("") + "...";
       }
 
-      function normalizeHealthSummaryList(value) {
+      function normalizeHealthSummaryList(value, maxLength) {
         if (!Array.isArray(value)) {
           return [];
         }
 
         return value.map(function (item) {
-          return normalizeHealthSummaryText(item, 90);
+          return normalizeHealthSummaryText(item, maxLength || 90);
         }).filter(Boolean);
       }
 

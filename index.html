@@ -1368,14 +1368,14 @@
       text-align: right;
     }
 
-    .journal-flower-count {
+    .journal-ritual-count {
       display: inline-flex;
       align-items: baseline;
       gap: 3px;
       white-space: nowrap;
     }
 
-    .journal-flower-icon {
+    .journal-ritual-icon {
       color: #9f625c;
       font-size: 1.04em;
       font-weight: 650;
@@ -2019,8 +2019,6 @@
       const REMOTE_SYNC_INTERVAL = 15000;
       const REMOTE_WRITE_MAX_ATTEMPTS = 5;
       const JOURNAL_ROLLOVER_HOUR = 5;
-      const JOURNAL_FLOWER_BASE_COUNT = 746;
-      const JOURNAL_FLOWER_START_DAY_KEY = "2026-06-18";
       const JOURNAL_EDIT_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
       const LOCATION_ALIASES = {
       };
@@ -2184,6 +2182,7 @@
         records: initialLocalPayload.records,
         deletedRecords: initialLocalPayload.deletedRecords || [],
         recurrenceCompletionArchive: initialLocalPayload.recurrenceCompletionArchive || [],
+        journalStats: initialLocalPayload.journalStats || {},
         recordsRevision: 0,
         localPayloadAt: initialLocalPayload.payloadAt,
         filter: "all",
@@ -3125,6 +3124,7 @@
             state.records = normalized.sort(sortRecords);
             state.deletedRecords = payload.deletedRecords;
             state.recurrenceCompletionArchive = payload.recurrenceCompletionArchive;
+            state.journalStats = payload.journalStats;
             state.editingId = null;
             persist();
             render();
@@ -3442,6 +3442,7 @@
         state.records = mergedPayload.records;
         state.deletedRecords = mergedPayload.deletedRecords;
         state.recurrenceCompletionArchive = mergedPayload.recurrenceCompletionArchive;
+        state.journalStats = mergedPayload.journalStats;
         state.localPayloadAt = fileNeedsMergedWrite ? state.localPayloadAt : (payload.payloadAt || state.localPayloadAt);
         state.editingId = null;
         state.sync.permissionNeeded = false;
@@ -3929,6 +3930,7 @@
         state.records = [];
         state.deletedRecords = [];
         state.recurrenceCompletionArchive = [];
+        state.journalStats = {};
         state.recordsRevision = 0;
         state.localPayloadAt = "";
         state.filter = "all";
@@ -4014,7 +4016,11 @@
           }
 
           if (result.missing) {
-            if (opts.createIfMissing || state.records.length || state.deletedRecords.length || state.recurrenceCompletionArchive.length) {
+            if (opts.createIfMissing
+              || state.records.length
+              || state.deletedRecords.length
+              || state.recurrenceCompletionArchive.length
+              || hasJournalStats(state.journalStats)) {
               const ok = await writeCurrentRecordsToRemote();
               if (ok && !opts.silent) {
                 setStatus("已创建 GitHub 数据文件。");
@@ -4047,7 +4053,8 @@
             state.recurrenceCompletionArchive,
             result.recurrenceCompletionArchive
           );
-          if ((recordsChanged || deletedRecordsChanged || archiveChanged) && isRemoteOlderThanLocal(result)) {
+          const journalStatsChanged = !journalStatsEqual(state.journalStats, result.journalStats);
+          if ((recordsChanged || deletedRecordsChanged || archiveChanged || journalStatsChanged) && isRemoteOlderThanLocal(result)) {
             state.remote.sha = result.sha || state.remote.sha;
             state.remote.lastSyncAt = new Date().toISOString();
             state.remote.lastPayloadAt = state.localPayloadAt || state.remote.lastPayloadAt;
@@ -4063,7 +4070,7 @@
             return;
           }
 
-          if (!recordsChanged && !deletedRecordsChanged && !archiveChanged) {
+          if (!recordsChanged && !deletedRecordsChanged && !archiveChanged && !journalStatsChanged) {
             state.remote.sha = result.sha;
             state.remote.lastSyncAt = new Date().toISOString();
             state.remote.lastPayloadAt = result.payloadAt || state.remote.lastPayloadAt;
@@ -4077,7 +4084,7 @@
             return;
           }
 
-          if ((recordsChanged || deletedRecordsChanged || archiveChanged)
+          if ((recordsChanged || deletedRecordsChanged || archiveChanged || journalStatsChanged)
             && !state.remote.lastSyncAt
             && state.records.length
             && result.records.length
@@ -4103,6 +4110,7 @@
             state.records = mergedPayload.records;
             state.deletedRecords = mergedPayload.deletedRecords;
             state.recurrenceCompletionArchive = mergedPayload.recurrenceCompletionArchive;
+            state.journalStats = mergedPayload.journalStats;
             state.editingId = null;
             saveLocalRecords(remoteNeedsMerge ? {} : {
               payloadSavedAt: result.savedAt,
@@ -4159,6 +4167,7 @@
             records: [],
             deletedRecords: [],
             recurrenceCompletionArchive: [],
+            journalStats: {},
             sha: ""
           };
         }
@@ -4175,6 +4184,7 @@
           records: payload.records,
           deletedRecords: payload.deletedRecords,
           recurrenceCompletionArchive: payload.recurrenceCompletionArchive,
+          journalStats: payload.journalStats,
           sha: typeof data.sha === "string" ? data.sha : "",
           savedAt: payload.savedAt,
           syncedAt: payload.syncedAt,
@@ -4856,6 +4866,7 @@
               state.records = recordsSnapshot.records;
               state.deletedRecords = recordsSnapshot.deletedRecords;
               state.recurrenceCompletionArchive = recordsSnapshot.recurrenceCompletionArchive;
+              state.journalStats = recordsSnapshot.journalStats;
               state.editingId = null;
               saveLocalRecords();
               queueSyncFileWrite();
@@ -4909,6 +4920,7 @@
                 state.records = recordsSnapshot.records;
                 state.deletedRecords = recordsSnapshot.deletedRecords;
                 state.recurrenceCompletionArchive = recordsSnapshot.recurrenceCompletionArchive;
+                state.journalStats = recordsSnapshot.journalStats;
                 state.editingId = null;
                 saveLocalRecords();
                 queueSyncFileWrite();
@@ -5133,7 +5145,8 @@
           && recurrenceCompletionArchivesEqual(
             left && left.recurrenceCompletionArchive,
             right && right.recurrenceCompletionArchive
-          );
+          )
+          && journalStatsEqual(left && left.journalStats, right && right.journalStats);
       }
 
       function mergeRecordsPayloads(localPayload, incomingPayload) {
@@ -5163,6 +5176,10 @@
           recurrenceCompletionArchive: mergeRecurrenceCompletionArchiveEntries(
             localPayload && localPayload.recurrenceCompletionArchive,
             incomingPayload && incomingPayload.recurrenceCompletionArchive
+          ),
+          journalStats: mergeJournalStats(
+            localPayload && localPayload.journalStats,
+            incomingPayload && incomingPayload.journalStats
           )
         };
       }
@@ -5323,11 +5340,117 @@
           === JSON.stringify(normalizeRecurrenceCompletionArchiveEntries(right));
       }
 
+      function journalStatsEqual(left, right) {
+        return JSON.stringify(normalizeJournalStats(left)) === JSON.stringify(normalizeJournalStats(right));
+      }
+
+      function mergeJournalStats(left, right) {
+        const normalizedLeft = normalizeJournalStats(left);
+        const normalizedRight = normalizeJournalStats(right);
+        const hasLeft = hasJournalStats(normalizedLeft);
+        const hasRight = hasJournalStats(normalizedRight);
+
+        if (!hasLeft) {
+          return hasRight ? normalizedRight : {};
+        }
+        if (!hasRight) {
+          return normalizedLeft;
+        }
+
+        const leftUpdatedAt = getJournalStatsUpdatedTime(normalizedLeft);
+        const rightUpdatedAt = getJournalStatsUpdatedTime(normalizedRight);
+        return rightUpdatedAt > leftUpdatedAt ? normalizedRight : normalizedLeft;
+      }
+
+      function getJournalStatsUpdatedTime(value) {
+        return isValidDate(value && value.updatedAt) ? new Date(value.updatedAt).getTime() : 0;
+      }
+
+      function hasJournalStats(value) {
+        return Boolean(value && typeof value === "object" && !Array.isArray(value) && value.ritual);
+      }
+
+      function normalizeJournalStats(value) {
+        const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+        const ritual = normalizeJournalRitualStats(source.ritual);
+        if (!ritual) {
+          return {};
+        }
+
+        const result = { ritual: ritual };
+        if (isValidDate(source.updatedAt)) {
+          result.updatedAt = new Date(source.updatedAt).toISOString();
+        }
+        return result;
+      }
+
+      function normalizeJournalRitualStats(value) {
+        if (!value || typeof value !== "object" || Array.isArray(value)) {
+          return null;
+        }
+
+        const baseCount = Math.floor(Number(value.baseCount));
+        const startDay = normalizeLocalDayKey(value.startDay || value.startDate);
+        const label = String(value.label || "").trim();
+        if (!Number.isFinite(baseCount) || baseCount < 0 || !startDay || !label) {
+          return null;
+        }
+
+        const dayBoundaryHour = normalizeDayBoundaryHour(value.dayBoundaryHour);
+        const result = {
+          baseCount: baseCount,
+          startDay: startDay,
+          dayBoundaryHour: dayBoundaryHour,
+          label: label
+        };
+        const icon = String(value.icon || "").trim();
+        const title = String(value.title || "").trim();
+        const color = normalizeHexColor(value.color);
+        if (icon) {
+          result.icon = icon;
+        }
+        if (title) {
+          result.title = title;
+        }
+        if (color) {
+          result.color = color;
+        }
+        return result;
+      }
+
+      function normalizeDayBoundaryHour(value) {
+        const hour = Math.floor(Number(value));
+        return Number.isFinite(hour) && hour >= 0 && hour <= 23 ? hour : 0;
+      }
+
+      function normalizeLocalDayKey(value) {
+        const source = String(value || "").trim();
+        const match = source.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) {
+          return "";
+        }
+
+        const year = Number(match[1]);
+        const month = Number(match[2]);
+        const day = Number(match[3]);
+        const date = new Date(year, month - 1, day);
+        if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+          return "";
+        }
+        return source;
+      }
+
+      function normalizeHexColor(value) {
+        const source = String(value || "").trim();
+        return /^#[0-9a-f]{6}$/i.test(source) ? source : "";
+      }
+
       function getRecordsSnapshot(records) {
         return JSON.stringify({
           records: Array.isArray(records) ? records : state.records || [],
           deletedRecords: normalizeDeletedRecordEntries(state.deletedRecords),
-          recurrenceCompletionArchive: normalizeRecurrenceCompletionArchiveEntries(state.recurrenceCompletionArchive)
+          recurrenceCompletionArchive: normalizeRecurrenceCompletionArchiveEntries(state.recurrenceCompletionArchive),
+          journalStats: normalizeJournalStats(state.journalStats)
         });
       }
 
@@ -5335,7 +5458,8 @@
         return JSON.parse(JSON.stringify({
           records: state.records || [],
           deletedRecords: normalizeDeletedRecordEntries(state.deletedRecords),
-          recurrenceCompletionArchive: normalizeRecurrenceCompletionArchiveEntries(state.recurrenceCompletionArchive)
+          recurrenceCompletionArchive: normalizeRecurrenceCompletionArchiveEntries(state.recurrenceCompletionArchive),
+          journalStats: normalizeJournalStats(state.journalStats)
         }));
       }
 
@@ -5385,7 +5509,10 @@
         const remoteDeletedRecords = normalizeDeletedRecordEntries(result && result.deletedRecords);
         const localArchive = normalizeRecurrenceCompletionArchiveEntries(state.recurrenceCompletionArchive);
         const remoteArchive = normalizeRecurrenceCompletionArchiveEntries(result && result.recurrenceCompletionArchive);
-        const hasLocalData = state.records.length || localDeletedRecords.length || localArchive.length;
+        const hasLocalData = state.records.length
+          || localDeletedRecords.length
+          || localArchive.length
+          || hasJournalStats(state.journalStats);
         if (!result || result.missing || !hasLocalData) {
           return false;
         }
@@ -5399,7 +5526,8 @@
 
         const hasRemoteData = (Array.isArray(result.records) ? result.records.length : 0)
           || remoteDeletedRecords.length
-          || remoteArchive.length;
+          || remoteArchive.length
+          || hasJournalStats(result && result.journalStats);
         return Boolean(localPayloadTime && (!hasRemoteData || !resultPayloadTime || resultPayloadTime < localPayloadTime));
       }
 
@@ -5438,35 +5566,56 @@
             return total + countTextCharacters(record.text);
           }, 0);
           const journalDayCount = countJournalDays(journalRecords);
-          const journalFlowerCount = JOURNAL_FLOWER_BASE_COUNT + countJournalFlowerDays(journalRecords);
+          const journalRitualStats = getJournalRitualStats();
+          const journalRitualCount = journalRitualStats
+            ? journalRitualStats.baseCount + countJournalRitualDays(journalRecords, journalRitualStats)
+            : null;
           const countText = visible.length === journalRecords.length
             ? "日记 " + formatSummaryNumber(journalRecords.length) + " 条"
             : "日记共 " + formatSummaryNumber(journalRecords.length) + " 条，当前显示 " + formatSummaryNumber(visible.length) + " 条";
-          renderJournalSummaryText(countText, journalDayCount, journalFlowerCount, journalWordCount);
+          renderJournalSummaryText(countText, journalDayCount, journalWordCount, journalRitualStats, journalRitualCount);
           return;
         }
 
         summaryText.textContent = "共 " + totalVisibleCount + " 条，当前显示 " + visible.length + " 条";
       }
 
-      function renderJournalSummaryText(countText, journalDayCount, journalFlowerCount, journalWordCount) {
-        const flowerText = formatSummaryNumber(journalFlowerCount) + " 朵小红花";
-        const flower = document.createElement("span");
+      function renderJournalSummaryText(countText, journalDayCount, journalWordCount, ritualStats, ritualCount) {
+        const summaryPrefix = countText + " · " + formatSummaryNumber(journalDayCount) + " 天";
+        if (!ritualStats) {
+          summaryText.textContent = summaryPrefix + " · 总字数 " + formatSummaryNumber(journalWordCount) + " 字";
+          return;
+        }
+
+        const ritualText = formatSummaryNumber(ritualCount) + " " + ritualStats.label;
+        const ritual = document.createElement("span");
         const icon = document.createElement("span");
 
-        flower.className = "journal-flower-count";
-        flower.title = "小红花：截至 2026/6/17 已有 746 朵，2026/6/18 起按自然日 0 点累加";
-        icon.className = "journal-flower-icon";
-        icon.setAttribute("aria-hidden", "true");
-        icon.textContent = "✿";
+        ritual.className = "journal-ritual-count";
+        if (ritualStats.title) {
+          ritual.title = ritualStats.title;
+        }
+        if (ritualStats.icon) {
+          icon.className = "journal-ritual-icon";
+          icon.setAttribute("aria-hidden", "true");
+          icon.textContent = ritualStats.icon;
+          if (ritualStats.color) {
+            icon.style.color = ritualStats.color;
+          }
+          ritual.appendChild(icon);
+        }
 
-        flower.appendChild(icon);
-        flower.appendChild(document.createTextNode(flowerText));
+        ritual.appendChild(document.createTextNode(ritualText));
 
         summaryText.textContent = "";
-        summaryText.appendChild(document.createTextNode(countText + " · " + formatSummaryNumber(journalDayCount) + " 天 · "));
-        summaryText.appendChild(flower);
+        summaryText.appendChild(document.createTextNode(summaryPrefix + " · "));
+        summaryText.appendChild(ritual);
         summaryText.appendChild(document.createTextNode(" · 总字数 " + formatSummaryNumber(journalWordCount) + " 字"));
+      }
+
+      function getJournalRitualStats() {
+        const stats = normalizeJournalStats(state.journalStats);
+        return stats.ritual || null;
       }
 
       function countJournalDays(records) {
@@ -5480,11 +5629,11 @@
         return days.size;
       }
 
-      function countJournalFlowerDays(records) {
+      function countJournalRitualDays(records, ritualStats) {
         const days = new Set();
         (records || []).forEach(function (record) {
-          const dayKey = getJournalFlowerDayKey(record);
-          if (dayKey && dayKey >= JOURNAL_FLOWER_START_DAY_KEY) {
+          const dayKey = getJournalRitualDayKey(record, ritualStats);
+          if (dayKey && dayKey >= ritualStats.startDay) {
             days.add(dayKey);
           }
         });
@@ -5500,13 +5649,17 @@
         return formatLocalDayKey(new Date(value));
       }
 
-      function getJournalFlowerDayKey(record) {
+      function getJournalRitualDayKey(record, ritualStats) {
         const value = normalizeDateTime(record && record.createdAt) || normalizeDateTime(record && record.updatedAt);
         if (!value || !isValidDate(value)) {
           return "";
         }
 
-        return formatLocalDayKey(new Date(value));
+        const date = new Date(value);
+        if (ritualStats && ritualStats.dayBoundaryHour > 0 && date.getHours() < ritualStats.dayBoundaryHour) {
+          date.setDate(date.getDate() - 1);
+        }
+        return formatLocalDayKey(date);
       }
 
       function formatLocalDayKey(date) {
@@ -9837,6 +9990,7 @@
               records: [],
               deletedRecords: [],
               recurrenceCompletionArchive: [],
+              journalStats: {},
               savedAt: "",
               syncedAt: "",
               payloadAt: ""
@@ -9850,6 +10004,7 @@
             records: [],
             deletedRecords: [],
             recurrenceCompletionArchive: [],
+            journalStats: {},
             savedAt: "",
             syncedAt: "",
             payloadAt: ""
@@ -9896,18 +10051,23 @@
         state.recordsRevision += 1;
       }
 
-      function buildRecordsPayload(extra, records, deletedRecords, recurrenceCompletionArchive) {
+      function buildRecordsPayload(extra, records, deletedRecords, recurrenceCompletionArchive, journalStats) {
         let payloadRecords = records;
         let payloadDeletedRecords = deletedRecords;
         let payloadRecurrenceArchive = recurrenceCompletionArchive;
+        let payloadJournalStats = journalStats;
 
         if (records && typeof records === "object" && !Array.isArray(records) && Array.isArray(records.records)) {
           payloadRecords = records.records;
           payloadDeletedRecords = records.deletedRecords;
           payloadRecurrenceArchive = records.recurrenceCompletionArchive;
+          payloadJournalStats = records.journalStats;
         }
 
-        return Object.assign({
+        const normalizedJournalStats = normalizeJournalStats(
+          payloadJournalStats === undefined ? state.journalStats : payloadJournalStats
+        );
+        const payload = Object.assign({
           version: 3,
           savedAt: new Date().toISOString(),
           records: Array.isArray(payloadRecords) ? payloadRecords : state.records,
@@ -9918,6 +10078,10 @@
             Array.isArray(payloadRecurrenceArchive) ? payloadRecurrenceArchive : state.recurrenceCompletionArchive
           )
         }, extra || {});
+        if (hasJournalStats(normalizedJournalStats)) {
+          payload.journalStats = normalizedJournalStats;
+        }
+        return payload;
       }
 
       function parseRecordsPayload(raw) {
@@ -9939,6 +10103,7 @@
           recurrenceCompletionArchive: !Array.isArray(parsed)
             ? normalizeRecurrenceCompletionArchiveEntries(parsed.recurrenceCompletionArchive)
             : [],
+          journalStats: !Array.isArray(parsed) ? normalizeJournalStats(parsed.journalStats) : {},
           savedAt: !Array.isArray(parsed) && isValidDate(parsed.savedAt) ? new Date(parsed.savedAt).toISOString() : "",
           syncedAt: !Array.isArray(parsed) && isValidDate(parsed.syncedAt) ? new Date(parsed.syncedAt).toISOString() : "",
           payloadAt: getPayloadTimestamp(parsed)

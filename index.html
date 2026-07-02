@@ -462,35 +462,7 @@
       margin: 0;
     }
 
-    .health-summary-training-plan {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px 10px;
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
-
-    .health-summary-training-plan li {
-      position: relative;
-      max-width: 100%;
-      padding: 0 0 0 12px;
-      color: var(--text-soft);
-      font-size: 12.5px;
-      line-height: 1.55;
-    }
-
-    .health-summary-training-plan li::before {
-      content: "";
-      position: absolute;
-      left: 0;
-      top: 0.72em;
-      width: 4px;
-      height: 4px;
-      border-radius: 999px;
-      background: var(--text-faint);
-    }
-
+    .health-summary-training-plan,
     .health-summary-advice {
       grid-column: 1 / -1;
       display: grid;
@@ -500,6 +472,7 @@
       list-style: none;
     }
 
+    .health-summary-training-plan li,
     .health-summary-advice li {
       position: relative;
       max-width: 100%;
@@ -509,6 +482,7 @@
       line-height: 1.55;
     }
 
+    .health-summary-training-plan li::before,
     .health-summary-advice li::before {
       content: "";
       position: absolute;

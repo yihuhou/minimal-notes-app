@@ -352,6 +352,8 @@
     }
 
     .health-summary[hidden],
+    .health-summary-training[hidden],
+    .health-summary-training-plan[hidden],
     .health-summary-advice[hidden],
     .health-summary-metrics[hidden],
     .health-summary-notices[hidden] {
@@ -418,6 +420,74 @@
       font-size: 11px;
       font-weight: 600;
       line-height: 1.2;
+    }
+
+    .health-summary-training {
+      display: grid;
+      gap: 4px;
+      padding-top: 7px;
+      border-top: 1px solid var(--border);
+    }
+
+    .health-summary-training-header {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 8px;
+      align-items: baseline;
+      min-width: 0;
+    }
+
+    .health-summary-training-label {
+      color: var(--text-faint);
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    .health-summary-training-title {
+      min-width: 0;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+
+    .health-summary-training-meta,
+    .health-summary-training-reason {
+      color: var(--text-soft);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .health-summary-training-reason {
+      margin: 0;
+    }
+
+    .health-summary-training-plan {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .health-summary-training-plan li {
+      position: relative;
+      padding-left: 10px;
+      color: var(--text-soft);
+      font-size: 11.5px;
+      line-height: 1.45;
+    }
+
+    .health-summary-training-plan li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.68em;
+      width: 3px;
+      height: 3px;
+      border-radius: 999px;
+      background: #3f7f61;
     }
 
     .health-summary-advice {
@@ -1911,6 +1981,15 @@
           <p id="healthSummaryText" class="health-summary-text"></p>
         </div>
         <div id="healthSummaryMetrics" class="health-summary-metrics" aria-label="健康指标" hidden></div>
+        <div id="healthSummaryTraining" class="health-summary-training" aria-label="今日训练建议" hidden>
+          <div class="health-summary-training-header">
+            <span id="healthSummaryTrainingLabel" class="health-summary-training-label">今日训练</span>
+            <strong id="healthSummaryTrainingTitle" class="health-summary-training-title"></strong>
+            <span id="healthSummaryTrainingMeta" class="health-summary-training-meta"></span>
+          </div>
+          <p id="healthSummaryTrainingReason" class="health-summary-training-reason"></p>
+          <ul id="healthSummaryTrainingPlan" class="health-summary-training-plan" hidden></ul>
+        </div>
         <ul id="healthSummaryAdvice" class="health-summary-advice" aria-label="健康建议" hidden></ul>
         <ul id="healthSummaryNotices" class="health-summary-notices" aria-label="健康状态提示" hidden></ul>
       </section>
@@ -2267,6 +2346,12 @@
       const healthSummaryLabel = document.getElementById("healthSummaryLabel");
       const healthSummaryText = document.getElementById("healthSummaryText");
       const healthSummaryMetrics = document.getElementById("healthSummaryMetrics");
+      const healthSummaryTraining = document.getElementById("healthSummaryTraining");
+      const healthSummaryTrainingLabel = document.getElementById("healthSummaryTrainingLabel");
+      const healthSummaryTrainingTitle = document.getElementById("healthSummaryTrainingTitle");
+      const healthSummaryTrainingMeta = document.getElementById("healthSummaryTrainingMeta");
+      const healthSummaryTrainingReason = document.getElementById("healthSummaryTrainingReason");
+      const healthSummaryTrainingPlan = document.getElementById("healthSummaryTrainingPlan");
       const healthSummaryAdvice = document.getElementById("healthSummaryAdvice");
       const healthSummaryNotices = document.getElementById("healthSummaryNotices");
       const syncActionButton = document.getElementById("syncActionButton");
@@ -4516,6 +4601,7 @@
         healthSummaryText.textContent = "";
         healthSummaryMetrics.innerHTML = "";
         healthSummaryMetrics.hidden = true;
+        clearHealthSummaryTraining();
         healthSummaryAdvice.innerHTML = "";
         healthSummaryAdvice.hidden = true;
         healthSummaryNotices.innerHTML = "";
@@ -4649,6 +4735,7 @@
           updatedText: formatHealthSummaryUpdatedAt(updatedAt),
           updatedTitle: formatHealthSummaryFullDate(updatedAt),
           summary: summary,
+          trainingSuggestion: normalizeHealthSummaryTrainingSuggestion(entry.trainingSuggestion || value.trainingSuggestion),
           advice: normalizeHealthSummaryList(entry.advice || entry.suggestions).slice(0, 2),
           metrics: normalizeHealthSummaryMetrics(entry.metrics).slice(0, 3),
           notices: normalizeHealthSummaryList(notices, 120).slice(0, 3)
@@ -4758,6 +4845,8 @@
         });
         healthSummaryMetrics.hidden = !summary.metrics.length;
 
+        renderHealthSummaryTraining(summary.trainingSuggestion);
+
         healthSummaryAdvice.innerHTML = "";
         summary.advice.forEach(function (text) {
           const item = document.createElement("li");
@@ -4774,6 +4863,48 @@
         });
         healthSummaryNotices.hidden = !summary.notices.length;
         healthSummary.hidden = false;
+      }
+
+      function clearHealthSummaryTraining() {
+        if (!healthSummaryTraining) {
+          return;
+        }
+
+        healthSummaryTraining.hidden = true;
+        healthSummaryTrainingLabel.textContent = "今日训练";
+        healthSummaryTrainingTitle.textContent = "";
+        healthSummaryTrainingMeta.textContent = "";
+        healthSummaryTrainingReason.textContent = "";
+        healthSummaryTrainingPlan.innerHTML = "";
+        healthSummaryTrainingPlan.hidden = true;
+      }
+
+      function renderHealthSummaryTraining(training) {
+        clearHealthSummaryTraining();
+        if (!training || (!training.title && !training.reason && !training.plan.length)) {
+          return;
+        }
+
+        healthSummaryTrainingLabel.textContent = training.label || "今日训练";
+        healthSummaryTrainingTitle.textContent = training.title || "";
+        healthSummaryTrainingMeta.textContent = formatHealthSummaryTrainingMeta(training);
+        healthSummaryTrainingReason.textContent = training.reason || "";
+
+        training.plan.forEach(function (text) {
+          const item = document.createElement("li");
+          item.textContent = text;
+          healthSummaryTrainingPlan.appendChild(item);
+        });
+        healthSummaryTrainingPlan.hidden = !training.plan.length;
+        healthSummaryTraining.hidden = false;
+      }
+
+      function formatHealthSummaryTrainingMeta(training) {
+        return [
+          training.categoryLabel,
+          training.duration,
+          training.intensity
+        ].filter(Boolean).join(" · ");
       }
 
       function normalizeHealthSummaryText(value, maxLength) {
@@ -4795,6 +4926,51 @@
         return value.map(function (item) {
           return normalizeHealthSummaryText(item, maxLength || 90);
         }).filter(Boolean);
+      }
+
+      function normalizeHealthSummaryTrainingSuggestion(value) {
+        if (!value || typeof value !== "object") {
+          return null;
+        }
+
+        const category = normalizeHealthSummaryText(value.category || value.type || value.kind || "", 18);
+        const training = {
+          label: normalizeHealthSummaryText(value.label || "今日训练", 16) || "今日训练",
+          category: category,
+          categoryLabel: normalizeHealthSummaryTrainingCategory(category, value.categoryLabel),
+          title: normalizeHealthSummaryText(value.title || value.name || "", 32),
+          duration: normalizeHealthSummaryText(value.duration || value.time || "", 18),
+          intensity: normalizeHealthSummaryText(value.intensity || value.effort || "", 18),
+          reason: normalizeHealthSummaryText(value.reason || value.rationale || value.note || "", 90),
+          plan: normalizeHealthSummaryList(value.plan || value.steps || value.items, 34).slice(0, 3)
+        };
+
+        if (!training.title && !training.reason && !training.plan.length) {
+          return null;
+        }
+        return training;
+      }
+
+      function normalizeHealthSummaryTrainingCategory(category, explicitLabel) {
+        const direct = normalizeHealthSummaryText(explicitLabel || "", 18);
+        if (direct) {
+          return direct;
+        }
+
+        const key = String(category || "").toLowerCase();
+        if (key === "cardio" || key === "aerobic") {
+          return "有氧";
+        }
+        if (key === "strength") {
+          return "力量";
+        }
+        if (key === "supportive" || key === "mobility") {
+          return "支持性";
+        }
+        if (key === "rest" || key === "recovery") {
+          return "恢复";
+        }
+        return normalizeHealthSummaryText(category, 18);
       }
 
       function normalizeHealthSummaryMetrics(value) {

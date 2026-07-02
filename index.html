@@ -1364,6 +1364,29 @@
       flex-wrap: wrap;
     }
 
+    #summaryText {
+      text-align: right;
+    }
+
+    .journal-flower-line {
+      display: block;
+      margin-top: 3px;
+    }
+
+    .journal-flower-count {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 3px;
+      white-space: nowrap;
+    }
+
+    .journal-flower-icon {
+      color: #9f625c;
+      font-size: 1.04em;
+      font-weight: 650;
+      line-height: 1;
+    }
+
     .item.upcoming .item-text,
     .item.upcoming .icon-btn:hover,
     .item.upcoming .icon-btn.danger:hover {
@@ -2001,6 +2024,8 @@
       const REMOTE_SYNC_INTERVAL = 15000;
       const REMOTE_WRITE_MAX_ATTEMPTS = 5;
       const JOURNAL_ROLLOVER_HOUR = 5;
+      const JOURNAL_FLOWER_BASE_COUNT = 746;
+      const JOURNAL_FLOWER_START_DAY_KEY = "2026-06-18";
       const JOURNAL_EDIT_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
       const LOCATION_ALIASES = {
       };
@@ -5418,14 +5443,37 @@
             return total + countTextCharacters(record.text);
           }, 0);
           const journalDayCount = countJournalDays(journalRecords);
+          const journalFlowerCount = JOURNAL_FLOWER_BASE_COUNT + countJournalFlowerDays(journalRecords);
           const countText = visible.length === journalRecords.length
             ? "日记 " + formatSummaryNumber(journalRecords.length) + " 条"
             : "日记共 " + formatSummaryNumber(journalRecords.length) + " 条，当前显示 " + formatSummaryNumber(visible.length) + " 条";
-          summaryText.textContent = countText + " · " + formatSummaryNumber(journalDayCount) + " 天 · 总字数 " + formatSummaryNumber(journalWordCount) + " 字";
+          renderJournalSummaryText(countText, journalDayCount, journalFlowerCount, journalWordCount);
           return;
         }
 
         summaryText.textContent = "共 " + totalVisibleCount + " 条，当前显示 " + visible.length + " 条";
+      }
+
+      function renderJournalSummaryText(countText, journalDayCount, journalFlowerCount, journalWordCount) {
+        const flowerText = formatSummaryNumber(journalFlowerCount) + " 朵小红花";
+        const flowerLine = document.createElement("span");
+        const flower = document.createElement("span");
+        const icon = document.createElement("span");
+
+        flowerLine.className = "journal-flower-line";
+        flower.className = "journal-flower-count";
+        flower.title = "小红花：截至 2026/6/17 已有 746 朵，2026/6/18 起按自然日 0 点累加";
+        icon.className = "journal-flower-icon";
+        icon.setAttribute("aria-hidden", "true");
+        icon.textContent = "✿";
+
+        flower.appendChild(icon);
+        flower.appendChild(document.createTextNode(flowerText));
+        flowerLine.appendChild(flower);
+
+        summaryText.textContent = "";
+        summaryText.appendChild(document.createTextNode(countText + " · " + formatSummaryNumber(journalDayCount) + " 天 · 总字数 " + formatSummaryNumber(journalWordCount) + " 字"));
+        summaryText.appendChild(flowerLine);
       }
 
       function countJournalDays(records) {
@@ -5439,14 +5487,44 @@
         return days.size;
       }
 
+      function countJournalFlowerDays(records) {
+        const days = new Set();
+        (records || []).forEach(function (record) {
+          const dayKey = getJournalFlowerDayKey(record);
+          if (dayKey && dayKey >= JOURNAL_FLOWER_START_DAY_KEY) {
+            days.add(dayKey);
+          }
+        });
+        return days.size;
+      }
+
       function getJournalDayKey(record) {
         const value = getJournalDateValue(record);
         if (!value || !isValidDate(value)) {
           return "";
         }
 
-        const date = new Date(value);
-        return [date.getFullYear(), date.getMonth() + 1, date.getDate()].join("-");
+        return formatLocalDayKey(new Date(value));
+      }
+
+      function getJournalFlowerDayKey(record) {
+        const value = normalizeDateTime(record && record.createdAt) || normalizeDateTime(record && record.updatedAt);
+        if (!value || !isValidDate(value)) {
+          return "";
+        }
+
+        return formatLocalDayKey(new Date(value));
+      }
+
+      function formatLocalDayKey(date) {
+        if (!date || !isValidDate(date)) {
+          return "";
+        }
+
+        const pad = function (number) {
+          return String(number).padStart(2, "0");
+        };
+        return [date.getFullYear(), pad(date.getMonth() + 1), pad(date.getDate())].join("-");
       }
 
       function countTextCharacters(text) {

@@ -5751,6 +5751,13 @@
           return formatCompactDateOnly(record.eventAt);
         }
 
+        if (record.type === "meeting" && extractTimeRangeFromText(record.text)) {
+          const endAt = getMeetingEndAt(record);
+          if (endAt && isValidDate(endAt)) {
+            return formatCompactDateTimeRange(record.eventAt, endAt);
+          }
+        }
+
         return formatCompactDateTime(record.eventAt);
       }
 
@@ -5792,6 +5799,44 @@
           pad(date.getHours()),
           ":",
           pad(date.getMinutes())
+        ].join("");
+      }
+
+      function formatCompactDateTimeRange(startValue, endValue) {
+        if (!startValue || !endValue || !isValidDate(startValue) || !isValidDate(endValue)) {
+          return "";
+        }
+
+        const start = new Date(startValue);
+        const end = new Date(endValue);
+        const pad = function (num) {
+          return String(num).padStart(2, "0");
+        };
+        const startText = [
+          start.getMonth() + 1,
+          "/",
+          start.getDate(),
+          " ",
+          pad(start.getHours()),
+          ":",
+          pad(start.getMinutes())
+        ].join("");
+        const endTimeText = [
+          pad(end.getHours()),
+          ":",
+          pad(end.getMinutes())
+        ].join("");
+
+        if (isSameLocalCalendarDay(start, end)) {
+          return startText + "-" + endTimeText;
+        }
+
+        return startText + "-" + [
+          end.getMonth() + 1,
+          "/",
+          end.getDate(),
+          " ",
+          endTimeText
         ].join("");
       }
 
@@ -7475,11 +7520,7 @@
         const end = new Date(start.getTime());
         const range = extractTimeRangeFromText(record.text);
         if (range) {
-          end.setHours(range.hours, range.minutes, 0, 0);
-          if (end.getTime() <= start.getTime()) {
-            end.setTime(start.getTime() + 60 * 60 * 1000);
-          }
-          return end;
+          return resolveTimeRangeEndDate(start, range);
         }
 
         if (isMidnightDateTime(eventAt)) {
@@ -7591,13 +7632,10 @@
 
         const start = new Date(record.eventAt);
         const range = extractTimeRangeFromText(record.text);
-        const end = new Date(start.getTime());
+        let end = new Date(start.getTime());
 
         if (range) {
-          end.setHours(range.hours, range.minutes, 0, 0);
-          if (end.getTime() <= start.getTime()) {
-            end.setTime(start.getTime() + 60 * 60 * 1000);
-          }
+          end = resolveTimeRangeEndDate(start, range);
         } else if (isMidnightDateTime(record.eventAt) && hasExplicitAllDayToken(record.text)) {
           end.setHours(23, 59, 0, 0);
         } else {
@@ -7612,6 +7650,11 @@
       }
 
       function extractTimeRangeFromText(text) {
+        const rangeInfo = extractTimeRangeInfoFromText(text);
+        return rangeInfo ? rangeInfo.end : null;
+      }
+
+      function extractTimeRangeInfoFromText(text) {
         const source = String(text || "");
         const periodTimePattern = "(?:" + getTimePeriodPatternSource() + ")?\\s*" + getTimeFragmentPatternSource();
         const rangeMatch = source.match(new RegExp("(" + periodTimePattern + ")\\s*(?:到|至|-|~|～)\\s*(" + periodTimePattern + ")"));
@@ -7619,8 +7662,42 @@
           return null;
         }
 
-        const fallbackLabel = extractTimePeriodLabel(rangeMatch[1]) || extractTimePeriodLabel(source);
-        return parseTimeFragment(rangeMatch[2], fallbackLabel);
+        const fallbackLabel = extractTimePeriodLabel(rangeMatch[1])
+          || extractTimePeriodLabel(source)
+          || inferTimePeriodLabelByWords(source);
+        const start = parseTimeFragment(rangeMatch[1], fallbackLabel);
+        const end = parseTimeFragment(rangeMatch[2], fallbackLabel);
+        if (!start || !end) {
+          return null;
+        }
+
+        return {
+          start: start,
+          end: end
+        };
+      }
+
+      function resolveTimeRangeEndDate(start, range) {
+        const end = new Date(start.getTime());
+        end.setHours(range.hours, range.minutes, 0, 0);
+
+        if (end.getTime() <= start.getTime()
+          && range.ambiguousMeridiem
+          && start.getHours() >= 12
+          && range.hours < 12) {
+          end.setHours(range.hours + 12, range.minutes, 0, 0);
+        }
+
+        if (end.getTime() <= start.getTime()) {
+          const nextDayEnd = new Date(end.getTime());
+          nextDayEnd.setDate(nextDayEnd.getDate() + 1);
+          if (nextDayEnd.getTime() > start.getTime()) {
+            return nextDayEnd;
+          }
+          end.setTime(start.getTime() + 60 * 60 * 1000);
+        }
+
+        return end;
       }
 
       function getTimePeriodPatternSource() {
@@ -7710,7 +7787,7 @@
 
       function parseTimeFragment(text, fallbackPeriodLabel) {
         const source = String(text || "");
-        const periodLabel = extractTimePeriodLabel(source) || fallbackPeriodLabel || "";
+        const periodLabel = extractTimePeriodLabel(source) || fallbackPeriodLabel || inferTimePeriodLabelByWords(source);
         const hmMatch = source.match(new RegExp("(" + getTimeNumberPatternSource() + ")\\s*[:：]\\s*(" + getTimeNumberPatternSource() + ")"));
         if (hmMatch) {
           const hours = parseTimeNumberToken(hmMatch[1]);
@@ -7721,7 +7798,8 @@
 
           return {
             hours: clampHour(applyTimePeriod(hours, periodLabel)),
-            minutes: clampMinute(minutes)
+            minutes: clampMinute(minutes),
+            ambiguousMeridiem: isAmbiguousMeridiemTime(hours, periodLabel)
           };
         }
 
@@ -9100,6 +9178,7 @@
         const date = new Date(dateInfo.date.getTime());
         if (timeInfo.matched) {
           date.setHours(timeInfo.hours, timeInfo.minutes, 0, 0);
+          adjustAmbiguousSameDayMeridiem(date, referenceNow, timeInfo);
           return { hasTemporalHint: true, eventAt: date.toISOString(), date: dateInfo.date };
         }
 
@@ -9314,7 +9393,18 @@
 
       function parseTimeFromText(text) {
         const defaultTime = inferDefaultTimeByWords(text);
-        const periodLabel = extractTimePeriodLabel(text);
+        const periodLabel = extractTimePeriodLabel(text) || inferTimePeriodLabelByWords(text);
+        const rangeInfo = extractTimeRangeInfoFromText(text);
+        if (rangeInfo) {
+          return {
+            matched: true,
+            hours: rangeInfo.start.hours,
+            minutes: rangeInfo.start.minutes,
+            ambiguousMeridiem: Boolean(rangeInfo.start.ambiguousMeridiem),
+            timeRange: rangeInfo
+          };
+        }
+
         const hmMatch = text.match(new RegExp("(" + getTimeNumberPatternSource() + ")\\s*[:：]\\s*(" + getTimeNumberPatternSource() + ")"));
         if (hmMatch) {
           const hours = parseTimeNumberToken(hmMatch[1]);
@@ -9361,19 +9451,43 @@
         return match ? match[0] : "";
       }
 
+      function inferTimePeriodLabelByWords(text) {
+        const source = String(text || "");
+        const isMealText = /吃饭|用餐|聚餐|饭局/.test(source);
+        if (/夜宵|宵夜/.test(source)) {
+          return "晚上";
+        }
+        if (/晚饭|晚餐/.test(source) || (isMealText && /傍晚|晚上|今晚|今夜|明晚|明夜/.test(source))) {
+          return "晚上";
+        }
+        if (/下午茶/.test(source)) {
+          return "下午";
+        }
+        if (/午饭|午餐|中饭/.test(source) || (isMealText && /中午|今午|明午/.test(source))) {
+          return "中午";
+        }
+        if (/早餐|早饭/.test(source) || (isMealText && /早上|今早|今晨|明早|明晨|上午/.test(source))) {
+          return "早上";
+        }
+        return "";
+      }
+
       function inferDefaultTimeByWords(text) {
-        const isMealText = /吃饭|用餐|聚餐|饭局|午饭|午餐|晚饭|晚餐/.test(text);
+        const isMealText = /吃饭|用餐|聚餐|饭局|午饭|午餐|中饭|晚饭|晚餐|早餐|早饭|下午茶|夜宵|宵夜/.test(text);
         if (/凌晨/.test(text)) {
           return { hours: 1, minutes: 0 };
         }
-        if (/早上|今早|今晨|明早|明晨|上午/.test(text)) {
+        if (/早上|今早|今晨|明早|明晨|上午|早餐|早饭/.test(text)) {
           return { hours: 9, minutes: 0 };
         }
-        if (/午饭|午餐/.test(text) || (isMealText && /中午|今午|明午/.test(text))) {
+        if (/午饭|午餐|中饭/.test(text) || (isMealText && /中午|今午|明午/.test(text))) {
           return { hours: 12, minutes: 0 };
         }
         if (/晚饭|晚餐/.test(text) || (isMealText && /傍晚|晚上|今晚|今夜|明晚|明夜/.test(text))) {
           return { hours: 18, minutes: 0 };
+        }
+        if (/下午茶/.test(text)) {
+          return { hours: 15, minutes: 0 };
         }
         if (/下午/.test(text)) {
           return { hours: 14, minutes: 0 };
@@ -9381,7 +9495,7 @@
         if (/傍晚/.test(text)) {
           return { hours: 18, minutes: 0 };
         }
-        if (/晚上|今晚|今夜|明晚|明夜/.test(text)) {
+        if (/晚上|今晚|今夜|明晚|明夜|夜宵|宵夜/.test(text)) {
           return { hours: 20, minutes: 0 };
         }
         return null;
@@ -9495,10 +9609,32 @@
 
         const explicitDateInfo = parseExplicitCalendarDate(String(text || ""), referenceNow);
         if (!explicitDateInfo.matched) {
+          return shouldRepairStoredMeridiemShift(text, currentEventAt, inferredEventAt);
+        }
+
+        if (!isSameLocalCalendarDay(currentEventAt, inferredEventAt)) {
+          return true;
+        }
+
+        return shouldRepairStoredMeridiemShift(text, currentEventAt, inferredEventAt);
+      }
+
+      function shouldRepairStoredMeridiemShift(text, currentEventAt, inferredEventAt) {
+        const source = String(text || "");
+        if (!hasExplicitTimeToken(source) || !(extractTimePeriodLabel(source) || inferTimePeriodLabelByWords(source))) {
           return false;
         }
 
-        return !isSameLocalCalendarDay(currentEventAt, inferredEventAt);
+        if (!isValidDate(currentEventAt) || !isValidDate(inferredEventAt)) {
+          return false;
+        }
+
+        const current = new Date(currentEventAt);
+        const inferred = new Date(inferredEventAt);
+        return isSameLocalCalendarDay(current, inferred)
+          && current.getMinutes() === inferred.getMinutes()
+          && current.getSeconds() === inferred.getSeconds()
+          && inferred.getHours() - current.getHours() === 12;
       }
 
       function getTextResolutionReferenceAt(record, text, type) {

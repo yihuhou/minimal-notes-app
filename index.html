@@ -6220,7 +6220,18 @@
       }
 
       function hasDisplayDateToken(text) {
-        return getDisplayDateTokenPattern().test(String(text || ""));
+        const source = String(text || "");
+        const pattern = getDisplayDateTokenPattern();
+        let match;
+        while ((match = pattern.exec(source)) !== null) {
+          if (isUsableDisplayDateMatch(source, match)) {
+            return true;
+          }
+          if (match[0].length === 0) {
+            pattern.lastIndex += 1;
+          }
+        }
+        return false;
       }
 
       function getRelativeDayPatternSource() {
@@ -6353,8 +6364,9 @@
       function injectWeekdayIntoText(source, weekday) {
         const fullDateText = insertWeekdayAfterPattern(
           source,
-          /(\d{4}\s*(?:年|[\/.-])\s*\d{1,2}\s*(?:月|[\/.-])\s*\d{1,2}\s*(?:日|号)?)/,
-          " " + weekday
+          /(\d{4}\s*(?:年|[\/.-])\s*\d{1,2}\s*(?:月|[\/.-])\s*\d{1,2}(?:\s*(?:日|号))?)/,
+          " " + weekday,
+          isUsableDisplayDateMatch
         );
         if (fullDateText !== source) {
           return fullDateText;
@@ -6362,8 +6374,9 @@
 
         const monthDayText = insertWeekdayAfterPattern(
           source,
-          /(\d{1,2}\s*(?:月|[\/.-])\s*\d{1,2}\s*(?:日|号)?)/,
-          " " + weekday
+          /(\d{1,2}\s*(?:月|[\/.-])\s*\d{1,2}(?:\s*(?:日|号))?)/,
+          " " + weekday,
+          isUsableDisplayDateMatch
         );
         if (monthDayText !== source) {
           return monthDayText;
@@ -6487,14 +6500,74 @@
         return date;
       }
 
-      function insertWeekdayAfterPattern(source, pattern, suffix) {
-        const match = String(source || "").match(pattern);
-        if (!match || match.index == null) {
-          return source;
+      function insertWeekdayAfterPattern(source, pattern, suffix, isUsableMatch) {
+        const text = String(source || "");
+        const flags = pattern.flags.indexOf("g") >= 0 ? pattern.flags : pattern.flags + "g";
+        const globalPattern = new RegExp(pattern.source, flags);
+        let match;
+        while ((match = globalPattern.exec(text)) !== null) {
+          if (!isUsableMatch || isUsableMatch(text, match)) {
+            const insertAt = match.index + match[0].length;
+            return text.slice(0, insertAt) + suffix + text.slice(insertAt);
+          }
+          if (match[0].length === 0) {
+            globalPattern.lastIndex += 1;
+          }
         }
 
-        const insertAt = match.index + match[0].length;
-        return source.slice(0, insertAt) + suffix + source.slice(insertAt);
+        return source;
+      }
+
+      function isUsableDisplayDateMatch(source, match) {
+        if (!match || match.index == null) {
+          return false;
+        }
+
+        const token = String(match[0] || "").trim();
+        if (!token) {
+          return false;
+        }
+
+        if (isDateTokenInsideClock(source, match.index, match[0].length)) {
+          return false;
+        }
+
+        return isValidDisplayDateToken(token);
+      }
+
+      function isDateTokenInsideClock(source, index, length) {
+        const text = String(source || "");
+        const before = text.slice(Math.max(0, index - 2), index);
+        const after = text.slice(index + length, Math.min(text.length, index + length + 2));
+        return /[:：]\s*$/.test(before) || /^\s*[:：]/.test(after);
+      }
+
+      function isValidDisplayDateToken(token) {
+        const source = String(token || "").trim();
+        if (!source) {
+          return false;
+        }
+
+        if (!/\d/.test(source)) {
+          return true;
+        }
+
+        const fullDateMatch = source.match(/^(\d{4})\s*(?:年|[\/.-])\s*(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?$/);
+        if (fullDateMatch) {
+          return isValidCalendarDateParts(
+            Number(fullDateMatch[1]),
+            Number(fullDateMatch[2]),
+            Number(fullDateMatch[3])
+          );
+        }
+
+        const monthDayMatch = source.match(/^(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?$/);
+        if (monthDayMatch) {
+          return isValidMonth(Number(monthDayMatch[1]))
+            && isValidMonthDay(Number(monthDayMatch[2]));
+        }
+
+        return true;
       }
 
       function highlightJournalRecordText(text) {

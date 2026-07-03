@@ -3289,7 +3289,12 @@
           return;
         }
 
+        const record = findIdeaRecord(input.dataset.id || "");
         input.dataset.originalValue = input.value;
+        input.dataset.originalUpdatedAt = record && isValidDate(record.updatedAt)
+          ? new Date(record.updatedAt).toISOString()
+          : "";
+        delete input.dataset.draftUpdatedAt;
         autoSizeIdeaInput(input);
       }
 
@@ -3310,7 +3315,10 @@
           return;
         }
 
+        const now = new Date().toISOString();
         record.text = nextText;
+        record.updatedAt = now;
+        input.dataset.draftUpdatedAt = now;
         autoSizeIdeaInput(input);
         persist();
         patchIdeaTextInList(record);
@@ -3332,6 +3340,14 @@
           const originalValue = input.dataset.originalValue;
           if (typeof originalValue === "string") {
             input.value = originalValue;
+            const record = findIdeaRecord(input.dataset.id || "");
+            if (record) {
+              record.text = originalValue;
+              restoreIdeaRecordOriginalUpdatedAt(record, input);
+              delete input.dataset.draftUpdatedAt;
+              persist();
+              patchIdeaTextInList(record);
+            }
           }
           input.blur();
         }
@@ -3350,6 +3366,128 @@
         return state.records.find(function (record) {
           return record.id === id && record.type === "idea";
         }) || null;
+      }
+
+      function restoreIdeaRecordOriginalUpdatedAt(record, input) {
+        if (!record || !input) {
+          return;
+        }
+
+        const originalUpdatedAt = input.dataset.originalUpdatedAt;
+        if (isValidDate(originalUpdatedAt)) {
+          record.updatedAt = new Date(originalUpdatedAt).toISOString();
+          return;
+        }
+
+        delete record.updatedAt;
+      }
+
+      function getActiveIdeaPaneDraft() {
+        if (!ideaPane || !document.activeElement || !document.activeElement.closest) {
+          return null;
+        }
+
+        const input = document.activeElement.closest('[data-role="idea-pane-text"]');
+        if (!input || !ideaPane.contains(input)) {
+          return null;
+        }
+
+        const id = input.dataset.id || "";
+        if (!id) {
+          return null;
+        }
+
+        const value = String(input.value || "");
+        const originalValue = typeof input.dataset.originalValue === "string"
+          ? input.dataset.originalValue
+          : value;
+        const record = findIdeaRecord(id);
+        const originalUpdatedAt = normalizeDateTime(input.dataset.originalUpdatedAt) || "";
+        const draftUpdatedAt = normalizeDateTime(input.dataset.draftUpdatedAt)
+          || normalizeDateTime(record && record.updatedAt)
+          || new Date().toISOString();
+
+        return {
+          id: id,
+          value: value,
+          originalValue: originalValue,
+          originalUpdatedAt: originalUpdatedAt,
+          dirty: value !== originalValue,
+          updatedAt: draftUpdatedAt,
+          selectionStart: typeof input.selectionStart === "number" ? input.selectionStart : value.length,
+          selectionEnd: typeof input.selectionEnd === "number" ? input.selectionEnd : value.length,
+          selectionDirection: typeof input.selectionDirection === "string" ? input.selectionDirection : "none"
+        };
+      }
+
+      function applyIdeaPaneDraftToRecords(records, draft) {
+        if (!draft || !draft.dirty || !Array.isArray(records)) {
+          return false;
+        }
+
+        const record = records.find(function (item) {
+          return item && item.id === draft.id && item.type === "idea";
+        });
+        if (!record) {
+          return false;
+        }
+
+        const nextText = String(draft.value || "");
+        const updatedAt = normalizeDateTime(draft.updatedAt) || new Date().toISOString();
+        let changed = record.text !== nextText;
+        record.text = nextText;
+        if (!isValidDate(record.updatedAt)
+          || new Date(record.updatedAt).getTime() < new Date(updatedAt).getTime()) {
+          record.updatedAt = updatedAt;
+          changed = true;
+        }
+        return changed;
+      }
+
+      function restoreIdeaPaneDraft(draft) {
+        if (!draft || !ideaPane) {
+          return;
+        }
+
+        const input = ideaPane.querySelector('[data-role="idea-pane-text"][data-id="' + cssEscape(draft.id) + '"]');
+        if (!input) {
+          return;
+        }
+
+        if (draft.dirty && input.value !== draft.value) {
+          input.value = draft.value;
+        }
+        if (draft.dirty) {
+          input.dataset.originalValue = draft.originalValue;
+          input.dataset.originalUpdatedAt = draft.originalUpdatedAt || "";
+          if (draft.updatedAt) {
+            input.dataset.draftUpdatedAt = draft.updatedAt;
+          }
+        } else {
+          const record = findIdeaRecord(draft.id);
+          input.dataset.originalValue = input.value;
+          input.dataset.originalUpdatedAt = record && isValidDate(record.updatedAt)
+            ? new Date(record.updatedAt).toISOString()
+            : "";
+          delete input.dataset.draftUpdatedAt;
+        }
+        autoSizeIdeaInput(input);
+
+        requestAnimationFrame(function () {
+          try {
+            input.focus({ preventScroll: true });
+          } catch (error) {
+            input.focus();
+          }
+          const valueLength = String(input.value || "").length;
+          const start = Math.min(Math.max(Number(draft.selectionStart) || 0, 0), valueLength);
+          const end = Math.min(Math.max(Number(draft.selectionEnd) || start, 0), valueLength);
+          try {
+            input.setSelectionRange(start, end, draft.selectionDirection || "none");
+          } catch (error) {
+            input.setSelectionRange(start, end);
+          }
+        });
       }
 
       function patchIdeaTextInList(record) {
@@ -3387,7 +3525,9 @@
 
         if (!trimmedNext) {
           record.text = previousText;
+          restoreIdeaRecordOriginalUpdatedAt(record, input);
           input.value = previousText;
+          delete input.dataset.draftUpdatedAt;
           persist();
           patchIdeaTextInList(record);
           setStatus("想法内容不能为空。");
@@ -3397,6 +3537,10 @@
         const changed = trimmedNext !== String(previousText || "").trim();
         if (!changed) {
           input.dataset.originalValue = nextText;
+          input.dataset.originalUpdatedAt = isValidDate(record.updatedAt)
+            ? new Date(record.updatedAt).toISOString()
+            : "";
+          delete input.dataset.draftUpdatedAt;
           if (record.text !== nextText) {
             record.text = nextText;
             persist();
@@ -3410,6 +3554,8 @@
         record.updatedAt = now;
         pushHistory(record, "edited", now);
         input.dataset.originalValue = nextText;
+        input.dataset.originalUpdatedAt = now;
+        delete input.dataset.draftUpdatedAt;
         persist();
         render();
         setStatus("想法已更新。");
@@ -4109,6 +4255,7 @@
         const file = await state.sync.handle.getFile();
         const raw = await file.text();
         state.sync.lastModified = file.lastModified || 0;
+        const activeIdeaDraft = getActiveIdeaPaneDraft();
 
         if (!raw.trim()) {
           state.sync.error = "";
@@ -4117,7 +4264,10 @@
         }
 
         const payload = parseRecordsEnvelope(raw);
-        const mergedPayload = mergeRecordsPayloads(getRecordsPayloadSnapshot(), payload);
+        const localPayload = getRecordsPayloadSnapshot();
+        applyIdeaPaneDraftToRecords(localPayload.records, activeIdeaDraft);
+        const mergedPayload = mergeRecordsPayloads(localPayload, payload);
+        applyIdeaPaneDraftToRecords(mergedPayload.records, activeIdeaDraft);
         const fileNeedsMergedWrite = !recordsPayloadContentEqual(payload, mergedPayload);
         state.records = mergedPayload.records;
         state.deletedRecords = mergedPayload.deletedRecords;
@@ -4773,8 +4923,11 @@
             return;
           }
 
+          const activeIdeaDraft = getActiveIdeaPaneDraft();
           const localPayload = getRecordsPayloadSnapshot();
+          applyIdeaPaneDraftToRecords(localPayload.records, activeIdeaDraft);
           const mergedPayload = mergeRecordsPayloads(localPayload, result);
+          applyIdeaPaneDraftToRecords(mergedPayload.records, activeIdeaDraft);
           const localNeedsMerge = !recordsPayloadContentEqual(localPayload, mergedPayload);
           const remoteNeedsMerge = !recordsPayloadContentEqual(result, mergedPayload);
 
@@ -5627,8 +5780,10 @@
           return false;
         }
 
+        const activeIdeaDraft = getActiveIdeaPaneDraft();
         const revisionAtWriteStart = state.recordsRevision;
         let recordsSnapshot = getRecordsPayloadSnapshot();
+        applyIdeaPaneDraftToRecords(recordsSnapshot.records, activeIdeaDraft);
         let baseSha = state.remote.sha;
         let payloadAt = "";
 
@@ -5643,6 +5798,7 @@
             baseSha = latestBeforeWrite.sha || baseSha;
             state.remote.sha = latestBeforeWrite.sha || state.remote.sha;
             recordsSnapshot = mergeRecordsPayloads(latestBeforeWrite, recordsSnapshot);
+            applyIdeaPaneDraftToRecords(recordsSnapshot.records, activeIdeaDraft);
             if (state.recordsRevision === revisionAtWriteStart
               && !state.remote.writeQueued
               && !recordsPayloadContentEqual(getRecordsPayloadSnapshot(), recordsSnapshot)) {
@@ -5701,6 +5857,7 @@
             state.remote.sha = latest.sha || "";
             if (!latest.missing) {
               recordsSnapshot = mergeRecordsPayloads(latest, recordsSnapshot);
+              applyIdeaPaneDraftToRecords(recordsSnapshot.records, activeIdeaDraft);
               if (state.recordsRevision === revisionAtWriteStart
                 && !state.remote.writeQueued
                 && !recordsPayloadContentEqual(getRecordsPayloadSnapshot(), recordsSnapshot)) {
@@ -6974,6 +7131,7 @@
           return;
         }
 
+        const activeIdeaDraft = getActiveIdeaPaneDraft();
         const journalFocus = state.filter === "journal";
         const ideas = getOpenIdeas();
         const hasIdeas = ideas.length > 0;
@@ -6996,6 +7154,9 @@
 
         ideaPane.innerHTML = ideas.map(renderIdeaCard).join("");
         syncIdeaPaneHeights();
+        if (!journalFocus) {
+          restoreIdeaPaneDraft(activeIdeaDraft);
+        }
       }
 
       function setIdeaPanePrivacyMode(enabled) {

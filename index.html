@@ -1482,23 +1482,27 @@
 
     .journal-bottom-jump {
       position: fixed;
-      right: 18px;
-      bottom: calc(18px + env(safe-area-inset-bottom));
+      left: 50%;
+      bottom: calc(24px + env(safe-area-inset-bottom));
       z-index: 30;
-      width: 46px;
-      height: 46px;
+      width: 52px;
+      height: 52px;
       padding: 0;
-      border: 1px solid rgba(159, 98, 92, 0.32);
+      border: 1px solid rgba(255, 255, 255, 0.84);
       border-radius: 999px;
-      background: rgba(255, 255, 253, 0.94);
-      color: #8f514d;
-      box-shadow: 0 14px 34px rgba(61, 49, 40, 0.16);
+      background: rgba(255, 255, 255, 0.82);
+      color: #111111;
+      box-shadow: 0 10px 26px rgba(16, 24, 40, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.56);
       display: none;
       align-items: center;
       justify-content: center;
-      gap: 1px;
-      font-family: "Cascadia Mono", "SFMono-Regular", "Menlo", "Consolas", "Microsoft YaHei UI", monospace;
+      font-family: Arial, "Microsoft YaHei UI", sans-serif;
+      font-size: 40px;
+      font-weight: 300;
       line-height: 1;
+      transform: translateX(-50%);
+      backdrop-filter: blur(18px) saturate(1.12);
+      -webkit-backdrop-filter: blur(18px) saturate(1.12);
       -webkit-tap-highlight-color: transparent;
     }
 
@@ -1508,21 +1512,15 @@
 
     .journal-bottom-jump:hover,
     .journal-bottom-jump:focus-visible {
-      border-color: rgba(159, 98, 92, 0.52);
-      background: #fffefe;
+      border-color: rgba(255, 255, 255, 0.94);
+      background: rgba(255, 255, 255, 0.9);
       outline: none;
-      transform: translateY(-1px);
-    }
-
-    .journal-bottom-jump-flower {
-      font-size: 21px;
-      font-weight: 650;
+      transform: translateX(-50%) translateY(-1px);
     }
 
     .journal-bottom-jump-arrow {
-      font-size: 14px;
-      font-weight: 800;
-      transform: translateY(2px);
+      display: block;
+      transform: translateY(-2px);
     }
 
     .g-teacher-panel {
@@ -2233,7 +2231,6 @@
     </div>
   </main>
   <button id="journalBottomJump" class="journal-bottom-jump" type="button" aria-label="跳到日记底部查看小红花统计" title="跳到小红花统计" hidden>
-    <span class="journal-bottom-jump-flower" aria-hidden="true">✿</span>
     <span class="journal-bottom-jump-arrow" aria-hidden="true">↓</span>
   </button>
   <div id="deleteDialog" class="delete-dialog" role="dialog" aria-modal="true" aria-labelledby="deleteDialogTitle" aria-describedby="deleteDialogDescription" hidden>
@@ -2549,6 +2546,7 @@
       let deleteDialogResolve = null;
       let deleteDialogPreviousFocus = null;
       let journalBottomJumpFrame = 0;
+      let journalBottomJumpScrollSeen = false;
 
       bindEvents();
       loadRemoteSyncSettings();
@@ -5977,6 +5975,13 @@
           return;
         }
 
+        const scrollY = getWindowScrollY();
+        if (state.filter === "journal" && scrollY > 24) {
+          journalBottomJumpScrollSeen = true;
+        } else if (state.filter !== "journal" || scrollY <= 4) {
+          journalBottomJumpScrollSeen = false;
+        }
+
         journalBottomJumpFrame = requestAnimationFrame(function () {
           journalBottomJumpFrame = 0;
           updateJournalBottomJump();
@@ -5989,14 +5994,18 @@
         }
 
         const footer = getSummaryFooter();
-        const scrollable = document.documentElement.scrollHeight > window.innerHeight + 96;
-        if (state.filter !== "journal" || !footer || !scrollable) {
+        const scrollHeight = getDocumentScrollHeight();
+        const scrollY = getWindowScrollY();
+        const scrollable = scrollHeight > window.innerHeight + 96;
+        if (state.filter !== "journal" || !footer || !scrollable || !journalBottomJumpScrollSeen) {
           journalBottomJump.hidden = true;
           return;
         }
 
         const rect = footer.getBoundingClientRect();
-        journalBottomJump.hidden = rect.top <= window.innerHeight - 88;
+        const footerVisible = rect.top <= window.innerHeight - 76;
+        const atBottom = scrollY + window.innerHeight >= scrollHeight - 24;
+        journalBottomJump.hidden = footerVisible || atBottom;
       }
 
       function jumpToJournalSummary() {
@@ -6024,6 +6033,17 @@
         }
 
         return summaryText.closest ? summaryText.closest(".footer") : summaryText;
+      }
+
+      function getWindowScrollY() {
+        return window.pageYOffset || document.documentElement.scrollTop || 0;
+      }
+
+      function getDocumentScrollHeight() {
+        return Math.max(
+          document.documentElement.scrollHeight,
+          document.body ? document.body.scrollHeight : 0
+        );
       }
 
       function renderFilters() {

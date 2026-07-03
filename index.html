@@ -6945,7 +6945,7 @@
         const body = source.slice(0, signatureStart).replace(/\s+$/, "");
         const trailing = source.slice(trimmedEnd.length);
         return highlightJournalRecordText(body)
-          + '<span class="g-teacher-signature">' + escapeHtml(G_TEACHER_SIGNATURE) + "</span>"
+          + '<span class="g-teacher-signature">' + highlightJournalRecordText(G_TEACHER_SIGNATURE) + "</span>"
           + escapeHtml(trailing);
       }
 

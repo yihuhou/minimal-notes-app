@@ -1039,7 +1039,7 @@
       border-color: rgba(63, 95, 141, 0.18);
     }
 
-    .item.g-teacher .item-tags > .token-g-teacher:first-child {
+    .item.g-teacher.tags-inline .item-tags > .token-g-teacher:first-child {
       margin-left: -0.65em;
     }
 
@@ -2547,6 +2547,7 @@
       let deleteDialogResolve = null;
       let deleteDialogPreviousFocus = null;
       let journalBottomJumpFrame = 0;
+      let gTeacherTagAlignmentFrame = 0;
       let journalBottomJumpShowIntent = false;
       let journalBottomJumpLastScrollY = getWindowScrollY();
 
@@ -2656,6 +2657,7 @@
           window.addEventListener("scroll", scheduleJournalBottomJumpUpdate, { passive: true });
           window.addEventListener("resize", scheduleJournalBottomJumpUpdate);
         }
+        window.addEventListener("resize", scheduleGTeacherTagAlignmentUpdate);
 
         document.addEventListener("keydown", function (event) {
           const target = event.target;
@@ -5972,8 +5974,37 @@
         renderSummary(visible);
         renderGTeacherPanel();
         renderList(visible);
+        updateGTeacherTagAlignment();
         renderIdeaPane();
         updateJournalBottomJump();
+      }
+
+      function scheduleGTeacherTagAlignmentUpdate() {
+        if (gTeacherTagAlignmentFrame) {
+          return;
+        }
+
+        gTeacherTagAlignmentFrame = requestAnimationFrame(function () {
+          gTeacherTagAlignmentFrame = 0;
+          updateGTeacherTagAlignment();
+        });
+      }
+
+      function updateGTeacherTagAlignment() {
+        const items = recordList.querySelectorAll(".item.g-teacher");
+        items.forEach(function (item) {
+          const tags = item.querySelector(".item-tags");
+          const text = item.querySelector(".item-text");
+          if (!tags || !text) {
+            item.classList.remove("tags-inline");
+            return;
+          }
+
+          const tagsRect = tags.getBoundingClientRect();
+          const textRect = text.getBoundingClientRect();
+          const sameLine = textRect.top < tagsRect.bottom - 1 && textRect.bottom > tagsRect.top + 1;
+          item.classList.toggle("tags-inline", sameLine);
+        });
       }
 
       function scheduleJournalBottomJumpUpdate() {

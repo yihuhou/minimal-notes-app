@@ -2345,7 +2345,7 @@
       const G_TEACHER_SIGNATURE = "——G老师";
       const G_TEACHER_ID_PATTERN = /^g-teacher-\d{4}-\d{2}-\d{2}-(?:morning|evening|pulse-[123])$/;
       const G_TEACHER_VIEW_MODES = ["mine", "with", "only"];
-      const G_TEACHER_FEEDBACK_VALUES = ["like", "dislike", "deleted"];
+      const G_TEACHER_FEEDBACK_VALUES = ["like", "dislike", "deleted", "cleared"];
       const G_TEACHER_LONG_PRESS_MS = 560;
       const G_TEACHER_LONG_PRESS_MOVE_TOLERANCE = 10;
       const JOURNAL_EDIT_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
@@ -3225,19 +3225,27 @@
         const stats = normalizeJournalStats(state.journalStats);
         const gTeacher = normalizeGTeacherStats(stats.gTeacher) || { enabled: true };
         const feedback = normalizeGTeacherFeedbackMap(gTeacher.feedback);
-        if (!feedback[record.id]) {
+        if (!feedback[record.id] || feedback[record.id].value === "cleared") {
           setStatus("这条G老师日记还没有反馈。");
           return;
         }
 
-        delete feedback[record.id];
-        if (Object.keys(feedback).length) {
-          gTeacher.feedback = feedback;
-        } else {
-          delete gTeacher.feedback;
+        const now = new Date().toISOString();
+        feedback[record.id] = {
+          value: "cleared",
+          at: now
+        };
+        const createdAt = normalizeDateTime(record.createdAt);
+        const textPreview = summarizeGTeacherFeedbackText(record);
+        if (createdAt) {
+          feedback[record.id].createdAt = createdAt;
         }
+        if (textPreview) {
+          feedback[record.id].textPreview = textPreview;
+        }
+        gTeacher.feedback = feedback;
         stats.gTeacher = gTeacher;
-        stats.updatedAt = new Date().toISOString();
+        stats.updatedAt = now;
         state.journalStats = stats;
         persist();
         render();
@@ -6384,7 +6392,8 @@
           ? stats.gTeacher.feedback
           : {};
         const entry = feedback[String(recordId || "")];
-        return normalizeGTeacherFeedbackValue(entry && entry.value);
+        const value = normalizeGTeacherFeedbackValue(entry && entry.value);
+        return value === "cleared" ? "" : value;
       }
 
       function formatGTeacherFeedbackLabel(value) {

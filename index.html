@@ -3420,6 +3420,11 @@
         };
       }
 
+      function hasActiveDirtyIdeaPaneDraft() {
+        const draft = getActiveIdeaPaneDraft();
+        return Boolean(draft && draft.dirty);
+      }
+
       function applyIdeaPaneDraftToRecords(records, draft) {
         if (!draft || !draft.dirty || !Array.isArray(records)) {
           return false;
@@ -4348,8 +4353,27 @@
         if (!state.sync.handle || state.sync.writeInFlight) {
           return;
         }
+        if (hasActiveDirtyIdeaPaneDraft()) {
+          state.sync.writeQueued = true;
+          window.clearTimeout(syncWriteTimer);
+          syncWriteTimer = window.setTimeout(function () {
+            syncWriteTimer = null;
+            writeQueuedSyncFile();
+          }, 1000);
+          updateStorageStatus();
+          return;
+        }
 
         while (state.sync.writeQueued) {
+          if (hasActiveDirtyIdeaPaneDraft()) {
+            window.clearTimeout(syncWriteTimer);
+            syncWriteTimer = window.setTimeout(function () {
+              syncWriteTimer = null;
+              writeQueuedSyncFile();
+            }, 1000);
+            updateStorageStatus();
+            return;
+          }
           state.sync.writeQueued = false;
           const ok = await writeCurrentRecordsToSyncFile();
           if (!ok) {
@@ -4373,6 +4397,9 @@
 
       async function checkForSyncFileChanges() {
         if (!state.sync.handle || state.sync.writeInFlight || state.sync.writeQueued) {
+          return;
+        }
+        if (hasActiveDirtyIdeaPaneDraft()) {
           return;
         }
 
@@ -4813,6 +4840,13 @@
 
         if (state.remote.writeInFlight || state.remote.writeQueued) {
           setStatus("GitHub 同步正在进行。");
+          return;
+        }
+        if (hasActiveDirtyIdeaPaneDraft()) {
+          updateStorageStatus();
+          if (!opts.silent) {
+            setStatus("正在编辑想法，离开输入框后再同步。");
+          }
           return;
         }
 
@@ -5938,6 +5972,16 @@
         if (!state.remote.enabled) {
           return;
         }
+        if (hasActiveDirtyIdeaPaneDraft()) {
+          state.remote.writeQueued = true;
+          window.clearTimeout(remoteWriteTimer);
+          remoteWriteTimer = window.setTimeout(function () {
+            remoteWriteTimer = null;
+            writeQueuedRemote();
+          }, 1000);
+          updateStorageStatus();
+          return;
+        }
 
         if (state.remote.writeInFlight) {
           window.clearTimeout(remoteWriteTimer);
@@ -5950,6 +5994,15 @@
         }
 
         while (state.remote.writeQueued) {
+          if (hasActiveDirtyIdeaPaneDraft()) {
+            window.clearTimeout(remoteWriteTimer);
+            remoteWriteTimer = window.setTimeout(function () {
+              remoteWriteTimer = null;
+              writeQueuedRemote();
+            }, 1000);
+            updateStorageStatus();
+            return;
+          }
           state.remote.writeQueued = false;
           const ok = await writeCurrentRecordsToRemote();
           if (!ok) {
@@ -7136,11 +7189,17 @@
         const ideas = getOpenIdeas();
         const hasIdeas = ideas.length > 0;
         const shouldShowIdeaPane = hasIdeas || journalFocus;
+        const keepActiveDraftEditor = Boolean(activeIdeaDraft && activeIdeaDraft.dirty && !journalFocus);
 
         document.body.classList.toggle("journal-focus", journalFocus);
         workspace.classList.toggle("journal-focus", journalFocus);
         workspace.classList.toggle("has-ideas", shouldShowIdeaPane);
         setIdeaPanePrivacyMode(journalFocus);
+        if (keepActiveDraftEditor) {
+          applyIdeaPaneDraftToRecords(state.records, activeIdeaDraft);
+          syncIdeaPaneHeights();
+          return;
+        }
 
         if (!shouldShowIdeaPane) {
           ideaPane.innerHTML = "";

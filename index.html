@@ -1043,6 +1043,13 @@
       margin-left: -0.65em;
     }
 
+    .g-teacher-signature {
+      display: block;
+      margin-top: 0.25em;
+      padding-right: 1.4em;
+      text-align: right;
+    }
+
     .item.readonly .item-line {
       cursor: default;
     }
@@ -6906,6 +6913,9 @@
 
       function renderDisplayTextHtml(record) {
         if (record && record.type === "journal") {
+          if (isGTeacherRecord(record)) {
+            return renderGTeacherJournalTextHtml(getDisplayText(record));
+          }
           return highlightJournalRecordText(getDisplayText(record));
         }
 
@@ -6922,6 +6932,21 @@
           + "</span>"
           + highlightRecordText(mismatchInfo.expectedWeekday)
           + highlightRecordText(mismatchInfo.after);
+      }
+
+      function renderGTeacherJournalTextHtml(text) {
+        const source = String(text || "");
+        const trimmedEnd = source.replace(/\s+$/, "");
+        if (!trimmedEnd.endsWith(G_TEACHER_SIGNATURE)) {
+          return highlightJournalRecordText(source);
+        }
+
+        const signatureStart = trimmedEnd.length - G_TEACHER_SIGNATURE.length;
+        const body = source.slice(0, signatureStart).replace(/\s+$/, "");
+        const trailing = source.slice(trimmedEnd.length);
+        return highlightJournalRecordText(body)
+          + '<span class="g-teacher-signature">' + escapeHtml(G_TEACHER_SIGNATURE) + "</span>"
+          + escapeHtml(trailing);
       }
 
       function getWeekdayMismatchInfo(record) {

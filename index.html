@@ -5069,6 +5069,10 @@
               queueSyncFileWrite();
               render();
             }
+            if (recordsPayloadContentEqual(latestBeforeWrite, recordsSnapshot)) {
+              markRemoteNoopWriteAsSynced(latestBeforeWrite, revisionAtWriteStart);
+              return true;
+            }
           }
 
           const body = {
@@ -5123,6 +5127,10 @@
                 queueSyncFileWrite();
                 render();
               }
+              if (recordsPayloadContentEqual(latest, recordsSnapshot)) {
+                markRemoteNoopWriteAsSynced(latest, revisionAtWriteStart);
+                return true;
+              }
               refreshBodyContent();
             }
             await waitForRemoteWriteRetry(attempt);
@@ -5152,6 +5160,19 @@
           state.remote.writeInFlight = false;
           updateStorageStatus();
         }
+      }
+
+      function markRemoteNoopWriteAsSynced(remotePayload, revisionAtWriteStart) {
+        const remotePayloadAt = remotePayload && (remotePayload.payloadAt || getPayloadTimestamp(remotePayload));
+        state.remote.sha = remotePayload && remotePayload.sha ? remotePayload.sha : state.remote.sha;
+        state.remote.lastSyncAt = new Date().toISOString();
+        state.remote.lastPayloadAt = remotePayloadAt || state.remote.lastPayloadAt;
+        state.localPayloadAt = remotePayloadAt || state.localPayloadAt;
+        state.remote.staleSha = "";
+        state.remote.pushLocalNext = state.recordsRevision !== revisionAtWriteStart || state.remote.writeQueued;
+        state.remote.error = "";
+        saveRemoteSyncSettingsToLocal();
+        updateStorageStatus();
       }
 
       function queueRemoteWrite() {

@@ -2217,7 +2217,7 @@
       const G_TEACHER_ID_PATTERN = /^g-teacher-\d{4}-\d{2}-\d{2}-(?:morning|evening|pulse-[123])$/;
       const G_TEACHER_VIEW_MODES = ["mine", "with", "only"];
       const JOURNAL_EDIT_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
-      const G_TEACHER_READONLY_MESSAGE = "G老师日记由自动化写入，用户端只读。";
+      const G_TEACHER_EDIT_LOCKED_MESSAGE = "G老师日记由自动化写入，不能编辑。";
       const JOURNAL_READONLY_MESSAGE = "3 天以外的日记只读。";
       const LOCATION_ALIASES = {
       };
@@ -2805,10 +2805,10 @@
           return;
         }
 
-        if (isRecordReadOnly(record)) {
+        if (isRecordEditLocked(record)) {
           state.editingId = null;
           render();
-          setStatus(getRecordReadOnlyMessage(record));
+          setStatus(getRecordEditLockedMessage(record));
           return;
         }
 
@@ -3025,11 +3025,6 @@
           return;
         }
 
-        if (isRecordReadOnly(record)) {
-          setStatus(getRecordReadOnlyMessage(record));
-          return;
-        }
-
         if (record.type === "journal") {
           setStatus("日记不需要标记完成。");
           return;
@@ -3095,7 +3090,7 @@
           return;
         }
 
-        if (isRecordReadOnly(record)) {
+        if (isRecordDeleteLocked(record)) {
           setStatus(getRecordReadOnlyMessage(record));
           return;
         }
@@ -3255,10 +3250,10 @@
           return;
         }
 
-        if (isRecordReadOnly(record)) {
+        if (isRecordEditLocked(record)) {
           state.editingId = null;
           render();
-          setStatus(getRecordReadOnlyMessage(record));
+          setStatus(getRecordEditLockedMessage(record));
           return;
         }
 
@@ -6127,8 +6122,10 @@
 
       function renderItem(record, conflicts) {
         const readOnly = isRecordReadOnly(record);
+        const editLocked = isRecordEditLocked(record);
+        const deleteLocked = isRecordDeleteLocked(record);
         const toggleDisabled = isRecordToggleDisabled(record);
-        const editing = state.editingId === record.id && !readOnly;
+        const editing = state.editingId === record.id && !editLocked;
         const urgent = hasUrgencyTag(record);
         const classes = [
           "item",
@@ -6151,7 +6148,7 @@
           editing ? renderInlineEdit(record) : renderDisplay(record, urgent, conflicts),
           "</div>",
           '<div class="item-actions">',
-          readOnly ? "" : '<button type="button" class="icon-btn danger" data-action="delete" data-id="' + escapeHtml(record.id) + '" aria-label="删除" title="删除">×</button>',
+          deleteLocked ? "" : '<button type="button" class="icon-btn danger" data-action="delete" data-id="' + escapeHtml(record.id) + '" aria-label="删除" title="删除">×</button>',
           "</div>",
           "</article>"
         ].join("");
@@ -6160,9 +6157,10 @@
       function renderDisplay(record, urgent, conflicts) {
         const displayText = getDisplayText(record);
         const readOnly = isRecordReadOnly(record);
+        const editLocked = isRecordEditLocked(record);
         const gTeacherRecord = record.type === "journal" && isGTeacherRecord(record);
         const parts = [];
-        parts.push(readOnly
+        parts.push(editLocked
           ? '<div class="item-line" title="' + escapeHtml(buildItemTitle(record)) + '">'
           : '<div class="item-line" data-action="open-edit" data-id="' + escapeHtml(record.id) + '" tabindex="0" title="' + escapeHtml(buildItemTitle(record)) + '">');
         parts.push('<span class="item-tags">');
@@ -6199,7 +6197,7 @@
         }
         if (record.type === "journal") {
           parts.push('<span class="code-token token-muted">' + escapeHtml(formatJournalDateToken(record)) + "</span>");
-          if (readOnly && !gTeacherRecord) {
+          if (readOnly) {
             parts.push('<span class="code-token token-muted">只读</span>');
           }
         }
@@ -6322,7 +6320,7 @@
         if (isRecordReadOnly(record)) {
           return {
             className: "readonly",
-            symbol: "•",
+            symbol: "",
             ariaLabel: "只读日记",
             title: getRecordReadOnlyMessage(record)
           };
@@ -6615,18 +6613,30 @@
       }
 
       function isRecordReadOnly(record) {
-        return isGTeacherRecord(record) || isJournalReadOnly(record);
+        return isJournalReadOnly(record);
+      }
+
+      function isRecordEditLocked(record) {
+        return isGTeacherRecord(record) || isRecordReadOnly(record);
+      }
+
+      function isRecordDeleteLocked(record) {
+        return isRecordReadOnly(record);
+      }
+
+      function getRecordEditLockedMessage(record) {
+        if (isGTeacherRecord(record)) {
+          return G_TEACHER_EDIT_LOCKED_MESSAGE;
+        }
+        return getRecordReadOnlyMessage(record);
       }
 
       function getRecordReadOnlyMessage(record) {
-        if (isGTeacherRecord(record)) {
-          return G_TEACHER_READONLY_MESSAGE;
-        }
         return JOURNAL_READONLY_MESSAGE;
       }
 
       function isRecordToggleDisabled(record) {
-        return Boolean(record && record.type === "journal") || isRecordReadOnly(record);
+        return Boolean(record && record.type === "journal") || isRecordEditLocked(record);
       }
 
       function isJournalReadOnly(record) {

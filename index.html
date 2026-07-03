@@ -2214,9 +2214,11 @@
       const REMOTE_WRITE_MAX_ATTEMPTS = 5;
       const JOURNAL_ROLLOVER_HOUR = 5;
       const G_TEACHER_SIGNATURE = "——G老师";
-      const G_TEACHER_ID_PATTERN = /^g-teacher-\d{4}-\d{2}-\d{2}-(?:morning|evening)$/;
+      const G_TEACHER_ID_PATTERN = /^g-teacher-\d{4}-\d{2}-\d{2}-(?:morning|evening|pulse-[123])$/;
       const G_TEACHER_VIEW_MODES = ["mine", "with", "only"];
       const JOURNAL_EDIT_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+      const G_TEACHER_READONLY_MESSAGE = "G老师日记由自动化写入，用户端只读。";
+      const JOURNAL_READONLY_MESSAGE = "3 天以外的日记只读。";
       const LOCATION_ALIASES = {
       };
       // Public baseline only. Personal journal terms are loaded from JOURNAL_PRIVATE_HIGHLIGHTS_PATH.
@@ -2806,7 +2808,7 @@
         if (isRecordReadOnly(record)) {
           state.editingId = null;
           render();
-          setStatus("3 天以外的日记只读。");
+          setStatus(getRecordReadOnlyMessage(record));
           return;
         }
 
@@ -3023,13 +3025,13 @@
           return;
         }
 
-        if (record.type === "journal") {
-          setStatus("日记不需要标记完成。");
+        if (isRecordReadOnly(record)) {
+          setStatus(getRecordReadOnlyMessage(record));
           return;
         }
 
-        if (isRecordReadOnly(record)) {
-          setStatus("3 天以外的日记只读。");
+        if (record.type === "journal") {
+          setStatus("日记不需要标记完成。");
           return;
         }
 
@@ -3094,7 +3096,7 @@
         }
 
         if (isRecordReadOnly(record)) {
-          setStatus("3 天以外的日记只读。");
+          setStatus(getRecordReadOnlyMessage(record));
           return;
         }
 
@@ -3256,7 +3258,7 @@
         if (isRecordReadOnly(record)) {
           state.editingId = null;
           render();
-          setStatus("3 天以外的日记只读。");
+          setStatus(getRecordReadOnlyMessage(record));
           return;
         }
 
@@ -6197,7 +6199,7 @@
         }
         if (record.type === "journal") {
           parts.push('<span class="code-token token-muted">' + escapeHtml(formatJournalDateToken(record)) + "</span>");
-          if (readOnly) {
+          if (readOnly && !gTeacherRecord) {
             parts.push('<span class="code-token token-muted">只读</span>');
           }
         }
@@ -6322,7 +6324,7 @@
             className: "readonly",
             symbol: "•",
             ariaLabel: "只读日记",
-            title: "3 天以外的日记只读"
+            title: getRecordReadOnlyMessage(record)
           };
         }
 
@@ -6613,7 +6615,14 @@
       }
 
       function isRecordReadOnly(record) {
-        return isJournalReadOnly(record);
+        return isGTeacherRecord(record) || isJournalReadOnly(record);
+      }
+
+      function getRecordReadOnlyMessage(record) {
+        if (isGTeacherRecord(record)) {
+          return G_TEACHER_READONLY_MESSAGE;
+        }
+        return JOURNAL_READONLY_MESSAGE;
       }
 
       function isRecordToggleDisabled(record) {

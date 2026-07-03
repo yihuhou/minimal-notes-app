@@ -3317,7 +3317,6 @@
 
         const now = new Date().toISOString();
         record.text = nextText;
-        record.updatedAt = now;
         input.dataset.draftUpdatedAt = now;
         autoSizeIdeaInput(input);
         persist();
@@ -3541,13 +3540,15 @@
 
         const changed = trimmedNext !== String(previousText || "").trim();
         if (!changed) {
+          const currentText = record.text;
+          const currentUpdatedAt = normalizeDateTime(record.updatedAt);
+          record.text = nextText;
+          restoreIdeaRecordOriginalUpdatedAt(record, input);
+          const restoredUpdatedAt = normalizeDateTime(record.updatedAt);
           input.dataset.originalValue = nextText;
-          input.dataset.originalUpdatedAt = isValidDate(record.updatedAt)
-            ? new Date(record.updatedAt).toISOString()
-            : "";
+          input.dataset.originalUpdatedAt = restoredUpdatedAt;
           delete input.dataset.draftUpdatedAt;
-          if (record.text !== nextText) {
-            record.text = nextText;
+          if (currentText !== nextText || currentUpdatedAt !== restoredUpdatedAt) {
             persist();
             patchIdeaTextInList(record);
           }
@@ -7196,7 +7197,6 @@
         workspace.classList.toggle("has-ideas", shouldShowIdeaPane);
         setIdeaPanePrivacyMode(journalFocus);
         if (keepActiveDraftEditor) {
-          applyIdeaPaneDraftToRecords(state.records, activeIdeaDraft);
           syncIdeaPaneHeights();
           return;
         }

@@ -5931,6 +5931,9 @@
             return !isGTeacherRecord(record);
           });
           const gTeacherRecords = journalRecords.filter(isGTeacherRecord);
+          const visibleUserJournalRecords = visible.filter(function (record) {
+            return record.type === "journal" && !isGTeacherRecord(record);
+          });
           const journalWordCount = userJournalRecords.reduce(function (total, record) {
             return total + countTextCharacters(record.text);
           }, 0);
@@ -5939,9 +5942,9 @@
           const journalRitualCount = journalRitualStats
             ? journalRitualStats.baseCount + countJournalRitualDays(userJournalRecords, journalRitualStats)
             : null;
-          const countText = visible.length === journalRecords.length
+          const countText = visibleUserJournalRecords.length === userJournalRecords.length
             ? "我的日记 " + formatSummaryNumber(userJournalRecords.length) + " 条"
-            : "我的日记共 " + formatSummaryNumber(userJournalRecords.length) + " 条，当前显示 " + formatSummaryNumber(visible.length) + " 条";
+            : "我的日记共 " + formatSummaryNumber(userJournalRecords.length) + " 条，当前显示 " + formatSummaryNumber(visibleUserJournalRecords.length) + " 条";
           const gTeacherText = gTeacherRecords.length
             ? " · G老师 " + formatSummaryNumber(gTeacherRecords.length) + " 条"
             : "";

@@ -1480,6 +1480,51 @@
       line-height: 1;
     }
 
+    .journal-bottom-jump {
+      position: fixed;
+      right: 18px;
+      bottom: calc(18px + env(safe-area-inset-bottom));
+      z-index: 30;
+      width: 46px;
+      height: 46px;
+      padding: 0;
+      border: 1px solid rgba(159, 98, 92, 0.32);
+      border-radius: 999px;
+      background: rgba(255, 255, 253, 0.94);
+      color: #8f514d;
+      box-shadow: 0 14px 34px rgba(61, 49, 40, 0.16);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 1px;
+      font-family: "Cascadia Mono", "SFMono-Regular", "Menlo", "Consolas", "Microsoft YaHei UI", monospace;
+      line-height: 1;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .journal-bottom-jump[hidden] {
+      display: none !important;
+    }
+
+    .journal-bottom-jump:hover,
+    .journal-bottom-jump:focus-visible {
+      border-color: rgba(159, 98, 92, 0.52);
+      background: #fffefe;
+      outline: none;
+      transform: translateY(-1px);
+    }
+
+    .journal-bottom-jump-flower {
+      font-size: 21px;
+      font-weight: 650;
+    }
+
+    .journal-bottom-jump-arrow {
+      font-size: 14px;
+      font-weight: 800;
+      transform: translateY(2px);
+    }
+
     .g-teacher-panel {
       margin: 0 24px 2px;
       padding: 0;
@@ -1901,6 +1946,16 @@
       .workspace.journal-focus .idea-pane {
         display: none;
       }
+
+      .journal-bottom-jump {
+        display: inline-flex;
+      }
+    }
+
+    @media (hover: none) and (pointer: coarse) {
+      .journal-bottom-jump {
+        display: inline-flex;
+      }
     }
 
     @media (max-width: 980px) and (orientation: landscape) {
@@ -2177,6 +2232,10 @@
     <aside id="ideaPane" class="idea-pane" aria-live="polite"></aside>
     </div>
   </main>
+  <button id="journalBottomJump" class="journal-bottom-jump" type="button" aria-label="跳到日记底部查看小红花统计" title="跳到小红花统计" hidden>
+    <span class="journal-bottom-jump-flower" aria-hidden="true">✿</span>
+    <span class="journal-bottom-jump-arrow" aria-hidden="true">↓</span>
+  </button>
   <div id="deleteDialog" class="delete-dialog" role="dialog" aria-modal="true" aria-labelledby="deleteDialogTitle" aria-describedby="deleteDialogDescription" hidden>
     <div class="delete-dialog-scrim" data-delete-mode="cancel"></div>
     <div class="delete-dialog-panel">
@@ -2446,6 +2505,7 @@
       const workspace = document.getElementById("workspace");
       const openCount = document.getElementById("openCount");
       const summaryText = document.getElementById("summaryText");
+      const journalBottomJump = document.getElementById("journalBottomJump");
       const statusText = document.getElementById("statusText");
       const healthSummary = document.getElementById("healthSummary");
       const healthSummaryLabel = document.getElementById("healthSummaryLabel");
@@ -2488,6 +2548,7 @@
       let healthSummaryLoadId = 0;
       let deleteDialogResolve = null;
       let deleteDialogPreviousFocus = null;
+      let journalBottomJumpFrame = 0;
 
       bindEvents();
       loadRemoteSyncSettings();
@@ -2586,6 +2647,11 @@
         clearRemoteSyncButton.addEventListener("click", clearRemoteSyncSettings);
         secureExitButton.addEventListener("click", secureExit);
         importFile.addEventListener("change", importRecords);
+        if (journalBottomJump) {
+          journalBottomJump.addEventListener("click", jumpToJournalSummary);
+          window.addEventListener("scroll", scheduleJournalBottomJumpUpdate, { passive: true });
+          window.addEventListener("resize", scheduleJournalBottomJumpUpdate);
+        }
 
         document.addEventListener("keydown", function (event) {
           const target = event.target;
@@ -5903,6 +5969,61 @@
         renderGTeacherPanel();
         renderList(visible);
         renderIdeaPane();
+        updateJournalBottomJump();
+      }
+
+      function scheduleJournalBottomJumpUpdate() {
+        if (!journalBottomJump || journalBottomJumpFrame) {
+          return;
+        }
+
+        journalBottomJumpFrame = requestAnimationFrame(function () {
+          journalBottomJumpFrame = 0;
+          updateJournalBottomJump();
+        });
+      }
+
+      function updateJournalBottomJump() {
+        if (!journalBottomJump) {
+          return;
+        }
+
+        const footer = getSummaryFooter();
+        const scrollable = document.documentElement.scrollHeight > window.innerHeight + 96;
+        if (state.filter !== "journal" || !footer || !scrollable) {
+          journalBottomJump.hidden = true;
+          return;
+        }
+
+        const rect = footer.getBoundingClientRect();
+        journalBottomJump.hidden = rect.top <= window.innerHeight - 88;
+      }
+
+      function jumpToJournalSummary() {
+        const footer = getSummaryFooter();
+        if (!footer) {
+          return;
+        }
+
+        const reduceMotion = window.matchMedia
+          && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        try {
+          footer.scrollIntoView({
+            behavior: reduceMotion ? "auto" : "smooth",
+            block: "center"
+          });
+        } catch (error) {
+          footer.scrollIntoView(false);
+        }
+        window.setTimeout(updateJournalBottomJump, reduceMotion ? 0 : 350);
+      }
+
+      function getSummaryFooter() {
+        if (!summaryText) {
+          return null;
+        }
+
+        return summaryText.closest ? summaryText.closest(".footer") : summaryText;
       }
 
       function renderFilters() {

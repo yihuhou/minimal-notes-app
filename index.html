@@ -1059,19 +1059,6 @@
       -webkit-tap-highlight-color: transparent;
     }
 
-    .token-g-teacher-feedback {
-      color: #4d6056;
-      background: rgba(77, 96, 86, 0.08);
-      border-color: rgba(77, 96, 86, 0.16);
-    }
-
-    .token-g-teacher-feedback.dislike,
-    .token-g-teacher-feedback.deleted {
-      color: #785350;
-      background: rgba(120, 83, 80, 0.08);
-      border-color: rgba(120, 83, 80, 0.16);
-    }
-
     .item.readonly .item-line {
       cursor: default;
     }
@@ -6928,7 +6915,6 @@
         const readOnly = isRecordReadOnly(record);
         const editLocked = isRecordEditLocked(record);
         const gTeacherRecord = record.type === "journal" && isGTeacherRecord(record);
-        const gTeacherFeedback = gTeacherRecord ? getGTeacherFeedbackValue(record.id) : "";
         const lineAttrs = gTeacherRecord
           ? 'class="item-line" data-g-teacher-feedback-target="true" tabindex="0" title="' + escapeHtml(buildItemTitle(record)) + '"'
           : (editLocked
@@ -6939,9 +6925,6 @@
         parts.push('<span class="item-tags">');
         if (gTeacherRecord) {
           parts.push('<span class="code-token token-g-teacher">G老师</span>');
-          if (gTeacherFeedback) {
-            parts.push('<span class="code-token token-g-teacher-feedback ' + escapeHtml(gTeacherFeedback) + '">' + escapeHtml(formatGTeacherFeedbackLabel(gTeacherFeedback)) + "</span>");
-          }
         } else {
           parts.push('<span class="badge">' + TYPE_LABELS[record.type] + "</span>");
         }

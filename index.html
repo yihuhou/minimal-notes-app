@@ -5992,8 +5992,12 @@
         }
 
         const journalFocus = state.filter === "journal";
-        gTeacherPanel.hidden = !journalFocus;
-        if (!journalFocus) {
+        const hasGTeacherRecords = hasGTeacherJournalRecords();
+        gTeacherPanel.hidden = !journalFocus || !hasGTeacherRecords;
+        if (!hasGTeacherRecords) {
+          state.journalViewMode = "with";
+        }
+        if (!journalFocus || !hasGTeacherRecords) {
           return;
         }
 
@@ -6101,6 +6105,12 @@
         }
         const text = typeof record.text === "string" ? record.text.trim() : "";
         return text.endsWith(G_TEACHER_SIGNATURE);
+      }
+
+      function hasGTeacherJournalRecords() {
+        return (state.records || []).some(function (record) {
+          return record.type === "journal" && isGTeacherRecord(record);
+        });
       }
 
       function formatSummaryNumber(value) {
@@ -7939,6 +7949,7 @@
 
       function getVisibleRecords() {
         const keyword = state.search.toLowerCase();
+        const hasGTeacherRecords = hasGTeacherJournalRecords();
         return state.records
           .slice()
           .sort(sortVisibleRecords)
@@ -7959,12 +7970,14 @@
               if (record.type !== "journal") {
                 return false;
               }
-              const gTeacherMode = normalizeGTeacherViewMode(state.journalViewMode);
-              if (gTeacherMode === "mine" && isGTeacherRecord(record)) {
-                return false;
-              }
-              if (gTeacherMode === "only" && !isGTeacherRecord(record)) {
-                return false;
+              if (hasGTeacherRecords) {
+                const gTeacherMode = normalizeGTeacherViewMode(state.journalViewMode);
+                if (gTeacherMode === "mine" && isGTeacherRecord(record)) {
+                  return false;
+                }
+                if (gTeacherMode === "only" && !isGTeacherRecord(record)) {
+                  return false;
+                }
               }
             } else if (state.filter !== "all") {
               if (record.completed || record.type !== state.filter) {

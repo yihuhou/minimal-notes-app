@@ -1483,23 +1483,23 @@
     .journal-bottom-jump {
       position: fixed;
       left: 50%;
-      bottom: calc(24px + env(safe-area-inset-bottom));
+      bottom: calc(22px + env(safe-area-inset-bottom));
       z-index: 30;
-      width: 52px;
-      height: 52px;
+      width: 40px;
+      height: 40px;
       padding: 0;
-      border: 1px solid rgba(255, 255, 255, 0.84);
+      border: 1px solid rgba(255, 255, 255, 0.78);
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.82);
+      background: rgba(255, 255, 255, 0.78);
       color: #111111;
-      box-shadow: 0 10px 26px rgba(16, 24, 40, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.56);
+      box-shadow: 0 8px 20px rgba(16, 24, 40, 0.14), inset 0 0 0 1px rgba(255, 255, 255, 0.46);
       display: none;
       align-items: center;
       justify-content: center;
       line-height: 1;
       transform: translateX(-50%);
-      backdrop-filter: blur(18px) saturate(1.12);
-      -webkit-backdrop-filter: blur(18px) saturate(1.12);
+      backdrop-filter: blur(16px) saturate(1.08);
+      -webkit-backdrop-filter: blur(16px) saturate(1.08);
       -webkit-tap-highlight-color: transparent;
     }
 
@@ -1517,9 +1517,9 @@
 
     .journal-bottom-jump-arrow {
       display: block;
-      width: 31px;
-      height: 31px;
-      transform: translateY(1px);
+      width: 22px;
+      height: 22px;
+      transform: translateY(0.5px);
     }
 
     .g-teacher-panel {
@@ -2231,7 +2231,7 @@
   </main>
   <button id="journalBottomJump" class="journal-bottom-jump" type="button" aria-label="跳到日记底部查看小红花统计" title="跳到小红花统计" hidden>
     <svg class="journal-bottom-jump-arrow" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-      <path d="M16 5.5v20.5M7.75 17.75 16 26l8.25-8.25" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"></path>
+      <path d="M16 6.5v18M8.75 17.75 16 25l7.25-7.25" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path>
     </svg>
   </button>
   <div id="deleteDialog" class="delete-dialog" role="dialog" aria-modal="true" aria-labelledby="deleteDialogTitle" aria-describedby="deleteDialogDescription" hidden>
@@ -2547,7 +2547,8 @@
       let deleteDialogResolve = null;
       let deleteDialogPreviousFocus = null;
       let journalBottomJumpFrame = 0;
-      let journalBottomJumpScrollSeen = false;
+      let journalBottomJumpShowIntent = false;
+      let journalBottomJumpLastScrollY = getWindowScrollY();
 
       bindEvents();
       loadRemoteSyncSettings();
@@ -2596,7 +2597,11 @@
             return;
           }
 
-          state.filter = button.dataset.filter;
+          const nextFilter = button.dataset.filter;
+          if (state.filter !== nextFilter) {
+            resetJournalBottomJumpIntent();
+          }
+          state.filter = nextFilter;
           render();
         });
 
@@ -5976,17 +5981,30 @@
           return;
         }
 
-        const scrollY = getWindowScrollY();
-        if (state.filter === "journal" && scrollY > 24) {
-          journalBottomJumpScrollSeen = true;
-        } else if (state.filter !== "journal" || scrollY <= 4) {
-          journalBottomJumpScrollSeen = false;
-        }
-
         journalBottomJumpFrame = requestAnimationFrame(function () {
           journalBottomJumpFrame = 0;
+          updateJournalBottomJumpIntent();
           updateJournalBottomJump();
         });
+      }
+
+      function updateJournalBottomJumpIntent() {
+        const scrollY = getWindowScrollY();
+        const delta = scrollY - journalBottomJumpLastScrollY;
+        journalBottomJumpLastScrollY = scrollY;
+        if (state.filter !== "journal" || scrollY <= 4) {
+          journalBottomJumpShowIntent = false;
+          return;
+        }
+
+        if (delta > 4) {
+          journalBottomJumpShowIntent = true;
+          return;
+        }
+
+        if (delta < -4) {
+          journalBottomJumpShowIntent = false;
+        }
       }
 
       function updateJournalBottomJump() {
@@ -5998,7 +6016,7 @@
         const scrollHeight = getDocumentScrollHeight();
         const scrollY = getWindowScrollY();
         const scrollable = scrollHeight > window.innerHeight + 96;
-        if (state.filter !== "journal" || !footer || !scrollable || !journalBottomJumpScrollSeen) {
+        if (state.filter !== "journal" || !footer || !scrollable || !journalBottomJumpShowIntent) {
           journalBottomJump.hidden = true;
           return;
         }
@@ -6045,6 +6063,14 @@
           document.documentElement.scrollHeight,
           document.body ? document.body.scrollHeight : 0
         );
+      }
+
+      function resetJournalBottomJumpIntent() {
+        journalBottomJumpShowIntent = false;
+        journalBottomJumpLastScrollY = getWindowScrollY();
+        if (journalBottomJump) {
+          journalBottomJump.hidden = true;
+        }
       }
 
       function renderFilters() {

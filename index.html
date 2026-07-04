@@ -2545,6 +2545,7 @@
           locationAliases: {},
           keywordGroups: [],
           patternRules: [],
+          suppressions: [],
           signature: "",
           error: ""
         }
@@ -5144,6 +5145,7 @@
           locationAliases: {},
           keywordGroups: [],
           patternRules: [],
+          suppressions: [],
           signature: "",
           error: ""
         };
@@ -5216,7 +5218,8 @@
         return {
           locationAliases: normalizeJournalLocationAliases(source.locationAliases),
           keywordGroups: normalizeJournalKeywordGroups(source.keywordGroups),
-          patternRules: normalizeJournalPatternRules(source.patternRules)
+          patternRules: normalizeJournalPatternRules(source.patternRules),
+          suppressions: normalizeJournalSuppressions(source.suppressions)
         };
       }
 
@@ -5308,6 +5311,48 @@
         }).filter(Boolean);
       }
 
+      function normalizeJournalSuppressions(value) {
+        if (!Array.isArray(value)) {
+          return [];
+        }
+
+        return value.map(function (item) {
+          if (!item || typeof item !== "object") {
+            return null;
+          }
+
+          const label = String(item.label || "").trim();
+          const tokenPattern = String(item.tokenPattern || "").trim();
+          const beforePattern = String(item.beforePattern || "").trim();
+          const afterPattern = String(item.afterPattern || "").trim();
+          const reason = String(item.reason || "").trim();
+          if (!tokenPattern) {
+            return null;
+          }
+
+          try {
+            new RegExp("^(?:" + tokenPattern + ")$", "i");
+            if (beforePattern) {
+              new RegExp("(?:" + beforePattern + ")$", "i");
+            }
+            if (afterPattern) {
+              new RegExp("^(?:" + afterPattern + ")", "i");
+            }
+          } catch (error) {
+            console.warn("Invalid private journal suppression ignored", tokenPattern, error);
+            return null;
+          }
+
+          return {
+            label: label,
+            tokenPattern: tokenPattern,
+            beforePattern: beforePattern,
+            afterPattern: afterPattern,
+            reason: reason
+          };
+        }).filter(Boolean);
+      }
+
       function getJournalPrivateHighlightsSignature(value) {
         if (!value) {
           return "";
@@ -5316,14 +5361,16 @@
         const hasAliases = Object.keys(value.locationAliases || {}).length > 0;
         const hasGroups = Array.isArray(value.keywordGroups) && value.keywordGroups.length > 0;
         const hasRules = Array.isArray(value.patternRules) && value.patternRules.length > 0;
-        if (!hasAliases && !hasGroups && !hasRules) {
+        const hasSuppressions = Array.isArray(value.suppressions) && value.suppressions.length > 0;
+        if (!hasAliases && !hasGroups && !hasRules && !hasSuppressions) {
           return "";
         }
 
         return JSON.stringify({
           locationAliases: value.locationAliases || {},
           keywordGroups: value.keywordGroups || [],
-          patternRules: value.patternRules || []
+          patternRules: value.patternRules || [],
+          suppressions: value.suppressions || []
         });
       }
 
@@ -8307,7 +8354,11 @@
           const token = match[0];
           const index = match.index;
           html += escapeHtml(source.slice(lastIndex, index));
-          html += wrapJournalHighlightedToken(token);
+          if (isJournalTokenSuppressed(token, source, index)) {
+            html += escapeHtml(token);
+          } else {
+            html += wrapJournalHighlightedToken(token);
+          }
           lastIndex = index + token.length;
         }
 
@@ -8590,6 +8641,63 @@
         }
 
         return null;
+      }
+
+      function isJournalTokenSuppressed(token, text, index) {
+        const suppressions = state.journalPrivateHighlights.suppressions || [];
+        if (!suppressions.length) {
+          return false;
+        }
+
+        const source = String(text || "");
+        const tokenSource = String(token || "");
+        const tokenLabel = getJournalTokenSuppressionLabel(tokenSource);
+        const tokenIndex = Number.isFinite(index) ? index : source.indexOf(tokenSource);
+        const before = tokenIndex >= 0 ? source.slice(0, tokenIndex) : "";
+        const after = tokenIndex >= 0 ? source.slice(tokenIndex + tokenSource.length) : "";
+
+        return suppressions.some(function (suppression) {
+          if (suppression.label && suppression.label !== tokenLabel) {
+            return false;
+          }
+          if (!new RegExp("^(?:" + suppression.tokenPattern + ")$", "i").test(tokenSource)) {
+            return false;
+          }
+          if (suppression.beforePattern && !new RegExp("(?:" + suppression.beforePattern + ")$", "i").test(before)) {
+            return false;
+          }
+          if (suppression.afterPattern && !new RegExp("^(?:" + suppression.afterPattern + ")", "i").test(after)) {
+            return false;
+          }
+          return true;
+        });
+      }
+
+      function getJournalTokenSuppressionLabel(token) {
+        const keywordInfo = getJournalKeywordTokenInfo(token);
+        if (keywordInfo) {
+          return keywordInfo.label;
+        }
+
+        const patternInfo = getJournalPatternTokenInfo(token);
+        if (patternInfo) {
+          return patternInfo.label;
+        }
+
+        const locationWithPrefix = splitJournalLocationPrefix(token);
+        if (locationWithPrefix || isJournalLocationToken(token)) {
+          return "地点";
+        }
+
+        if (isJournalTrailMetricToken(token)) {
+          return "出行/露营";
+        }
+
+        if (isJournalTimeToken(token)) {
+          return "时间";
+        }
+
+        return "";
       }
 
       function getJournalGroupedTokenInfo(groups, token) {

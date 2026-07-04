@@ -8138,7 +8138,32 @@
           return monthDayText;
         }
 
+        const standaloneDayText = insertWeekdayAfterPattern(
+          source,
+          /(^|[^第\dA-Za-z年月\/.-])([0-9一二两三四五六七八九十]{1,3}\s*(?:日|号))(?!\s*(?:楼|栋|座|门|线|院|房|室|厅|馆|车|桌|床|柜|机|文件|题|组|页|个|人|名|位|次|岁|元|块|%))/,
+          " " + weekday,
+          isUsableStandaloneDayDateMatch
+        );
+        if (standaloneDayText !== source) {
+          return standaloneDayText;
+        }
+
         return insertWeekdayAfterPattern(source, /(大后天|后天|明天|明日|今天|今日)/, weekday);
+      }
+
+      function isUsableStandaloneDayDateMatch(source, match) {
+        if (!match || match.index == null) {
+          return false;
+        }
+
+        const prefix = match[1] || "";
+        const dayToken = match[2] || "";
+        const dayIndex = match.index + prefix.length;
+        if (isDateTokenInsideClock(source, dayIndex, dayToken.length)) {
+          return false;
+        }
+
+        return isValidDisplayDateToken(dayToken);
       }
 
       function injectWeekdayRangeIntoText(source, startValue) {
@@ -8147,9 +8172,20 @@
           return source;
         }
 
-        const weekdayRange = formatWeekdayToken(rangeInfo.startDate) + "至" + formatWeekdayToken(rangeInfo.endDate);
+        const startWeekday = formatWeekdayToken(rangeInfo.startDate);
+        const endWeekday = formatWeekdayToken(rangeInfo.endDate);
+        if (!startWeekday || !endWeekday) {
+          return source;
+        }
+
+        const weekdayConnector = rangeInfo.weekdayConnector || "至";
+        const weekdayRange = startWeekday + weekdayConnector + endWeekday;
         const insertAt = rangeInfo.index + rangeInfo.length;
         return source.slice(0, insertAt) + " " + weekdayRange + source.slice(insertAt);
+      }
+
+      function getWeekdayConnectorForDateSeparator(separator) {
+        return /^(?:或|或者|还是)$/.test(String(separator || "").trim()) ? "或" : "至";
       }
 
       function extractDateRangeInfo(source, startValue) {
@@ -8163,13 +8199,14 @@
           return weekdayRange;
         }
 
-        let match = source.match(/(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?\s*(?:到|至|-|~|～)\s*(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?/);
+        let match = source.match(/(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?\s*(到|至|-|~|～|或者|或|还是)\s*(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?/);
         if (match && match.index != null) {
           const year = startDate.getFullYear();
           const startMonth = Number(match[1]);
           const startDay = Number(match[2]);
-          const endMonth = Number(match[3]);
-          const endDay = Number(match[4]);
+          const separator = match[3];
+          const endMonth = Number(match[4]);
+          const endDay = Number(match[5]);
           if (isValidCalendarDateParts(year, startMonth, startDay)
             && isValidCalendarDateParts(year, endMonth, endDay)) {
             const rangeStart = new Date(year, startMonth - 1, startDay);
@@ -8181,17 +8218,19 @@
               index: match.index,
               length: match[0].length,
               startDate: rangeStart,
-              endDate: rangeEnd
+              endDate: rangeEnd,
+              weekdayConnector: getWeekdayConnectorForDateSeparator(separator)
             };
           }
         }
 
-        match = source.match(/(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?\s*(?:到|至|-|~|～)\s*(\d{1,2})\s*(?:日|号)?(?!\s*(?:月|[\/.-]))/);
+        match = source.match(/(\d{1,2})\s*(?:月|[\/.-])\s*(\d{1,2})\s*(?:日|号)?\s*(到|至|-|~|～|或者|或|还是)\s*(\d{1,2})\s*(?:日|号)?(?!\s*(?:月|[\/.-]))/);
         if (match && match.index != null) {
           const year = startDate.getFullYear();
           const month = Number(match[1]);
           const startDay = Number(match[2]);
-          const endDay = Number(match[3]);
+          const separator = match[3];
+          const endDay = Number(match[4]);
           if (isValidCalendarDateParts(year, month, startDay)
             && isValidMonthDay(endDay)) {
             const rangeStart = new Date(year, month - 1, startDay);
@@ -8201,7 +8240,8 @@
                 index: match.index,
                 length: match[0].length,
                 startDate: rangeStart,
-                endDate: rangeEnd
+                endDate: rangeEnd,
+                weekdayConnector: getWeekdayConnectorForDateSeparator(separator)
               };
             }
           }
@@ -8213,7 +8253,8 @@
             index: standaloneDayRangeInfo.index,
             length: standaloneDayRangeInfo.length,
             startDate: standaloneDayRangeInfo.startDate,
-            endDate: standaloneDayRangeInfo.endDate
+            endDate: standaloneDayRangeInfo.endDate,
+            weekdayConnector: standaloneDayRangeInfo.weekdayConnector
           };
         }
 
@@ -11172,12 +11213,13 @@
           index: match.index,
           length: match.length,
           startDate: startDate,
-          endDate: resolveDayRangeEndDate(startDate, endDay)
+          endDate: resolveDayRangeEndDate(startDate, endDay),
+          weekdayConnector: getWeekdayConnectorForDateSeparator(match.separator)
         };
       }
 
       function matchStandaloneDayRange(text) {
-        const match = String(text || "").match(/(^|[^第\dA-Za-z年月\/.-])([0-9一二两三四五六七八九十]{1,3})\s*(?:日|号)?\s*(?:到|至|-|~|～)\s*([0-9一二两三四五六七八九十]{1,3})\s*(?:日|号)(?!\s*(?:楼|栋|座|门|线|院|房|室|厅|馆|车|桌|床|柜|机|文件|题|组|页|个|人|名|位|次|岁|元|块|%))/);
+        const match = String(text || "").match(/(^|[^第\dA-Za-z年月\/.-])([0-9一二两三四五六七八九十]{1,3})\s*(?:日|号)?\s*(到|至|-|~|～|或者|或|还是)\s*([0-9一二两三四五六七八九十]{1,3})\s*(?:日|号)(?!\s*(?:楼|栋|座|门|线|院|房|室|厅|馆|车|桌|床|柜|机|文件|题|组|页|个|人|名|位|次|岁|元|块|%))/);
         if (!match || match.index == null) {
           return null;
         }
@@ -11187,7 +11229,8 @@
           index: match.index + prefix.length,
           length: match[0].length - prefix.length,
           startToken: match[2],
-          endToken: match[3]
+          separator: match[3],
+          endToken: match[4]
         };
       }
 

@@ -1609,7 +1609,9 @@
       position: fixed;
       z-index: 50;
       display: flex;
+      flex-wrap: wrap;
       gap: 4px;
+      max-width: calc(100vw - 16px);
       padding: 5px;
       border: 1px solid var(--border-strong);
       border-radius: 8px;
@@ -2290,8 +2292,10 @@
     </svg>
   </button>
   <div id="gTeacherFeedbackMenu" class="g-teacher-feedback-menu" role="menu" aria-label="G老师日记反馈" hidden>
-    <button type="button" data-g-teacher-feedback="like" role="menuitemradio">喜欢</button>
-    <button type="button" data-g-teacher-feedback="dislike" role="menuitemradio">不喜欢</button>
+    <button type="button" data-g-teacher-feedback-aspect="content" data-g-teacher-feedback="like" role="menuitemcheckbox">内容喜欢</button>
+    <button type="button" data-g-teacher-feedback-aspect="content" data-g-teacher-feedback="dislike" role="menuitemcheckbox">内容不喜欢</button>
+    <button type="button" data-g-teacher-feedback-aspect="wording" data-g-teacher-feedback="like" role="menuitemcheckbox">措辞喜欢</button>
+    <button type="button" data-g-teacher-feedback-aspect="wording" data-g-teacher-feedback="dislike" role="menuitemcheckbox">措辞不喜欢</button>
     <button type="button" data-g-teacher-feedback="clear" role="menuitem">取消反馈</button>
   </div>
   <div id="deleteDialog" class="delete-dialog" role="dialog" aria-modal="true" aria-labelledby="deleteDialogTitle" aria-describedby="deleteDialogDescription" hidden>
@@ -2334,6 +2338,7 @@
       const G_TEACHER_ID_PATTERN = /^g-teacher-\d{4}-\d{2}-\d{2}-(?:morning|evening|pulse-[123])$/;
       const G_TEACHER_VIEW_MODES = ["mine", "with", "only"];
       const G_TEACHER_FEEDBACK_VALUES = ["like", "dislike", "deleted", "cleared"];
+      const G_TEACHER_FEEDBACK_ASPECTS = ["content", "wording"];
       const G_TEACHER_LONG_PRESS_MS = 560;
       const G_TEACHER_LONG_PRESS_MOVE_TOLERANCE = 10;
       const JOURNAL_EDIT_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
@@ -3041,12 +3046,13 @@
 
         const recordId = gTeacherFeedbackMenuRecordId;
         const value = button.dataset.gTeacherFeedback;
+        const aspect = button.dataset.gTeacherFeedbackAspect || "";
         closeGTeacherFeedbackMenu();
         if (value === "clear") {
           clearGTeacherFeedback(recordId);
           return;
         }
-        setGTeacherFeedback(recordId, value);
+        setGTeacherFeedback(recordId, value, aspect);
       }
 
       function handleGTeacherFeedbackOutsideClick(event) {
@@ -3128,13 +3134,15 @@
           return;
         }
 
-        const current = getGTeacherFeedbackValue(recordId);
+        const hasFeedback = hasGTeacherFeedback(recordId);
         gTeacherFeedbackMenu.querySelectorAll("button[data-g-teacher-feedback]").forEach(function (button) {
           const value = button.dataset.gTeacherFeedback || "";
+          const aspect = button.dataset.gTeacherFeedbackAspect || "";
+          const current = getGTeacherFeedbackValue(recordId, aspect);
           const active = value === current;
           button.classList.toggle("active", active);
           if (value === "clear") {
-            button.hidden = !current;
+            button.hidden = !hasFeedback;
             return;
           }
           button.hidden = false;
@@ -3156,25 +3164,26 @@
         }) || null;
       }
 
-      function setGTeacherFeedback(recordId, value) {
+      function setGTeacherFeedback(recordId, value, aspect) {
         const record = findGTeacherRecord(recordId);
         const feedbackValue = normalizeGTeacherFeedbackValue(value);
-        if (!record || !feedbackValue) {
+        const feedbackAspect = normalizeGTeacherFeedbackAspect(aspect);
+        if (!record || !feedbackValue || !feedbackAspect) {
           return;
         }
 
-        if (getGTeacherFeedbackValue(record.id) === feedbackValue) {
-          setStatus("这条G老师日记已经标记为" + formatGTeacherFeedbackLabel(feedbackValue) + "。");
+        if (getGTeacherFeedbackValue(record.id, feedbackAspect) === feedbackValue) {
+          setStatus("这条G老师日记已经标记为" + formatGTeacherFeedbackLabel(feedbackValue, feedbackAspect) + "。");
           return;
         }
 
-        rememberGTeacherFeedback(record, feedbackValue, new Date().toISOString());
+        rememberGTeacherFeedback(record, feedbackValue, new Date().toISOString(), feedbackAspect);
         persist();
         render();
-        setStatus("已标记G老师日记：" + formatGTeacherFeedbackLabel(feedbackValue) + "。");
+        setStatus("已标记G老师日记：" + formatGTeacherFeedbackLabel(feedbackValue, feedbackAspect) + "。");
       }
 
-      function rememberGTeacherFeedback(record, value, at) {
+      function rememberGTeacherFeedback(record, value, at, aspect) {
         const feedbackValue = normalizeGTeacherFeedbackValue(value);
         if (!record || !record.id || !feedbackValue) {
           return false;
@@ -3184,10 +3193,22 @@
         const stats = normalizeJournalStats(state.journalStats);
         const gTeacher = normalizeGTeacherStats(stats.gTeacher) || { enabled: true };
         const feedback = normalizeGTeacherFeedbackMap(gTeacher.feedback);
-        const entry = {
-          value: feedbackValue,
-          at: now
-        };
+        const entry = Object.assign({}, feedback[record.id] || {});
+        const feedbackAspect = normalizeGTeacherFeedbackAspect(aspect);
+        if (feedbackAspect) {
+          const aspects = normalizeGTeacherFeedbackAspects(entry.aspects);
+          aspects[feedbackAspect] = {
+            value: feedbackValue,
+            at: now
+          };
+          entry.aspects = aspects;
+          if (entry.value === "cleared") {
+            delete entry.value;
+          }
+        } else {
+          entry.value = feedbackValue;
+        }
+        entry.at = now;
         const createdAt = normalizeDateTime(record.createdAt);
         const textPreview = summarizeGTeacherFeedbackText(record);
         if (createdAt) {
@@ -3214,24 +3235,32 @@
         const stats = normalizeJournalStats(state.journalStats);
         const gTeacher = normalizeGTeacherStats(stats.gTeacher) || { enabled: true };
         const feedback = normalizeGTeacherFeedbackMap(gTeacher.feedback);
-        if (!feedback[record.id] || feedback[record.id].value === "cleared") {
+        if (!hasActiveGTeacherFeedbackEntry(feedback[record.id])) {
           setStatus("这条G老师日记还没有反馈。");
           return;
         }
 
         const now = new Date().toISOString();
-        feedback[record.id] = {
-          value: "cleared",
-          at: now
-        };
+        const entry = Object.assign({}, feedback[record.id] || {});
+        const aspects = normalizeGTeacherFeedbackAspects(entry.aspects);
+        G_TEACHER_FEEDBACK_ASPECTS.forEach(function (aspect) {
+          aspects[aspect] = {
+            value: "cleared",
+            at: now
+          };
+        });
+        entry.value = "cleared";
+        entry.at = now;
+        entry.aspects = aspects;
         const createdAt = normalizeDateTime(record.createdAt);
         const textPreview = summarizeGTeacherFeedbackText(record);
         if (createdAt) {
-          feedback[record.id].createdAt = createdAt;
+          entry.createdAt = createdAt;
         }
         if (textPreview) {
-          feedback[record.id].textPreview = textPreview;
+          entry.textPreview = textPreview;
         }
+        feedback[record.id] = entry;
         gTeacher.feedback = feedback;
         stats.gTeacher = gTeacher;
         stats.updatedAt = now;
@@ -6450,6 +6479,11 @@
         if (comparable.gTeacher && comparable.gTeacher.feedback) {
           Object.keys(comparable.gTeacher.feedback).forEach(function (recordId) {
             delete comparable.gTeacher.feedback[recordId].at;
+            if (comparable.gTeacher.feedback[recordId].aspects) {
+              Object.keys(comparable.gTeacher.feedback[recordId].aspects).forEach(function (aspect) {
+                delete comparable.gTeacher.feedback[recordId].aspects[aspect].at;
+              });
+            }
           });
         }
         return comparable;
@@ -6512,14 +6546,62 @@
           Object.keys(normalized).forEach(function (recordId) {
             const incoming = normalized[recordId];
             const existing = merged[recordId];
+            merged[recordId] = mergeGTeacherFeedbackEntry(existing, incoming);
+          });
+        });
+        return merged;
+      }
+
+      function mergeGTeacherFeedbackEntry(left, right) {
+        if (!left) {
+          return right;
+        }
+        if (!right) {
+          return left;
+        }
+
+        const leftTime = getGTeacherFeedbackEntryTime(left);
+        const rightTime = getGTeacherFeedbackEntryTime(right);
+        const preferred = rightTime >= leftTime ? right : left;
+        const merged = Object.assign({}, preferred);
+        const aspects = mergeGTeacherFeedbackAspects(left.aspects, right.aspects);
+        if (Object.keys(aspects).length) {
+          merged.aspects = aspects;
+        } else {
+          delete merged.aspects;
+        }
+        return normalizeGTeacherFeedbackEntry(merged) || merged;
+      }
+
+      function mergeGTeacherFeedbackAspects(left, right) {
+        const merged = {};
+        [left, right].forEach(function (source) {
+          const aspects = normalizeGTeacherFeedbackAspects(source);
+          Object.keys(aspects).forEach(function (aspect) {
+            const incoming = aspects[aspect];
+            const existing = merged[aspect];
             const incomingTime = isValidDate(incoming.at) ? new Date(incoming.at).getTime() : 0;
             const existingTime = existing && isValidDate(existing.at) ? new Date(existing.at).getTime() : 0;
             if (!existing || incomingTime >= existingTime) {
-              merged[recordId] = incoming;
+              merged[aspect] = incoming;
             }
           });
         });
         return merged;
+      }
+
+      function getGTeacherFeedbackEntryTime(entry) {
+        const times = [];
+        if (isValidDate(entry && entry.at)) {
+          times.push(new Date(entry.at).getTime());
+        }
+        const aspects = normalizeGTeacherFeedbackAspects(entry && entry.aspects);
+        Object.keys(aspects).forEach(function (aspect) {
+          if (isValidDate(aspects[aspect].at)) {
+            times.push(new Date(aspects[aspect].at).getTime());
+          }
+        });
+        return times.length ? Math.max.apply(null, times) : 0;
       }
 
       function getJournalStatsUpdatedTime(value) {
@@ -6600,29 +6682,69 @@
         const result = {};
         Object.keys(source).sort().forEach(function (recordId) {
           const id = String(recordId || "").trim();
-          const entry = source[recordId];
-          if (!id || !entry || typeof entry !== "object" || Array.isArray(entry)) {
+          const normalized = normalizeGTeacherFeedbackEntry(source[recordId]);
+          if (id && normalized) {
+            result[id] = normalized;
+          }
+        });
+        return result;
+      }
+
+      function normalizeGTeacherFeedbackEntry(entry) {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+          return null;
+        }
+
+        const feedbackValue = normalizeGTeacherFeedbackValue(entry.value);
+        const aspects = normalizeGTeacherFeedbackAspects(entry.aspects);
+        const aspectTimes = Object.keys(aspects)
+          .map(function (aspect) {
+            return isValidDate(aspects[aspect].at) ? new Date(aspects[aspect].at).getTime() : 0;
+          })
+          .filter(Boolean);
+        const at = isValidDate(entry.at)
+          ? new Date(entry.at).toISOString()
+          : (aspectTimes.length ? new Date(Math.max.apply(null, aspectTimes)).toISOString() : "");
+        if ((!feedbackValue && !Object.keys(aspects).length) || !at) {
+          return null;
+        }
+
+        const normalized = {
+          at: at
+        };
+        if (feedbackValue) {
+          normalized.value = feedbackValue;
+        }
+        if (Object.keys(aspects).length) {
+          normalized.aspects = aspects;
+        }
+        if (isValidDate(entry.createdAt)) {
+          normalized.createdAt = new Date(entry.createdAt).toISOString();
+        }
+        const textPreview = String(entry.textPreview || "").replace(/\s+/g, " ").trim().slice(0, 180);
+        if (textPreview) {
+          normalized.textPreview = textPreview;
+        }
+        return normalized;
+      }
+
+      function normalizeGTeacherFeedbackAspects(value) {
+        const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+        const result = {};
+        G_TEACHER_FEEDBACK_ASPECTS.forEach(function (aspect) {
+          const entry = source[aspect];
+          if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
             return;
           }
-
           const feedbackValue = normalizeGTeacherFeedbackValue(entry.value);
           const at = isValidDate(entry.at) ? new Date(entry.at).toISOString() : "";
-          if (!feedbackValue || !at) {
+          if (!feedbackValue || feedbackValue === "deleted" || !at) {
             return;
           }
-
-          const normalized = {
+          result[aspect] = {
             value: feedbackValue,
             at: at
           };
-          if (isValidDate(entry.createdAt)) {
-            normalized.createdAt = new Date(entry.createdAt).toISOString();
-          }
-          const textPreview = String(entry.textPreview || "").replace(/\s+/g, " ").trim().slice(0, 180);
-          if (textPreview) {
-            normalized.textPreview = textPreview;
-          }
-          result[id] = normalized;
         });
         return result;
       }
@@ -6632,22 +6754,55 @@
         return G_TEACHER_FEEDBACK_VALUES.includes(source) ? source : "";
       }
 
-      function getGTeacherFeedbackValue(recordId) {
+      function normalizeGTeacherFeedbackAspect(value) {
+        const source = String(value || "").trim();
+        return G_TEACHER_FEEDBACK_ASPECTS.includes(source) ? source : "";
+      }
+
+      function getGTeacherFeedbackValue(recordId, aspect) {
         const stats = normalizeJournalStats(state.journalStats);
         const feedback = stats.gTeacher && stats.gTeacher.feedback
           ? stats.gTeacher.feedback
           : {};
         const entry = feedback[String(recordId || "")];
+        const feedbackAspect = normalizeGTeacherFeedbackAspect(aspect);
+        if (feedbackAspect && entry && entry.aspects && entry.aspects[feedbackAspect]) {
+          const aspectValue = normalizeGTeacherFeedbackValue(entry.aspects[feedbackAspect].value);
+          return aspectValue === "cleared" ? "" : aspectValue;
+        }
         const value = normalizeGTeacherFeedbackValue(entry && entry.value);
         return value === "cleared" ? "" : value;
       }
 
-      function formatGTeacherFeedbackLabel(value) {
+      function hasGTeacherFeedback(recordId) {
+        const stats = normalizeJournalStats(state.journalStats);
+        const feedback = stats.gTeacher && stats.gTeacher.feedback
+          ? stats.gTeacher.feedback
+          : {};
+        return hasActiveGTeacherFeedbackEntry(feedback[String(recordId || "")]);
+      }
+
+      function hasActiveGTeacherFeedbackEntry(entry) {
+        if (!entry) {
+          return false;
+        }
+        const value = normalizeGTeacherFeedbackValue(entry.value);
+        if (value && value !== "cleared") {
+          return true;
+        }
+        const aspects = normalizeGTeacherFeedbackAspects(entry.aspects);
+        return Object.keys(aspects).some(function (aspect) {
+          return aspects[aspect].value && aspects[aspect].value !== "cleared";
+        });
+      }
+
+      function formatGTeacherFeedbackLabel(value, aspect) {
+        const prefix = aspect === "content" ? "内容" : (aspect === "wording" ? "措辞" : "");
         if (value === "like") {
-          return "喜欢";
+          return prefix + "喜欢";
         }
         if (value === "dislike") {
-          return "不喜欢";
+          return prefix + "不喜欢";
         }
         if (value === "deleted") {
           return "最不喜欢";

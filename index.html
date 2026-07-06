@@ -10374,12 +10374,7 @@
               return true;
             }
 
-            const haystack = [
-              getDisplayText(record),
-              TYPE_LABELS[record.type],
-              getStatusSearchText(record),
-              record.eventAt ? formatDateTime(record.eventAt) : ""
-            ].join(" ").toLowerCase();
+            const haystack = (record && typeof record.text === "string" ? record.text : "").toLowerCase();
 
             return haystack.includes(keyword);
           });

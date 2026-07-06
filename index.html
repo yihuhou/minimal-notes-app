@@ -2161,7 +2161,7 @@
     <section class="shell" aria-label="极简个人记录工具">
       <header class="header">
         <div class="title-block">
-          <h1>极简记录</h1>
+          <h1 id="todayHeading">今天</h1>
           <p>像记事本一样记下待办、日程、截止、想法和日记。打开就能写。</p>
         </div>
         <div class="counter" aria-live="polite">
@@ -2571,6 +2571,7 @@
       const gTeacherFeedbackMenu = document.getElementById("gTeacherFeedbackMenu");
       const ideaPane = document.getElementById("ideaPane");
       const workspace = document.getElementById("workspace");
+      const todayHeading = document.getElementById("todayHeading");
       const openCount = document.getElementById("openCount");
       const summaryText = document.getElementById("summaryText");
       const journalBottomJump = document.getElementById("journalBottomJump");
@@ -2627,8 +2628,11 @@
       let gTeacherLongPressStartY = 0;
       let gTeacherFeedbackMenuRecordId = "";
       let gTeacherFeedbackOpenedAt = 0;
+      let todayHeadingTimer = 0;
 
       bindEvents();
+      updateTodayHeading();
+      scheduleTodayHeadingUpdate();
       loadRemoteSyncSettings();
       populateRemoteSyncPanel();
       loadCachedJournalPrivateHighlights();
@@ -2768,6 +2772,34 @@
             cancelGTeacherLongPress();
           }
         });
+      }
+
+      function updateTodayHeading() {
+        if (!todayHeading) {
+          return;
+        }
+
+        const now = new Date();
+        todayHeading.textContent = formatTodayHeading(now);
+        todayHeading.title = "今天是 " + formatTodayHeading(now);
+      }
+
+      function scheduleTodayHeadingUpdate() {
+        window.clearTimeout(todayHeadingTimer);
+        const now = new Date();
+        const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
+        todayHeadingTimer = window.setTimeout(function () {
+          updateTodayHeading();
+          scheduleTodayHeadingUpdate();
+        }, Math.max(1000, nextDay.getTime() - now.getTime()));
+      }
+
+      function formatTodayHeading(date) {
+        const weekdayLabels = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+        return date.getFullYear() + "年"
+          + (date.getMonth() + 1) + "月"
+          + date.getDate() + "日 "
+          + weekdayLabels[date.getDay()];
       }
 
       function toggleComposerAdvanced(forceExpanded) {

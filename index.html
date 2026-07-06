@@ -319,6 +319,26 @@
       color: var(--text);
     }
 
+    button.counter {
+      display: block;
+      width: auto;
+    }
+
+    button.counter:hover {
+      background: #f7f7f4;
+      border-color: var(--border-strong);
+    }
+
+    button.counter:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 3px;
+    }
+
+    button.counter[aria-expanded="true"] {
+      background: var(--accent-soft);
+      border-color: var(--border-strong);
+    }
+
     .counter strong {
       display: block;
       font-size: 24px;
@@ -338,6 +358,252 @@
 
     body.journal-focus .counter {
       background: rgba(247, 246, 242, 0.84);
+    }
+
+    .health-calendar-panel {
+      display: grid;
+      gap: 12px;
+      margin: 12px 24px 0;
+      padding: 12px 13px 13px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: #fcfcfb;
+    }
+
+    .health-calendar-head {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px 14px;
+    }
+
+    .health-calendar-kicker,
+    .health-calendar-meta,
+    .health-calendar-legend,
+    .health-calendar-weekday,
+    .health-calendar-day,
+    .health-calendar-note {
+      font-family: "Cascadia Mono", "SFMono-Regular", "Menlo", "Consolas", "Microsoft YaHei UI", monospace;
+    }
+
+    .health-calendar-kicker {
+      display: block;
+      color: var(--text-faint);
+      font-size: 11px;
+      line-height: 1.3;
+    }
+
+    .health-calendar-title {
+      margin: 2px 0 0;
+      color: var(--text);
+      font-size: 17px;
+      line-height: 1.3;
+      font-weight: 750;
+      letter-spacing: 0;
+    }
+
+    .health-calendar-meta {
+      margin: 4px 0 0;
+      color: var(--text-soft);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .health-calendar-legend {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 5px;
+      max-width: 360px;
+      color: var(--text-soft);
+      font-size: 11px;
+    }
+
+    .health-calendar-legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-height: 20px;
+    }
+
+    .health-calendar-legend span::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border: 1px solid var(--border-strong);
+      border-radius: 3px;
+      background: var(--calendar-fill, #f4f6f8);
+    }
+
+    .health-calendar-legend .good {
+      --calendar-fill: #dcefe6;
+    }
+
+    .health-calendar-legend .steady {
+      --calendar-fill: #dfeaf3;
+    }
+
+    .health-calendar-legend .rest {
+      --calendar-fill: #f0d5d2;
+    }
+
+    .health-calendar-legend .active {
+      --calendar-fill: #f1dccb;
+    }
+
+    .health-calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      grid-template-rows: auto;
+      grid-auto-rows: 60px;
+      gap: 6px;
+    }
+
+    .health-calendar-weekday {
+      color: var(--text-faint);
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.2;
+      text-align: center;
+    }
+
+    .health-calendar-day {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+      padding: 6px 7px;
+      border: 1px solid var(--calendar-stroke, #e3e8ef);
+      border-radius: 10px;
+      background: var(--calendar-fill, #f4f6f8);
+      color: var(--calendar-text, #7b8494);
+      display: grid;
+      grid-template-columns: minmax(34px, auto) minmax(0, 1fr);
+      grid-template-rows: auto auto auto;
+      align-content: start;
+      column-gap: 8px;
+      row-gap: 1px;
+      overflow: hidden;
+    }
+
+    .health-calendar-day.good {
+      --calendar-fill: #dcefe6;
+      --calendar-stroke: #93c9ad;
+      --calendar-text: #226044;
+    }
+
+    .health-calendar-day.steady {
+      --calendar-fill: #dfeaf3;
+      --calendar-stroke: #9ebfd8;
+      --calendar-text: #285b84;
+    }
+
+    .health-calendar-day.rest {
+      --calendar-fill: #f0d5d2;
+      --calendar-stroke: #d69b96;
+      --calendar-text: #7d332d;
+    }
+
+    .health-calendar-day.active {
+      --calendar-fill: #f1dccb;
+      --calendar-stroke: #d3a67f;
+      --calendar-text: #82481f;
+    }
+
+    .health-calendar-day.missing {
+      --calendar-fill: #f4f6f8;
+      --calendar-stroke: #e3e8ef;
+      --calendar-text: #98a2b3;
+    }
+
+    .health-calendar-day.empty {
+      visibility: hidden;
+    }
+
+    .health-calendar-day.future {
+      opacity: 0.52;
+    }
+
+    .health-calendar-day.partial::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.34) 0,
+        rgba(255, 255, 255, 0.34) 3px,
+        transparent 3px,
+        transparent 8px
+      );
+      pointer-events: none;
+    }
+
+    .health-calendar-day strong,
+    .health-calendar-day span,
+    .health-calendar-day small {
+      position: relative;
+      z-index: 1;
+    }
+
+    .health-calendar-day strong {
+      grid-column: 1;
+      grid-row: 1;
+      font-size: 13px;
+      line-height: 1;
+      font-weight: 800;
+    }
+
+    .health-calendar-day span {
+      grid-column: 1;
+      grid-row: 2;
+      font-size: 11px;
+      line-height: 1.25;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .health-calendar-day small {
+      grid-column: 2;
+      justify-self: end;
+      max-width: 100%;
+      color: var(--calendar-text);
+      opacity: 0.72;
+      font-size: 10px;
+      line-height: 1.2;
+      text-align: right;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .health-calendar-day small:nth-of-type(1) {
+      grid-row: 1;
+    }
+
+    .health-calendar-day small:nth-of-type(2) {
+      grid-row: 2;
+    }
+
+    .health-calendar-day small:nth-of-type(3) {
+      grid-row: 3;
+    }
+
+    .health-calendar-day small.activity-location {
+      grid-column: 1 / -1;
+      justify-self: start;
+      text-align: left;
+    }
+
+    .health-calendar-metric-value {
+      font-weight: 750;
+    }
+
+    .health-calendar-note {
+      margin: 0;
+      color: var(--text-faint);
+      font-size: 11px;
+      line-height: 1.55;
     }
 
     .health-summary {
@@ -1876,6 +2142,45 @@
         padding: 9px 10px;
       }
 
+      .health-calendar-panel {
+        margin: 10px 12px 0;
+        padding: 10px;
+        border-radius: 12px;
+      }
+
+      .health-calendar-head {
+        gap: 8px;
+      }
+
+      .health-calendar-legend {
+        justify-content: flex-start;
+        max-width: none;
+      }
+
+      .health-calendar-grid {
+        grid-auto-rows: 48px;
+        gap: 4px;
+      }
+
+      .health-calendar-day {
+        grid-template-columns: minmax(28px, auto) minmax(0, 1fr);
+        column-gap: 5px;
+        padding: 5px;
+        border-radius: 8px;
+      }
+
+      .health-calendar-day span {
+        font-size: 10px;
+      }
+
+      .health-calendar-day small {
+        font-size: 9px;
+      }
+
+      .health-calendar-day small + small {
+        display: none;
+      }
+
       .counter strong {
         font-size: 21px;
       }
@@ -2164,11 +2469,24 @@
           <h1 id="todayHeading">今天</h1>
           <p>像记事本一样记下待办、日程、截止、想法和日记。打开就能写。</p>
         </div>
-        <div class="counter" aria-live="polite">
+        <button id="healthCalendarToggle" class="counter" type="button" aria-live="polite" aria-expanded="false" aria-controls="healthCalendarPanel" title="展开本月健康月历">
           <strong id="openCount">0</strong>
           <span>未完成事项 · 不含想法/日记</span>
-        </div>
+        </button>
       </header>
+
+      <section id="healthCalendarPanel" class="health-calendar-panel" aria-label="本月健康月历" hidden>
+        <div class="health-calendar-head">
+          <div>
+            <span class="health-calendar-kicker">COROS health calendar</span>
+            <h2 id="healthCalendarTitle" class="health-calendar-title">本月健康月历</h2>
+            <p id="healthCalendarMeta" class="health-calendar-meta">正在读取健康历史...</p>
+          </div>
+          <div id="healthCalendarLegend" class="health-calendar-legend" aria-label="状态图例"></div>
+        </div>
+        <div id="healthCalendarGrid" class="health-calendar-grid" aria-live="polite"></div>
+        <p id="healthCalendarNote" class="health-calendar-note"></p>
+      </section>
 
       <section id="healthSummary" class="health-summary" aria-label="健康小结" hidden>
         <div class="health-summary-main">
@@ -2329,6 +2647,8 @@
       const DEFAULT_REMOTE_PATH = "minimal-notes-records.json";
       const HEALTH_SUMMARY_PATH = "minimal-notes-health-summary.json";
       const HEALTH_SUMMARY_CACHE_KEY = "minimal-notes-health-summary-cache-v1";
+      const HEALTH_HISTORY_PATH = "minimal-notes-health-history.json";
+      const HEALTH_HISTORY_CACHE_KEY = "minimal-notes-health-history-cache-v1";
       const JOURNAL_PRIVATE_HIGHLIGHTS_PATH = "minimal-notes-journal-private-highlights.json";
       const JOURNAL_PRIVATE_HIGHLIGHTS_CACHE_KEY = "minimal-notes-journal-private-highlights-cache-v1";
       const REMOTE_SYNC_INTERVAL = 15000;
@@ -2553,6 +2873,14 @@
           suppressions: [],
           signature: "",
           error: ""
+        },
+        healthCalendar: {
+          open: false,
+          loading: false,
+          loaded: false,
+          cached: false,
+          payload: null,
+          error: ""
         }
       };
 
@@ -2572,6 +2900,13 @@
       const ideaPane = document.getElementById("ideaPane");
       const workspace = document.getElementById("workspace");
       const todayHeading = document.getElementById("todayHeading");
+      const healthCalendarToggle = document.getElementById("healthCalendarToggle");
+      const healthCalendarPanel = document.getElementById("healthCalendarPanel");
+      const healthCalendarTitle = document.getElementById("healthCalendarTitle");
+      const healthCalendarMeta = document.getElementById("healthCalendarMeta");
+      const healthCalendarLegend = document.getElementById("healthCalendarLegend");
+      const healthCalendarGrid = document.getElementById("healthCalendarGrid");
+      const healthCalendarNote = document.getElementById("healthCalendarNote");
       const openCount = document.getElementById("openCount");
       const summaryText = document.getElementById("summaryText");
       const journalBottomJump = document.getElementById("journalBottomJump");
@@ -2666,6 +3001,9 @@
         });
 
         addButton.addEventListener("click", addRecord);
+        if (healthCalendarToggle) {
+          healthCalendarToggle.addEventListener("click", toggleHealthCalendar);
+        }
         syncActionButton.addEventListener("click", handleSyncAction);
         backupAuthButton.addEventListener("click", handleBackupAuthAction);
         cloudRestoreButton.addEventListener("click", restoreRecordsFromCloudBackup);
@@ -2800,6 +3138,535 @@
           + (date.getMonth() + 1) + "月"
           + date.getDate() + "日 "
           + weekdayLabels[date.getDay()];
+      }
+
+      function toggleHealthCalendar() {
+        setHealthCalendarOpen(!state.healthCalendar.open);
+      }
+
+      function setHealthCalendarOpen(open) {
+        const shouldOpen = Boolean(open);
+        const opening = shouldOpen && !state.healthCalendar.open;
+        state.healthCalendar.open = shouldOpen;
+        if (!healthCalendarPanel || !healthCalendarToggle) {
+          return;
+        }
+
+        healthCalendarPanel.hidden = !state.healthCalendar.open;
+        healthCalendarToggle.setAttribute("aria-expanded", String(state.healthCalendar.open));
+        healthCalendarToggle.title = state.healthCalendar.open ? "收起本月健康月历" : "展开本月健康月历";
+
+        if (opening && !state.healthCalendar.loading) {
+          if (!state.healthCalendar.payload) {
+            loadCachedHealthCalendar();
+          }
+          if (state.healthCalendar.payload) {
+            renderHealthCalendar(state.healthCalendar.payload);
+          }
+          loadAndRenderHealthCalendar({
+            preserveExisting: Boolean(state.healthCalendar.payload)
+          });
+        }
+      }
+
+      async function loadAndRenderHealthCalendar(options) {
+        const opts = options || {};
+        const preserveExisting = Boolean(opts.preserveExisting && state.healthCalendar.payload);
+        state.healthCalendar.loading = true;
+        state.healthCalendar.error = "";
+        if (!preserveExisting) {
+          renderHealthCalendarEmpty("正在读取健康历史...");
+        }
+
+        try {
+          const payload = await fetchHealthHistoryPayload();
+          state.healthCalendar.payload = payload;
+          state.healthCalendar.loaded = true;
+          state.healthCalendar.cached = false;
+          saveHealthCalendarCache(payload);
+          renderHealthCalendar(payload);
+        } catch (error) {
+          console.warn("Health calendar unavailable", error);
+          state.healthCalendar.error = error && error.message ? String(error.message) : "健康历史读取失败";
+          state.healthCalendar.loaded = true;
+          if (!preserveExisting) {
+            renderHealthCalendarEmpty("暂时无法读取健康历史。");
+          }
+        } finally {
+          state.healthCalendar.loading = false;
+        }
+      }
+
+      function loadCachedHealthCalendar() {
+        try {
+          const raw = localStorage.getItem(HEALTH_HISTORY_CACHE_KEY);
+          if (!raw) {
+            return false;
+          }
+
+          const payload = JSON.parse(raw);
+          if (!payload || typeof payload !== "object") {
+            clearHealthCalendarCache();
+            return false;
+          }
+
+          state.healthCalendar.payload = payload;
+          state.healthCalendar.loaded = true;
+          state.healthCalendar.cached = true;
+          state.healthCalendar.error = "";
+          renderHealthCalendar(payload);
+          return true;
+        } catch (error) {
+          console.warn("Cached health calendar unavailable", error);
+          clearHealthCalendarCache();
+          return false;
+        }
+      }
+
+      function saveHealthCalendarCache(payload) {
+        if (state.sessionOnly || state.remote.temporary) {
+          return;
+        }
+
+        try {
+          localStorage.setItem(HEALTH_HISTORY_CACHE_KEY, JSON.stringify(payload));
+        } catch (error) {
+          console.warn("Health calendar cache unavailable", error);
+        }
+      }
+
+      function clearHealthCalendarCache() {
+        try {
+          localStorage.removeItem(HEALTH_HISTORY_CACHE_KEY);
+        } catch (error) {
+          console.warn("Health calendar cache cleanup failed", error);
+        }
+      }
+
+      async function fetchHealthHistoryPayload() {
+        const remotePayload = await fetchRemoteHealthHistoryPayload();
+        if (remotePayload) {
+          return remotePayload;
+        }
+
+        return fetchLocalHealthHistoryPayload();
+      }
+
+      async function fetchRemoteHealthHistoryPayload() {
+        if (!state.remote.enabled || !state.remote.token || !state.remote.repo) {
+          return null;
+        }
+
+        const response = await fetch(getRemotePathContentsUrl(HEALTH_HISTORY_PATH, true), {
+          headers: getRemoteHeaders(false),
+          cache: "no-store"
+        });
+
+        if (response.status === 404) {
+          return null;
+        }
+
+        if (!response.ok) {
+          throw await createRemoteHttpError(response, "健康历史读取失败");
+        }
+
+        const data = await response.json();
+        const text = decodeBase64Utf8(String(data.content || ""));
+        return JSON.parse(text);
+      }
+
+      async function fetchLocalHealthHistoryPayload() {
+        if (isLocalFilePage()) {
+          throw new Error("本地文件页面不能直接读取健康历史。");
+        }
+
+        const response = await fetch(HEALTH_HISTORY_PATH + "?t=" + encodeURIComponent(String(Date.now())), {
+          cache: "no-store"
+        });
+
+        if (response.status === 404) {
+          throw new Error("未找到 " + HEALTH_HISTORY_PATH);
+        }
+
+        if (!response.ok) {
+          throw new Error("健康历史读取失败：" + response.status);
+        }
+
+        return response.json();
+      }
+
+      function renderHealthCalendarEmpty(message) {
+        const now = new Date();
+        if (healthCalendarTitle) {
+          healthCalendarTitle.textContent = (now.getFullYear()) + "年" + (now.getMonth() + 1) + "月健康月历";
+        }
+        if (healthCalendarMeta) {
+          healthCalendarMeta.textContent = message || "没有可显示的健康历史。";
+        }
+        if (healthCalendarLegend) {
+          healthCalendarLegend.innerHTML = "";
+        }
+        if (healthCalendarGrid) {
+          healthCalendarGrid.innerHTML = "";
+        }
+        if (healthCalendarNote) {
+          healthCalendarNote.textContent = state.remote.enabled
+            ? "健康历史不可用。"
+            : "健康历史未连接。";
+        }
+      }
+
+      function renderHealthCalendar(payload) {
+        const model = buildHealthCalendarModel(payload, new Date());
+        if (!model.daysWithData) {
+          renderHealthCalendarEmpty("本月暂时没有 COROS 健康数据。");
+          return;
+        }
+
+        healthCalendarTitle.textContent = model.title;
+        healthCalendarMeta.textContent = model.meta;
+        renderHealthCalendarLegend(model.counts);
+        renderHealthCalendarGrid(model);
+        healthCalendarNote.textContent = model.note;
+      }
+
+      function renderHealthCalendarLegend(counts) {
+        healthCalendarLegend.innerHTML = "";
+        [
+          ["good", "不错", counts.good],
+          ["steady", "平稳", counts.steady],
+          ["rest", "欠佳", counts.rest],
+          ["active", "活动", counts.active]
+        ].forEach(function (item) {
+          const chip = document.createElement("span");
+          chip.className = item[0];
+          chip.textContent = item[1] + " " + item[2] + "天";
+          healthCalendarLegend.appendChild(chip);
+        });
+      }
+
+      function renderHealthCalendarGrid(model) {
+        healthCalendarGrid.innerHTML = "";
+        ["一", "二", "三", "四", "五", "六", "日"].forEach(function (weekday) {
+          const node = document.createElement("div");
+          node.className = "health-calendar-weekday";
+          node.textContent = weekday;
+          healthCalendarGrid.appendChild(node);
+        });
+
+        for (let index = 0; index < model.firstOffset; index += 1) {
+          const empty = document.createElement("div");
+          empty.className = "health-calendar-day empty";
+          healthCalendarGrid.appendChild(empty);
+        }
+
+        model.days.forEach(function (day) {
+          healthCalendarGrid.appendChild(createHealthCalendarDayCell(day));
+        });
+      }
+
+      function createHealthCalendarDayCell(day) {
+        const cell = document.createElement("div");
+        cell.className = [
+          "health-calendar-day",
+          day.statusKey,
+          day.partial ? "partial" : "",
+          day.future ? "future" : ""
+        ].filter(Boolean).join(" ");
+        cell.title = day.tooltip;
+
+        const number = document.createElement("strong");
+        number.textContent = String(day.dayNumber);
+        cell.appendChild(number);
+
+        const label = document.createElement("span");
+        label.textContent = day.shortLabel;
+        cell.appendChild(label);
+
+        day.details.forEach(function (item) {
+          const detail = document.createElement("small");
+          if (item.className) {
+            detail.className = item.className;
+          }
+          if (Array.isArray(item.parts)) {
+            item.parts.forEach(function (part) {
+              if (part.label) {
+                detail.appendChild(document.createTextNode(part.label));
+              }
+              const value = document.createElement("span");
+              value.className = "health-calendar-metric-value";
+              value.textContent = part.value;
+              detail.appendChild(value);
+            });
+          } else {
+            detail.textContent = item.text;
+          }
+          cell.appendChild(detail);
+        });
+
+        return cell;
+      }
+
+      function buildHealthCalendarModel(payload, referenceDate) {
+        const now = isValidDate(referenceDate) ? new Date(referenceDate) : new Date();
+        const year = now.getFullYear();
+        const monthIndex = now.getMonth();
+        const todayKey = formatLocalDayKey(now);
+        const monthStartKey = formatLocalDayKey(new Date(year, monthIndex, 1));
+        const monthEndKey = formatLocalDayKey(new Date(year, monthIndex, daysInMonth(year, monthIndex)));
+        const entryMap = new Map();
+
+        getHealthHistoryEntries(payload).forEach(function (entry) {
+          if (entry && typeof entry.date === "string") {
+            entryMap.set(entry.date, entry);
+          }
+        });
+
+        const counts = { good: 0, steady: 0, rest: 0, active: 0 };
+        const days = [];
+        let daysWithData = 0;
+        for (let dayNumber = 1; dayNumber <= daysInMonth(year, monthIndex); dayNumber += 1) {
+          const date = formatLocalDayKey(new Date(year, monthIndex, dayNumber));
+          const entry = entryMap.get(date);
+          const day = buildHealthCalendarDay(date, dayNumber, entry, date > todayKey);
+          if (entry) {
+            daysWithData += 1;
+            counts[day.statusKey] = (counts[day.statusKey] || 0) + 1;
+          }
+          days.push(day);
+        }
+
+        return {
+          title: year + "年" + (monthIndex + 1) + "月健康月历",
+          meta: "有手表数据 " + daysWithData + " 天 · "
+            + "不错 " + counts.good + " · 平稳 " + counts.steady
+            + " · 欠佳 " + counts.rest + " · 活动 " + counts.active,
+          note: "斜纹表示当天数据未完整。",
+          counts: counts,
+          days: days,
+          daysWithData: daysWithData,
+          firstOffset: getLocalWeekdayIndex(new Date(year, monthIndex, 1)),
+          monthStartKey: monthStartKey,
+          monthEndKey: monthEndKey
+        };
+      }
+
+      function getHealthHistoryEntries(payload) {
+        if (!payload || typeof payload !== "object" || !Array.isArray(payload.entries)) {
+          return [];
+        }
+
+        return payload.entries.slice().sort(function (left, right) {
+          return String(left && left.date || "").localeCompare(String(right && right.date || ""));
+        });
+      }
+
+      function buildHealthCalendarDay(date, dayNumber, entry, future) {
+        if (!entry) {
+          return {
+            date: date,
+            dayNumber: dayNumber,
+            statusKey: "missing",
+            shortLabel: future ? "" : "无数据",
+            details: future ? [] : [{ text: "未同步" }],
+            tooltip: date + "：无手表数据",
+            partial: false,
+            future: future
+          };
+        }
+
+        const metrics = getHealthCalendarMetrics(entry);
+        const status = classifyHealthCalendarDay(metrics);
+        return {
+          date: date,
+          dayNumber: dayNumber,
+          statusKey: status.key,
+          shortLabel: status.short,
+          details: formatHealthCalendarDayDetails(metrics, status.key),
+          tooltip: buildHealthCalendarTooltip(date, status.label, metrics),
+          partial: metrics.partial,
+          future: future
+        };
+      }
+
+      function getHealthCalendarMetrics(entry) {
+        const coros = entry.coros || {};
+        const dailyHealth = coros.dailyHealth || {};
+        const sleep = coros.sleep || {};
+        const sleepHrv = coros.sleepHrv || {};
+        const heartRate = coros.heartRate || {};
+        const recovery = coros.recovery || {};
+        const activities = Array.isArray(coros.activities) ? coros.activities : [];
+
+        return {
+          partial: entry.dayComplete === false
+            || /partial|incomplete/i.test(String(entry.dataStatus || ""))
+            || /partial|incomplete/i.test(String(dailyHealth.dataStatus || "")),
+          sleepScore: healthNumber(sleep.score),
+          sleepMinutes: healthNumber(sleep.mainSleepMinutes),
+          recoveryPct: healthNumber(recovery.percentage),
+          hrvMs: healthNumber(sleepHrv.avgMs),
+          hrvBaselineMs: healthNumber(sleepHrv.baselineMs),
+          hrvNormalRangeLowMs: healthNumber(sleepHrv.normalRangeLowMs),
+          restingBpm: healthNumber(heartRate.restingBpm),
+          steps: healthNumber(dailyHealth.steps),
+          exerciseMinutes: healthNumber(dailyHealth.exerciseMinutes),
+          activeCalories: healthNumber(dailyHealth.activeCalories),
+          activityLocation: getHealthCalendarActivityLocation(activities),
+          elevationGainMeters: healthSum(activities.map(function (activity) {
+            return healthNumber(activity && activity.elevationGainMeters);
+          })),
+          trainingLoad: healthSum(activities.map(function (activity) {
+            return healthNumber(activity && activity.trainingDetails && activity.trainingDetails.trainingLoad);
+          }))
+        };
+      }
+
+      function classifyHealthCalendarDay(metrics) {
+        const sleepLow = metrics.sleepScore != null && metrics.sleepScore < 70;
+        const recoveryLow = metrics.recoveryPct != null && metrics.recoveryPct < 70;
+        const hrvLow = metrics.hrvMs != null
+          && metrics.hrvNormalRangeLowMs != null
+          && metrics.hrvMs < metrics.hrvNormalRangeLowMs;
+        const restingHigh = metrics.restingBpm != null && metrics.restingBpm >= 58;
+        const highActivity = !metrics.partial && (
+          (metrics.exerciseMinutes || 0) >= 90
+          || (metrics.steps || 0) >= 15000
+          || (metrics.activeCalories || 0) >= 800
+          || (metrics.elevationGainMeters || 0) >= 300
+          || (metrics.trainingLoad || 0) >= 100
+        );
+        const hrvGood = metrics.hrvMs == null
+          || metrics.hrvBaselineMs == null
+          || metrics.hrvMs >= metrics.hrvBaselineMs;
+        const restingGood = metrics.restingBpm == null || metrics.restingBpm <= 53;
+
+        if (sleepLow || recoveryLow || hrvLow || restingHigh) {
+          return { key: "rest", label: "需要休息", short: "欠佳" };
+        }
+        if (highActivity) {
+          return { key: "active", label: "活动较多", short: "活动" };
+        }
+        if (metrics.sleepScore != null && metrics.sleepScore >= 90
+          && (metrics.recoveryPct == null || metrics.recoveryPct >= 90)
+          && hrvGood
+          && restingGood) {
+          return { key: "good", label: "状态不错", short: "不错" };
+        }
+        return { key: "steady", label: "平稳", short: "平稳" };
+      }
+
+      function formatHealthCalendarDayDetails(metrics, statusKey) {
+        const details = [];
+        const sleepValue = metrics.sleepScore != null ? String(Math.round(metrics.sleepScore)) : "--";
+        const restingValue = metrics.restingBpm != null ? String(Math.round(metrics.restingBpm)) : "--";
+        const hrvValue = metrics.hrvMs != null ? String(Math.round(metrics.hrvMs)) : "--";
+
+        details.push({
+          parts: [
+            { label: "睡", value: sleepValue },
+            { label: " 静", value: restingValue }
+          ]
+        });
+        details.push({
+          parts: [
+            { label: "HRV ", value: hrvValue }
+          ]
+        });
+        if (metrics.activityLocation) {
+          details.push({
+            text: metrics.activityLocation,
+            className: "activity-location"
+          });
+        }
+        return details;
+      }
+
+      function buildHealthCalendarTooltip(date, label, metrics) {
+        const partialText = metrics.partial ? "；当天数据未完整" : "";
+        return [
+          date + "：" + label + partialText,
+          "睡眠 " + formatHealthMetric(metrics.sleepScore, "分") + " / " + formatHealthDuration(metrics.sleepMinutes),
+          "恢复 " + formatHealthMetric(metrics.recoveryPct, "%"),
+          "HRV " + formatHealthMetric(metrics.hrvMs, "ms") + "，静息心率 " + formatHealthMetric(metrics.restingBpm, "bpm"),
+          "步数 " + formatHealthMetric(metrics.steps, "步") + "，运动 " + formatHealthDuration(metrics.exerciseMinutes),
+          metrics.activityLocation ? "地点 " + metrics.activityLocation : ""
+        ].filter(Boolean).join("；");
+      }
+
+      function getHealthCalendarActivityLocation(activities) {
+        let bestLocation = "";
+        let bestCalories = -Infinity;
+        for (let index = 0; index < activities.length; index += 1) {
+          const activity = activities[index] || {};
+          const location = String(activity.location || activity.place || activity.routeName || "").trim();
+          if (!location) {
+            continue;
+          }
+
+          const calories = getHealthCalendarActivityAnalysisCalories(activity);
+          const score = calories == null ? 0 : calories;
+          if (!bestLocation || score > bestCalories) {
+            bestLocation = location;
+            bestCalories = score;
+          }
+        }
+        return bestLocation;
+      }
+
+      function getHealthCalendarActivityAnalysisCalories(activity) {
+        if (!activity || typeof activity !== "object") {
+          return null;
+        }
+
+        const direct = healthNumber(activity.analysisCalories);
+        if (direct != null) {
+          return direct;
+        }
+
+        const nested = healthNumber(activity.analysis && activity.analysis.calories);
+        if (nested != null) {
+          return nested;
+        }
+
+        return healthNumber(activity.calories);
+      }
+
+      function healthNumber(value) {
+        if (typeof value === "number" && Number.isFinite(value)) {
+          return value;
+        }
+        if (typeof value === "string" && value.trim()) {
+          const parsed = Number(value);
+          return Number.isFinite(parsed) ? parsed : null;
+        }
+        return null;
+      }
+
+      function healthSum(values) {
+        return values.reduce(function (total, value) {
+          return total + (typeof value === "number" && Number.isFinite(value) ? value : 0);
+        }, 0);
+      }
+
+      function formatHealthMetric(value, unit) {
+        if (value == null || !Number.isFinite(value)) {
+          return "暂无";
+        }
+        return Math.round(value).toLocaleString("zh-CN") + unit;
+      }
+
+      function formatHealthDuration(minutes) {
+        if (minutes == null || !Number.isFinite(minutes)) {
+          return "暂无";
+        }
+        const total = Math.round(minutes);
+        const hours = Math.floor(total / 60);
+        const rest = total % 60;
+        if (!hours) {
+          return rest + "分钟";
+        }
+        return hours + "小时" + (rest ? rest + "分钟" : "");
       }
 
       function toggleComposerAdvanced(forceExpanded) {
@@ -4868,6 +5735,7 @@
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(REMOTE_SYNC_STORAGE_KEY);
         localStorage.removeItem(HEALTH_SUMMARY_CACHE_KEY);
+        localStorage.removeItem(HEALTH_HISTORY_CACHE_KEY);
         localStorage.removeItem(JOURNAL_PRIVATE_HIGHLIGHTS_CACHE_KEY);
         await deleteStoredSyncFileHandle();
         populateRemoteSyncPanel();
@@ -6238,7 +7106,8 @@
       function isProtectedRemoteWritePath(value) {
         const path = normalizeRemotePath(value).replace(/\\/g, "/").toLowerCase();
         return path === JOURNAL_PRIVATE_HIGHLIGHTS_PATH.toLowerCase()
-          || path === HEALTH_SUMMARY_PATH.toLowerCase();
+          || path === HEALTH_SUMMARY_PATH.toLowerCase()
+          || path === HEALTH_HISTORY_PATH.toLowerCase();
       }
 
       function encodeRemotePath(path) {

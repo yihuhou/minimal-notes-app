@@ -3383,6 +3383,7 @@
           healthCalendarTitle.textContent = (now.getFullYear()) + "年" + (now.getMonth() + 1) + "月健康月历";
         }
         if (healthCalendarMeta) {
+          healthCalendarMeta.hidden = false;
           healthCalendarMeta.textContent = message || "没有可显示的健康历史。";
         }
         if (healthCalendarLegend) {
@@ -3406,7 +3407,10 @@
         }
 
         healthCalendarTitle.textContent = model.title;
-        healthCalendarMeta.textContent = model.meta;
+        if (healthCalendarMeta) {
+          healthCalendarMeta.textContent = "";
+          healthCalendarMeta.hidden = true;
+        }
         renderHealthCalendarLegend(model.counts);
         renderHealthCalendarGrid(model);
         healthCalendarNote.textContent = model.note;
@@ -3520,9 +3524,6 @@
 
         return {
           title: year + "年" + (monthIndex + 1) + "月健康月历",
-          meta: "有手表数据 " + daysWithData + " 天 · "
-            + "不错 " + counts.good + " · 平稳 " + counts.steady
-            + " · 欠佳 " + counts.rest + " · 活动 " + counts.active,
           note: "斜纹表示当天数据未完整。",
           counts: counts,
           days: days,

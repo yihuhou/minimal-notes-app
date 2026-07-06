@@ -2177,7 +2177,7 @@
         font-size: 9px;
       }
 
-      .health-calendar-day small + small {
+      .health-calendar-day small.activity-location {
         display: none;
       }
 
@@ -2317,6 +2317,36 @@
       }
     }
 
+    @media (max-width: 760px) and (orientation: portrait) {
+      .health-calendar-grid {
+        grid-auto-rows: 42px;
+      }
+
+      .health-calendar-day {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto auto;
+        justify-items: center;
+        align-content: center;
+        row-gap: 3px;
+        padding: 5px 2px;
+      }
+
+      .health-calendar-day strong,
+      .health-calendar-day span {
+        grid-column: 1;
+        justify-self: center;
+        text-align: center;
+      }
+
+      .health-calendar-day span {
+        font-size: 10px;
+      }
+
+      .health-calendar-day small {
+        display: none;
+      }
+    }
+
     @media (max-width: 980px) and (orientation: landscape) {
       .app {
         padding: 8px 8px calc(12px + env(safe-area-inset-bottom));
@@ -2364,6 +2394,26 @@
         margin-top: 2px;
         font-size: 10px;
         white-space: nowrap;
+      }
+
+      .health-calendar-grid {
+        grid-auto-rows: 50px;
+        gap: 4px;
+      }
+
+      .health-calendar-day {
+        grid-template-columns: minmax(28px, auto) minmax(0, 1fr);
+        column-gap: 5px;
+        padding: 5px;
+      }
+
+      .health-calendar-day small {
+        display: block;
+        font-size: 9px;
+      }
+
+      .health-calendar-day small.activity-location {
+        display: none;
       }
 
       .composer {
@@ -2647,6 +2697,8 @@
       const DEFAULT_REMOTE_PATH = "minimal-notes-records.json";
       const HEALTH_SUMMARY_PATH = "minimal-notes-health-summary.json";
       const HEALTH_SUMMARY_CACHE_KEY = "minimal-notes-health-summary-cache-v1";
+      const HEALTH_CALENDAR_PATH = "minimal-notes-health-calendar.json";
+      const HEALTH_CALENDAR_CACHE_KEY = "minimal-notes-health-calendar-cache-v1";
       const HEALTH_HISTORY_PATH = "minimal-notes-health-history.json";
       const HEALTH_HISTORY_CACHE_KEY = "minimal-notes-health-history-cache-v1";
       const JOURNAL_PRIVATE_HIGHLIGHTS_PATH = "minimal-notes-journal-private-highlights.json";
@@ -3175,7 +3227,7 @@
         state.healthCalendar.loading = true;
         state.healthCalendar.error = "";
         if (!preserveExisting) {
-          renderHealthCalendarEmpty("正在读取健康历史...");
+          renderHealthCalendarEmpty("正在读取健康月历...");
         }
 
         try {
@@ -3199,7 +3251,7 @@
 
       function loadCachedHealthCalendar() {
         try {
-          const raw = localStorage.getItem(HEALTH_HISTORY_CACHE_KEY);
+          const raw = localStorage.getItem(HEALTH_CALENDAR_CACHE_KEY);
           if (!raw) {
             return false;
           }
@@ -3229,7 +3281,7 @@
         }
 
         try {
-          localStorage.setItem(HEALTH_HISTORY_CACHE_KEY, JSON.stringify(payload));
+          localStorage.setItem(HEALTH_CALENDAR_CACHE_KEY, JSON.stringify(payload));
         } catch (error) {
           console.warn("Health calendar cache unavailable", error);
         }
@@ -3237,6 +3289,7 @@
 
       function clearHealthCalendarCache() {
         try {
+          localStorage.removeItem(HEALTH_CALENDAR_CACHE_KEY);
           localStorage.removeItem(HEALTH_HISTORY_CACHE_KEY);
         } catch (error) {
           console.warn("Health calendar cache cleanup failed", error);
@@ -3244,20 +3297,38 @@
       }
 
       async function fetchHealthHistoryPayload() {
+        const remoteCalendarPayload = await fetchRemoteHealthCalendarPayload();
+        if (remoteCalendarPayload) {
+          return remoteCalendarPayload;
+        }
+
         const remotePayload = await fetchRemoteHealthHistoryPayload();
         if (remotePayload) {
           return remotePayload;
         }
 
+        const localCalendarPayload = await fetchLocalHealthCalendarPayload();
+        if (localCalendarPayload) {
+          return localCalendarPayload;
+        }
+
         return fetchLocalHealthHistoryPayload();
       }
 
+      async function fetchRemoteHealthCalendarPayload() {
+        return fetchRemoteHealthJsonPayload(HEALTH_CALENDAR_PATH, "健康月历读取失败");
+      }
+
       async function fetchRemoteHealthHistoryPayload() {
+        return fetchRemoteHealthJsonPayload(HEALTH_HISTORY_PATH, "健康历史读取失败");
+      }
+
+      async function fetchRemoteHealthJsonPayload(path, errorMessage) {
         if (!state.remote.enabled || !state.remote.token || !state.remote.repo) {
           return null;
         }
 
-        const response = await fetch(getRemotePathContentsUrl(HEALTH_HISTORY_PATH, true), {
+        const response = await fetch(getRemotePathContentsUrl(path, true), {
           headers: getRemoteHeaders(false),
           cache: "no-store"
         });
@@ -3267,7 +3338,7 @@
         }
 
         if (!response.ok) {
-          throw await createRemoteHttpError(response, "健康历史读取失败");
+          throw await createRemoteHttpError(response, errorMessage);
         }
 
         const data = await response.json();
@@ -3275,21 +3346,32 @@
         return JSON.parse(text);
       }
 
+      async function fetchLocalHealthCalendarPayload() {
+        return fetchLocalHealthJsonPayload(HEALTH_CALENDAR_PATH, true);
+      }
+
       async function fetchLocalHealthHistoryPayload() {
+        return fetchLocalHealthJsonPayload(HEALTH_HISTORY_PATH, false);
+      }
+
+      async function fetchLocalHealthJsonPayload(path, missingAsNull) {
         if (isLocalFilePage()) {
-          throw new Error("本地文件页面不能直接读取健康历史。");
+          throw new Error("本地文件页面不能直接读取健康月历。");
         }
 
-        const response = await fetch(HEALTH_HISTORY_PATH + "?t=" + encodeURIComponent(String(Date.now())), {
+        const response = await fetch(path + "?t=" + encodeURIComponent(String(Date.now())), {
           cache: "no-store"
         });
 
         if (response.status === 404) {
-          throw new Error("未找到 " + HEALTH_HISTORY_PATH);
+          if (missingAsNull) {
+            return null;
+          }
+          throw new Error("未找到 " + path);
         }
 
         if (!response.ok) {
-          throw new Error("健康历史读取失败：" + response.status);
+          throw new Error("健康月历读取失败：" + response.status);
         }
 
         return response.json();
@@ -3416,7 +3498,7 @@
         const monthEndKey = formatLocalDayKey(new Date(year, monthIndex, daysInMonth(year, monthIndex)));
         const entryMap = new Map();
 
-        getHealthHistoryEntries(payload).forEach(function (entry) {
+        getHealthCalendarEntries(payload).forEach(function (entry) {
           if (entry && typeof entry.date === "string") {
             entryMap.set(entry.date, entry);
           }
@@ -3451,12 +3533,16 @@
         };
       }
 
-      function getHealthHistoryEntries(payload) {
-        if (!payload || typeof payload !== "object" || !Array.isArray(payload.entries)) {
+      function getHealthCalendarEntries(payload) {
+        if (!payload || typeof payload !== "object") {
           return [];
         }
 
-        return payload.entries.slice().sort(function (left, right) {
+        const entries = Array.isArray(payload.days)
+          ? payload.days
+          : (Array.isArray(payload.entries) ? payload.entries : []);
+
+        return entries.slice().sort(function (left, right) {
           return String(left && left.date || "").localeCompare(String(right && right.date || ""));
         });
       }
@@ -3476,7 +3562,7 @@
         }
 
         const metrics = getHealthCalendarMetrics(entry);
-        const status = classifyHealthCalendarDay(metrics);
+        const status = resolveHealthCalendarDayStatus(metrics);
         return {
           date: date,
           dayNumber: dayNumber,
@@ -3490,6 +3576,33 @@
       }
 
       function getHealthCalendarMetrics(entry) {
+        if (entry && typeof entry === "object" && !entry.coros && typeof entry.statusKey === "string") {
+          const compactActivities = Array.isArray(entry.activities) ? entry.activities : [];
+          const directElevationGain = healthNumber(entry.elevationGainMeters);
+          const directTrainingLoad = healthNumber(entry.trainingLoad);
+          return {
+            statusKey: normalizeHealthCalendarStatusKey(entry.statusKey),
+            partial: Boolean(entry.partial),
+            sleepScore: healthNumber(entry.sleepScore),
+            sleepMinutes: healthNumber(entry.sleepMinutes),
+            recoveryPct: healthNumber(entry.recoveryPct),
+            hrvMs: healthNumber(entry.hrvMs),
+            hrvBaselineMs: healthNumber(entry.hrvBaselineMs),
+            hrvNormalRangeLowMs: healthNumber(entry.hrvNormalRangeLowMs),
+            restingBpm: healthNumber(entry.restingBpm),
+            steps: healthNumber(entry.steps),
+            exerciseMinutes: healthNumber(entry.exerciseMinutes),
+            activeCalories: getHealthCalendarCompactActiveCalories(entry),
+            activityLocation: getHealthCalendarActivityLocation(compactActivities),
+            elevationGainMeters: directElevationGain != null ? directElevationGain : healthSum(compactActivities.map(function (activity) {
+              return healthNumber(activity && activity.elevationGainMeters);
+            })),
+            trainingLoad: directTrainingLoad != null ? directTrainingLoad : healthSum(compactActivities.map(function (activity) {
+              return healthNumber(activity && activity.trainingDetails && activity.trainingDetails.trainingLoad);
+            }))
+          };
+        }
+
         const coros = entry.coros || {};
         const dailyHealth = coros.dailyHealth || {};
         const sleep = coros.sleep || {};
@@ -3497,11 +3610,13 @@
         const heartRate = coros.heartRate || {};
         const recovery = coros.recovery || {};
         const activities = Array.isArray(coros.activities) ? coros.activities : [];
+        const activeCalories = getHealthCalendarDailyActiveCalories(dailyHealth, activities);
 
         return {
+          statusKey: "",
           partial: entry.dayComplete === false
-            || /partial|incomplete/i.test(String(entry.dataStatus || ""))
-            || /partial|incomplete/i.test(String(dailyHealth.dataStatus || "")),
+            || /partial/i.test(String(entry.dataStatus || ""))
+            || /partial/i.test(String(dailyHealth.dataStatus || "")),
           sleepScore: healthNumber(sleep.score),
           sleepMinutes: healthNumber(sleep.mainSleepMinutes),
           recoveryPct: healthNumber(recovery.percentage),
@@ -3511,7 +3626,7 @@
           restingBpm: healthNumber(heartRate.restingBpm),
           steps: healthNumber(dailyHealth.steps),
           exerciseMinutes: healthNumber(dailyHealth.exerciseMinutes),
-          activeCalories: healthNumber(dailyHealth.activeCalories),
+          activeCalories: activeCalories,
           activityLocation: getHealthCalendarActivityLocation(activities),
           elevationGainMeters: healthSum(activities.map(function (activity) {
             return healthNumber(activity && activity.elevationGainMeters);
@@ -3520,6 +3635,52 @@
             return healthNumber(activity && activity.trainingDetails && activity.trainingDetails.trainingLoad);
           }))
         };
+      }
+
+      function normalizeHealthCalendarStatusKey(value) {
+        const key = String(value || "").toLowerCase();
+        return ["good", "steady", "rest", "active"].includes(key) ? key : "";
+      }
+
+      function getHealthCalendarStatus(statusKey) {
+        const key = normalizeHealthCalendarStatusKey(statusKey);
+        const statuses = {
+          good: { key: "good", label: "状态不错", short: "不错" },
+          steady: { key: "steady", label: "平稳", short: "平稳" },
+          rest: { key: "rest", label: "需要休息", short: "欠佳" },
+          active: { key: "active", label: "活动较多", short: "活动" }
+        };
+        return statuses[key] || null;
+      }
+
+      function getHealthCalendarCompactActiveCalories(entry) {
+        const analysisActiveCalories = healthNumber(entry && entry.analysisActiveCalories);
+        if (analysisActiveCalories != null) {
+          return analysisActiveCalories;
+        }
+
+        return healthNumber(entry && entry.activeCalories);
+      }
+
+      function getHealthCalendarDailyActiveCalories(dailyHealth, activities) {
+        const analysisActiveCalories = healthNumber(dailyHealth && dailyHealth.analysisActiveCalories);
+        if (analysisActiveCalories != null) {
+          return analysisActiveCalories;
+        }
+
+        const rawActiveCalories = healthNumber(dailyHealth && dailyHealth.activeCalories);
+        if (rawActiveCalories == null) {
+          return null;
+        }
+
+        const activeCaloriesDelta = healthSum((Array.isArray(activities) ? activities : []).map(function (activity) {
+          return getHealthCalendarActivityAnalysisCalorieDelta(activity);
+        }));
+        return Math.max(0, Math.round(rawActiveCalories + activeCaloriesDelta));
+      }
+
+      function resolveHealthCalendarDayStatus(metrics) {
+        return getHealthCalendarStatus(metrics.statusKey) || classifyHealthCalendarDay(metrics);
       }
 
       function classifyHealthCalendarDay(metrics) {
@@ -3541,11 +3702,14 @@
           || metrics.hrvMs >= metrics.hrvBaselineMs;
         const restingGood = metrics.restingBpm == null || metrics.restingBpm <= 53;
 
-        if (sleepLow || recoveryLow || hrvLow || restingHigh) {
+        if (sleepLow || recoveryLow) {
           return { key: "rest", label: "需要休息", short: "欠佳" };
         }
         if (highActivity) {
           return { key: "active", label: "活动较多", short: "活动" };
+        }
+        if (hrvLow || restingHigh) {
+          return { key: "rest", label: "需要休息", short: "欠佳" };
         }
         if (metrics.sleepScore != null && metrics.sleepScore >= 90
           && (metrics.recoveryPct == null || metrics.recoveryPct >= 90)
@@ -3630,6 +3794,25 @@
         }
 
         return healthNumber(activity.calories);
+      }
+
+      function getHealthCalendarActivityAnalysisCalorieDelta(activity) {
+        if (!activity || typeof activity !== "object") {
+          return 0;
+        }
+
+        const original = healthNumber(activity.calories);
+        if (original == null) {
+          return 0;
+        }
+
+        const direct = healthNumber(activity.analysisCalories);
+        if (direct != null) {
+          return direct - original;
+        }
+
+        const nested = healthNumber(activity.analysis && activity.analysis.calories);
+        return nested != null ? nested - original : 0;
       }
 
       function healthNumber(value) {
@@ -5735,6 +5918,7 @@
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(REMOTE_SYNC_STORAGE_KEY);
         localStorage.removeItem(HEALTH_SUMMARY_CACHE_KEY);
+        localStorage.removeItem(HEALTH_CALENDAR_CACHE_KEY);
         localStorage.removeItem(HEALTH_HISTORY_CACHE_KEY);
         localStorage.removeItem(JOURNAL_PRIVATE_HIGHLIGHTS_CACHE_KEY);
         await deleteStoredSyncFileHandle();
@@ -7107,6 +7291,7 @@
         const path = normalizeRemotePath(value).replace(/\\/g, "/").toLowerCase();
         return path === JOURNAL_PRIVATE_HIGHLIGHTS_PATH.toLowerCase()
           || path === HEALTH_SUMMARY_PATH.toLowerCase()
+          || path === HEALTH_CALENDAR_PATH.toLowerCase()
           || path === HEALTH_HISTORY_PATH.toLowerCase();
       }
 

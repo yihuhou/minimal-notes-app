@@ -41,6 +41,8 @@ DDL 6月10日前交材料
 
 输入框下方有 `事项`、`待办`、`日程`、`截止`、`想法`、`日记`、`已完成` 这些筛选按钮。
 
+`待办`、`日程`、`截止` 可以自动识别：普通内容默认是待办；带时间的内容通常会识别为日程；带 `DDL`、`截止`、`前`、`之前` 等截止提示的内容会识别为截止事项。`想法` 和 `日记` 不会自动猜测，需要在内容开头写 `想法：`、`日记：`，或者先点到对应筛选按钮再输入。
+
 如果你先点到某个具体类别，再直接输入内容，新的记录会默认保存到这个类别里。例如：
 
 - 点 `日记` 后输入 `今天把论文引言改完了`，会直接保存为日记，不需要每次都写 `日记：`。
@@ -282,6 +284,8 @@ Journal: finished revising the introduction today
 ### Categories And Filters
 
 The filter buttons under the input box include `事项` (Items), `待办` (Todo), `日程` (Schedule), `截止` (Deadline), `想法` (Idea), `日记` (Journal), and `已完成` (Completed).
+
+`待办` (Todo), `日程` (Schedule), and `截止` (Deadline) can be detected automatically: plain text defaults to todo; text with a time is usually treated as a schedule item; text with deadline hints such as `DDL`, `截止`, `前`, or `之前` is treated as a deadline. `想法` (Idea) and `日记` (Journal) are not guessed automatically; use an `Idea:` / `Journal:` prefix, or click the matching filter before typing.
 
 If you click a specific category first and then type into the input box, new records are saved to that category by default. For example:
 

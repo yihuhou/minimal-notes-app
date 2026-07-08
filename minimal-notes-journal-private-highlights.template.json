@@ -1,0 +1,40 @@
+{
+  "locationAliases": {
+    "Library": "学习地点",
+    "Office": "工作地点"
+  },
+  "keywordGroups": [
+    {
+      "label": "自定义健康词",
+      "className": "code-inline-journal-health",
+      "words": [
+        "睡眠",
+        "跑步",
+        "恢复"
+      ]
+    },
+    {
+      "label": "自定义工作词",
+      "className": "code-inline-journal-work",
+      "words": [
+        "论文",
+        "会议",
+        "写作"
+      ]
+    }
+  ],
+  "patternRules": [
+    {
+      "label": "自定义情绪规则",
+      "className": "code-inline-journal-emotion",
+      "pattern": "开心|焦虑|平静"
+    }
+  ],
+  "suppressions": [
+    {
+      "label": "忽略示例",
+      "tokenPattern": "示例词",
+      "reason": "把这里改成你想隐藏的误识别词；不需要时可以删除本条。"
+    }
+  ]
+}

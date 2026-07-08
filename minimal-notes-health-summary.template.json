@@ -1,0 +1,45 @@
+{
+  "entries": [
+    {
+      "date": "2026-07-08",
+      "generatedAt": "2026-07-08T08:00:00+08:00",
+      "label": "健康小结",
+      "summary": "把这里改成你的健康小结。应用会显示最新一条 summary 或 text。",
+      "metrics": [
+        {
+          "label": "睡眠",
+          "value": "88分",
+          "note": "可选说明"
+        },
+        {
+          "label": "恢复",
+          "value": "82%"
+        },
+        {
+          "label": "HRV",
+          "value": "52ms"
+        }
+      ],
+      "advice": [
+        "把这里改成今天最重要的一条建议。",
+        "最多显示前两条 advice。"
+      ],
+      "notices": [
+        "可选提醒，最多显示前三条。"
+      ],
+      "trainingSuggestion": {
+        "label": "今日训练",
+        "category": "recovery",
+        "title": "轻松恢复",
+        "duration": "20-30 分钟",
+        "intensity": "低强度",
+        "reason": "把这里改成训练建议原因。",
+        "plan": [
+          "热身 5 分钟",
+          "轻松活动 15 分钟",
+          "拉伸 5 分钟"
+        ]
+      }
+    }
+  ]
+}

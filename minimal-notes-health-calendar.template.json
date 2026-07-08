@@ -1,0 +1,45 @@
+{
+  "templateNote": "Copy this file to your private data repository as minimal-notes-health-calendar.json, then replace the sample dates and metrics with your own data.",
+  "days": [
+    {
+      "date": "2026-07-01",
+      "statusKey": "good",
+      "partial": false,
+      "sleepScore": 92,
+      "sleepMinutes": 455,
+      "recoveryPct": 91,
+      "hrvMs": 54,
+      "hrvBaselineMs": 50,
+      "hrvNormalRangeLowMs": 42,
+      "restingBpm": 51,
+      "steps": 8600,
+      "exerciseMinutes": 35,
+      "activeCalories": 420,
+      "activities": [
+        {
+          "location": "Park",
+          "calories": 180,
+          "elevationGainMeters": 35,
+          "trainingDetails": {
+            "trainingLoad": 42
+          }
+        }
+      ]
+    },
+    {
+      "date": "2026-07-02",
+      "statusKey": "steady",
+      "partial": false,
+      "sleepScore": 81,
+      "sleepMinutes": 420,
+      "recoveryPct": 78,
+      "hrvMs": 49,
+      "hrvBaselineMs": 50,
+      "hrvNormalRangeLowMs": 42,
+      "restingBpm": 54,
+      "steps": 6200,
+      "exerciseMinutes": 20,
+      "activeCalories": 310
+    }
+  ]
+}

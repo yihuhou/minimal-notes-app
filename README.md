@@ -37,7 +37,7 @@ DDL 6月10日前交材料
 日记：今天把论文引言改完了
 ```
 
-### 分类和筛选
+### 分类、筛选和搜索
 
 输入框下方有 `事项`、`待办`、`日程`、`截止`、`想法`、`日记`、`已完成` 这些筛选按钮。
 
@@ -50,6 +50,8 @@ DDL 6月10日前交材料
 - 点 `日程`、`截止` 或 `待办` 后输入内容，会保存到对应事项类别。
 
 如果使用类型下拉框，或者在内容开头写 `日记：`、`想法：`、`DDL` 等明确提示，应用会优先按这些明确提示处理。`事项` 和 `已完成` 只是查看范围，不会把新记录固定到某个类别。
+
+列表里的搜索框不仅可以搜索记录内容，也可以搜索日期、月份和星期。
 
 ### 事项状态、提醒和删除
 
@@ -74,8 +76,6 @@ DDL 6月10日前交材料
 ### 日记规则
 
 日记日期按凌晨 5 点换天。也就是说，凌晨 5 点前写的日记会显示为前一天，5 点后写的日记才显示为当天。
-
-列表里的搜索框不仅可以搜索记录内容，也可以搜索日期、月份和星期。
 
 日记只能修改最近 3 天内的内容。超过 3 天的日记会变成只读，不能编辑或删除。
 
@@ -354,7 +354,7 @@ Idea: add a mobile shortcut
 Journal: finished revising the introduction today
 ```
 
-### Categories And Filters
+### Categories, Filters, And Search
 
 The filter buttons under the input box include `事项` (Items), `待办` (Todo), `日程` (Schedule), `截止` (Deadline), `想法` (Idea), `日记` (Journal), and `已完成` (Completed).
 
@@ -367,6 +367,8 @@ If you click a specific category first and then type into the input box, new rec
 - Click `日程` (`Schedule`), `截止` (`Deadline`), or `待办` (`Todo`) to save new entries into that item category.
 
 The type dropdown and explicit prefixes such as `Journal:`, `Idea:`, or `DDL` still take priority. `事项` (`Items`) and `已完成` (`Completed`) are viewing filters only and do not force a category for new records.
+
+The list search box can search both record text and dates, months, or weekdays.
 
 ### Item States, Warnings, And Deletion
 
@@ -391,8 +393,6 @@ When deleting a record, there are two choices:
 ### Journal Rules
 
 Journal dates roll over at 5:00 AM. A journal entry written before 5:00 AM is shown as the previous day; entries written at or after 5:00 AM are shown as the current day.
-
-The list search box can search both record text and dates, months, or weekdays.
 
 Journal entries can only be edited within 3 days. Older journal entries become read-only and cannot be edited or deleted.
 

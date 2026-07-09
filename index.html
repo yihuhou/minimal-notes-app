@@ -8479,7 +8479,7 @@
         const journalFocus = state.filter === "journal";
         const ideas = getOpenIdeas();
         const hasIdeas = ideas.length > 0;
-        const shouldShowIdeaPane = hasIdeas || journalFocus;
+        const shouldShowIdeaPane = hasIdeas;
         const keepActiveDraftEditor = Boolean(activeIdeaDraft && activeIdeaDraft.dirty && !journalFocus);
 
         document.body.classList.toggle("journal-focus", journalFocus);
@@ -8493,11 +8493,6 @@
 
         if (!shouldShowIdeaPane) {
           ideaPane.innerHTML = "";
-          return;
-        }
-
-        if (!hasIdeas) {
-          ideaPane.innerHTML = journalFocus ? '<div class="journal-idea-veil" aria-hidden="true"></div>' : "";
           return;
         }
 

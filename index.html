@@ -10379,15 +10379,12 @@
         if (haystack.includes(keyword)) {
           return true;
         }
-        if (record && record.type === "journal") {
-          return journalDateMatchesSearch(record, keyword);
-        }
-        return false;
+        return recordDateMatchesSearch(record, keyword);
       }
 
-      function journalDateMatchesSearch(record, keyword) {
+      function recordDateMatchesSearch(record, keyword) {
         const normalizedKeyword = normalizeSearchToken(keyword);
-        return getJournalDateSearchTokens(record).some(function (token) {
+        return getRecordDateSearchTokens(record).some(function (token) {
           return normalizeSearchToken(token) === normalizedKeyword;
         });
       }
@@ -10396,8 +10393,38 @@
         return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
       }
 
-      function getJournalDateSearchTokens(record) {
-        const value = getJournalDateValue(record);
+      function getRecordDateSearchTokens(record) {
+        const info = getRecordSearchDateInfo(record);
+        if (!info) {
+          return [];
+        }
+
+        return getDateSearchTokens(info.value, info.label);
+      }
+
+      function getRecordSearchDateInfo(record) {
+        if (!record) {
+          return null;
+        }
+
+        if (record.type === "journal") {
+          const journalValue = getJournalDateValue(record);
+          return journalValue && isValidDate(journalValue)
+            ? { value: journalValue, label: formatJournalDateToken(record) }
+            : null;
+        }
+
+        if (record.eventAt && isValidDate(record.eventAt)) {
+          return {
+            value: record.eventAt,
+            label: formatRecordTimeToken(record)
+          };
+        }
+
+        return null;
+      }
+
+      function getDateSearchTokens(value, primaryLabel) {
         if (!value || !isValidDate(value)) {
           return [];
         }
@@ -10436,7 +10463,7 @@
           year + "年" + paddedMonth + "月份"
         ];
         const dateTokens = [
-          formatJournalDateToken(record),
+          primaryLabel,
           monthText + "/" + dayText,
           paddedMonth + "/" + paddedDay,
           monthText + "." + dayText,

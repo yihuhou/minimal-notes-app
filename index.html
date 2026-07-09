@@ -2911,6 +2911,8 @@
           lastPayloadAt: "",
           staleSha: "",
           pushLocalNext: false,
+          checkedThisSession: false,
+          readInFlight: false,
           writeInFlight: false,
           writeQueued: false,
           temporary: false,
@@ -5831,6 +5833,7 @@
         state.remote.lastPayloadAt = "";
         state.remote.staleSha = "";
         state.remote.pushLocalNext = false;
+        state.remote.checkedThisSession = false;
         state.remote.error = "";
         state.remote.temporary = Boolean(opts.temporary);
         state.remote.temporaryStartedAt = state.remote.temporary
@@ -5874,6 +5877,8 @@
         state.remote.lastPayloadAt = "";
         state.remote.staleSha = "";
         state.remote.pushLocalNext = false;
+        state.remote.checkedThisSession = false;
+        state.remote.readInFlight = false;
         state.remote.error = "";
         state.remote.temporary = false;
         state.remote.temporaryStartedAt = "";
@@ -5955,7 +5960,7 @@
           return;
         }
 
-        if (state.remote.writeInFlight || state.remote.writeQueued) {
+        if (state.remote.readInFlight || state.remote.writeInFlight || state.remote.writeQueued) {
           setStatus("GitHub 同步正在进行。");
           return;
         }
@@ -5968,7 +5973,7 @@
         }
 
         try {
-          state.remote.error = "";
+          state.remote.readInFlight = true;
           updateStorageStatus();
 
           if (state.remote.pushLocalNext) {
@@ -6040,6 +6045,7 @@
             state.remote.lastSyncAt = new Date().toISOString();
             state.remote.lastPayloadAt = state.localPayloadAt || state.remote.lastPayloadAt;
             state.remote.staleSha = result.sha || state.remote.staleSha;
+            state.remote.checkedThisSession = true;
             state.remote.error = "";
             state.remote.pushLocalNext = true;
             saveRemoteSyncSettingsToLocal();
@@ -6056,6 +6062,7 @@
             state.remote.lastSyncAt = new Date().toISOString();
             state.remote.lastPayloadAt = result.payloadAt || state.remote.lastPayloadAt;
             state.remote.staleSha = "";
+            state.remote.checkedThisSession = true;
             state.remote.error = "";
             saveRemoteSyncSettingsToLocal();
             updateStorageStatus();
@@ -6088,6 +6095,7 @@
             ? new Date().toISOString()
             : (result.payloadAt || state.remote.lastPayloadAt);
           state.remote.staleSha = "";
+          state.remote.checkedThisSession = !remoteNeedsMerge;
           state.remote.error = "";
 
           if (localNeedsMerge) {
@@ -6130,6 +6138,8 @@
             setStatus(state.remote.error + "。");
           }
         } finally {
+          state.remote.readInFlight = false;
+          updateStorageStatus();
           if (opts.refreshHealthSummary !== false && state.remote.enabled) {
             await loadHealthSummary();
           }
@@ -7087,6 +7097,7 @@
           state.localPayloadAt = payloadAt;
           state.remote.staleSha = baseSha || state.remote.staleSha;
           state.remote.pushLocalNext = state.recordsRevision !== revisionAtWriteStart || state.remote.writeQueued;
+          state.remote.checkedThisSession = true;
           state.remote.error = "";
           saveRemoteSyncSettingsToLocal();
           updateStorageStatus();
@@ -7110,6 +7121,7 @@
         state.localPayloadAt = remotePayloadAt || state.localPayloadAt;
         state.remote.staleSha = "";
         state.remote.pushLocalNext = state.recordsRevision !== revisionAtWriteStart || state.remote.writeQueued;
+        state.remote.checkedThisSession = true;
         state.remote.error = "";
         saveRemoteSyncSettingsToLocal();
         updateStorageStatus();
@@ -7147,6 +7159,16 @@
         }
 
         if (state.remote.writeInFlight) {
+          window.clearTimeout(remoteWriteTimer);
+          remoteWriteTimer = window.setTimeout(function () {
+            remoteWriteTimer = null;
+            writeQueuedRemote();
+          }, 300);
+          updateStorageStatus();
+          return;
+        }
+
+        if (state.remote.readInFlight) {
           window.clearTimeout(remoteWriteTimer);
           remoteWriteTimer = window.setTimeout(function () {
             remoteWriteTimer = null;
@@ -13358,6 +13380,7 @@
       function updateStorageStatus() {
         const busy = state.sync.writeInFlight
           || state.sync.writeQueued
+          || state.remote.readInFlight
           || state.remote.writeInFlight
           || state.remote.writeQueued;
 
@@ -13387,7 +13410,7 @@
         if (cloudRestoreButton) {
           const hasCloudBackup = Boolean(state.remote.enabled && state.sync.handle);
           cloudRestoreButton.hidden = !hasCloudBackup;
-          cloudRestoreButton.disabled = !hasCloudBackup || state.sync.writeInFlight || state.sync.writeQueued || state.remote.writeInFlight || state.remote.writeQueued;
+          cloudRestoreButton.disabled = !hasCloudBackup || state.sync.writeInFlight || state.sync.writeQueued || state.remote.readInFlight || state.remote.writeInFlight || state.remote.writeQueued;
           cloudRestoreButton.textContent = "从备份恢复";
           cloudRestoreButton.title = "从云盘备份文件恢复记录";
         }
@@ -13425,11 +13448,11 @@
         }
 
         if (tempRemoteSyncButton) {
-          tempRemoteSyncButton.disabled = !state.remote.supported || state.remote.writeInFlight;
+          tempRemoteSyncButton.disabled = !state.remote.supported || state.remote.readInFlight || state.remote.writeInFlight;
         }
 
         if (saveRemoteSyncButton) {
-          saveRemoteSyncButton.disabled = !state.remote.supported || state.remote.writeInFlight;
+          saveRemoteSyncButton.disabled = !state.remote.supported || state.remote.readInFlight || state.remote.writeInFlight;
         }
 
         if (secureExitButton) {
@@ -13442,7 +13465,7 @@
       }
 
       function getSyncActionText() {
-        if (state.remote.enabled && (state.remote.writeInFlight || state.remote.writeQueued)) {
+        if (state.remote.enabled && (state.remote.readInFlight || state.remote.writeInFlight || state.remote.writeQueued)) {
           return state.remote.temporary ? "临时同步中" : "同步中";
         }
 
@@ -13455,6 +13478,9 @@
         }
 
         if (state.remote.enabled) {
+          if (!state.remote.lastSyncAt || !state.remote.checkedThisSession) {
+            return state.remote.temporary ? "临时同步" : "同步GitHub";
+          }
           return state.remote.temporary ? "临时同步" : "已同步";
         }
 
@@ -13511,6 +13537,10 @@
           const suffix = backupText ? "；" + backupText : "";
           const modeText = state.remote.temporary ? "GitHub 临时" : "GitHub";
 
+          if (state.remote.readInFlight || state.remote.writeInFlight || state.remote.writeQueued) {
+            return modeText + " 同步中" + suffix;
+          }
+
           if (state.remote.error) {
             return state.remote.error + suffix;
           }
@@ -13519,8 +13549,12 @@
             return "等待写回 " + modeText + suffix;
           }
 
-          if (state.remote.writeInFlight || state.remote.writeQueued) {
-            return modeText + " 同步中" + suffix;
+          if (!state.remote.lastSyncAt) {
+            return modeText + " 等待确认" + suffix;
+          }
+
+          if (!state.remote.checkedThisSession) {
+            return modeText + " 上次已同步" + suffix;
           }
 
           return modeText + " 已同步" + suffix;

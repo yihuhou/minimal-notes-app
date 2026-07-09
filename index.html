@@ -8201,7 +8201,7 @@
         const summaryPrefix = countText + " · " + formatSummaryNumber(journalDayCount) + " 天";
         const suffix = suffixText || "";
         if (!ritualStats) {
-          summaryText.textContent = summaryPrefix + " · 总字数 " + formatSummaryNumber(journalWordCount) + " 字" + suffix;
+          summaryText.textContent = summaryPrefix + " · " + formatSummaryNumber(journalWordCount) + " 字" + suffix;
           return;
         }
 
@@ -8228,7 +8228,7 @@
         summaryText.textContent = "";
         summaryText.appendChild(document.createTextNode(summaryPrefix + " · "));
         summaryText.appendChild(ritual);
-        summaryText.appendChild(document.createTextNode(" · 总字数 " + formatSummaryNumber(journalWordCount) + " 字" + suffix));
+        summaryText.appendChild(document.createTextNode(" · " + formatSummaryNumber(journalWordCount) + " 字" + suffix));
       }
 
       function renderGTeacherPanel() {

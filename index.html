@@ -10370,10 +10370,105 @@
               return true;
             }
 
-            const haystack = (record && typeof record.text === "string" ? record.text : "").toLowerCase();
-
-            return haystack.includes(keyword);
+            return recordMatchesSearch(record, keyword);
           });
+      }
+
+      function recordMatchesSearch(record, keyword) {
+        const haystack = (record && typeof record.text === "string" ? record.text : "").toLowerCase();
+        if (haystack.includes(keyword)) {
+          return true;
+        }
+        if (record && record.type === "journal") {
+          return journalDateMatchesSearch(record, keyword);
+        }
+        return false;
+      }
+
+      function journalDateMatchesSearch(record, keyword) {
+        const normalizedKeyword = normalizeSearchToken(keyword);
+        return getJournalDateSearchTokens(record).some(function (token) {
+          return normalizeSearchToken(token) === normalizedKeyword;
+        });
+      }
+
+      function normalizeSearchToken(value) {
+        return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+      }
+
+      function getJournalDateSearchTokens(record) {
+        const value = getJournalDateValue(record);
+        if (!value || !isValidDate(value)) {
+          return [];
+        }
+
+        const date = new Date(value);
+        const year = date.getFullYear();
+        const month = date.getMonth() + 1;
+        const day = date.getDate();
+        const monthText = String(month);
+        const dayText = String(day);
+        const paddedMonth = monthText.padStart(2, "0");
+        const paddedDay = dayText.padStart(2, "0");
+        const weekday = formatWeekdayToken(date);
+        const longWeekday = weekday ? weekday.replace("周", "星期") : "";
+        const chineseMonth = [
+          "一月", "二月", "三月", "四月", "五月", "六月",
+          "七月", "八月", "九月", "十月", "十一月", "十二月"
+        ][month - 1] || "";
+        const monthTokens = [
+          monthText + "月",
+          paddedMonth + "月",
+          monthText + "月份",
+          paddedMonth + "月份",
+          chineseMonth,
+          year + "/" + monthText,
+          year + "/" + paddedMonth,
+          year + "-" + monthText,
+          year + "-" + paddedMonth,
+          year + "." + monthText,
+          year + "." + paddedMonth,
+          year + " " + monthText + "月",
+          year + " " + paddedMonth + "月",
+          year + "年" + monthText + "月",
+          year + "年" + paddedMonth + "月",
+          year + "年" + monthText + "月份",
+          year + "年" + paddedMonth + "月份"
+        ];
+        const dateTokens = [
+          formatJournalDateToken(record),
+          monthText + "/" + dayText,
+          paddedMonth + "/" + paddedDay,
+          monthText + "." + dayText,
+          paddedMonth + "." + paddedDay,
+          monthText + "月" + dayText,
+          monthText + "月" + dayText + "日",
+          year + "/" + monthText + "/" + dayText,
+          year + "/" + paddedMonth + "/" + paddedDay,
+          year + "." + monthText + "." + dayText,
+          year + "." + paddedMonth + "." + paddedDay,
+          year + "-" + monthText + "-" + dayText,
+          year + "-" + paddedMonth + "-" + paddedDay,
+          year + "年" + monthText + "月" + dayText,
+          year + "年" + paddedMonth + "月" + paddedDay,
+          year + "年" + monthText + "月" + dayText + "日"
+        ];
+        const weekdayTokens = [weekday, longWeekday].filter(Boolean);
+        const parts = monthTokens.concat(dateTokens, weekdayTokens);
+
+        dateTokens.forEach(function (dateToken) {
+          if (!dateToken) {
+            return;
+          }
+          weekdayTokens.forEach(function (weekdayToken) {
+            parts.push(dateToken + " " + weekdayToken);
+            parts.push(dateToken + weekdayToken);
+          });
+        });
+
+        return parts.filter(function (part, index) {
+          return part && parts.indexOf(part) === index;
+        });
       }
 
       function sortVisibleRecords(a, b) {

@@ -2913,6 +2913,7 @@
           pushLocalNext: false,
           checkedThisSession: false,
           readInFlight: false,
+          readProgressVisible: false,
           writeInFlight: false,
           writeQueued: false,
           temporary: false,
@@ -5879,6 +5880,7 @@
         state.remote.pushLocalNext = false;
         state.remote.checkedThisSession = false;
         state.remote.readInFlight = false;
+        state.remote.readProgressVisible = false;
         state.remote.error = "";
         state.remote.temporary = false;
         state.remote.temporaryStartedAt = "";
@@ -5961,7 +5963,9 @@
         }
 
         if (state.remote.readInFlight || state.remote.writeInFlight || state.remote.writeQueued) {
-          setStatus("GitHub 同步正在进行。");
+          if (!opts.silent) {
+            setStatus("GitHub 同步正在进行。");
+          }
           return;
         }
         if (hasActiveDirtyIdeaPaneDraft()) {
@@ -5974,6 +5978,7 @@
 
         try {
           state.remote.readInFlight = true;
+          state.remote.readProgressVisible = !opts.silent;
           updateStorageStatus();
 
           if (state.remote.pushLocalNext) {
@@ -6139,6 +6144,7 @@
           }
         } finally {
           state.remote.readInFlight = false;
+          state.remote.readProgressVisible = false;
           updateStorageStatus();
           if (opts.refreshHealthSummary !== false && state.remote.enabled) {
             await loadHealthSummary();
@@ -13378,14 +13384,14 @@
       }
 
       function updateStorageStatus() {
-        const busy = state.sync.writeInFlight
+        const interactionBusy = state.sync.writeInFlight
           || state.sync.writeQueued
           || state.remote.readInFlight
           || state.remote.writeInFlight
           || state.remote.writeQueued;
 
         if (syncActionButton) {
-          syncActionButton.disabled = (!state.sync.supported && !state.remote.supported) || busy;
+          syncActionButton.disabled = (!state.sync.supported && !state.remote.supported) || interactionBusy;
           syncActionButton.textContent = getSyncActionText();
           syncActionButton.title = getSyncActionTitle();
           syncActionButton.classList.toggle("attention", Boolean(
@@ -13400,7 +13406,7 @@
           const needsBackupAuth = Boolean(hasCloudBackup && state.sync.permissionNeeded);
           const needsBackupRetry = Boolean(hasCloudBackup && !state.sync.permissionNeeded && state.sync.error);
           backupAuthButton.hidden = !hasCloudBackup;
-          backupAuthButton.disabled = (!needsBackupAuth && !needsBackupRetry) || busy;
+          backupAuthButton.disabled = (!needsBackupAuth && !needsBackupRetry) || interactionBusy;
           backupAuthButton.textContent = needsBackupAuth ? "授权备份" : (needsBackupRetry ? "重试备份" : "已授权");
           backupAuthButton.title = needsBackupAuth ? "授权云盘备份文件" : (needsBackupRetry ? "重试写入云盘备份文件" : "云盘备份已授权");
           backupAuthButton.classList.toggle("attention", needsBackupAuth || needsBackupRetry);
@@ -13456,7 +13462,7 @@
         }
 
         if (secureExitButton) {
-          secureExitButton.disabled = busy;
+          secureExitButton.disabled = interactionBusy;
         }
 
         if (!statusTimer) {
@@ -13465,7 +13471,7 @@
       }
 
       function getSyncActionText() {
-        if (state.remote.enabled && (state.remote.readInFlight || state.remote.writeInFlight || state.remote.writeQueued)) {
+        if (state.remote.enabled && (state.remote.readProgressVisible || state.remote.writeInFlight || state.remote.writeQueued)) {
           return state.remote.temporary ? "临时同步中" : "同步中";
         }
 
@@ -13537,7 +13543,7 @@
           const suffix = backupText ? "；" + backupText : "";
           const modeText = state.remote.temporary ? "GitHub 临时" : "GitHub";
 
-          if (state.remote.readInFlight || state.remote.writeInFlight || state.remote.writeQueued) {
+          if (state.remote.readProgressVisible || state.remote.writeInFlight || state.remote.writeQueued) {
             return modeText + " 同步中" + suffix;
           }
 

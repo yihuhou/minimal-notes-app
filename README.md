@@ -63,6 +63,10 @@ DDL 6月10日前交材料
 每月底整理账单
 每 3 天浇花
 每两周一次检查设备
+每月 15 号交报告，下一次是 7月15日
+每两周一次检查设备，第一次是 7月1日
+每 3 天浇花，上次是昨天
+每周一跑步，从 7月1日 开始
 ```
 
 基本逻辑：
@@ -72,6 +76,15 @@ DDL 6月10日前交材料
 - 固定日期类循环，例如 `每周一`、`每月 15 号`、`每月底`，会跳到下一个符合日历规则的日期。
 - 间隔类循环，例如 `每 3 天`、`每两周一次`，会从你完成的时间开始计算下一次。
 - 日记和想法不参与循环；它们更适合当作普通记录保存。
+
+指定首个或当前周期：
+
+- `下一次`、`下次`、`本次`、`这次`、`下一期` 等词后面带日期时，会把这条循环事项当前显示的日期设为那个日期。例如：`每月 15 号交报告，下一次是 7月15日`。
+- `第一次`、`首次`、`首期` 等词后面带日期时，会把那个日期当作第一次发生的日期。例如：`每两周一次检查设备，第一次是 7月1日`。
+- `上一次`、`上次`、`最近一次`、`上轮` 等词后面带日期时，会把那个日期当作上一轮，用来推算下一轮。例如：`每 3 天浇花，上次是昨天`。
+- `从`、`自`、`开始`、`起始日期` 等词后面带日期时，会把那个日期当作循环起点；如果起点已经过去，应用会从这个起点推到当前应该显示的周期。例如：`每周一跑步，从 7月1日 开始`。
+
+日期可以写成 `2026-07-15`、`2026年7月15日`、`7月15日`、`15号`、`明天`、`下周一` 等形式。没有写 `下一次`、`第一次` 这类锚点词时，应用会优先使用文本里直接出现的日期；如果也没有明确日期，就按循环规则从今天附近自动推算。
 
 ### 数据默认保存在哪里
 
@@ -307,6 +320,10 @@ The app supports recurring todos, schedules, and deadlines. The natural-language
 每月底整理账单
 每 3 天浇花
 每两周一次检查设备
+每月 15 号交报告，下一次是 7月15日
+每两周一次检查设备，第一次是 7月1日
+每 3 天浇花，上次是昨天
+每周一跑步，从 7月1日 开始
 ```
 
 Basic logic:
@@ -316,6 +333,15 @@ Basic logic:
 - Fixed calendar rules, such as `每周一`, `每月 15 号`, and `每月底`, advance to the next matching calendar date.
 - Interval rules, such as `每 3 天` or `每两周一次`, calculate the next occurrence from the time you complete the item.
 - Journals and ideas do not recur; they are saved as normal passive records.
+
+Setting the first or current occurrence:
+
+- `下一次`, `下次`, `本次`, `这次`, `下一期`, and similar phrases set the currently shown occurrence when followed by a date. Example: `每月 15 号交报告，下一次是 7月15日`.
+- `第一次`, `首次`, `首期`, and similar phrases set the first occurrence date. Example: `每两周一次检查设备，第一次是 7月1日`.
+- `上一次`, `上次`, `最近一次`, `上轮`, and similar phrases treat the date as the previous occurrence and use it to calculate the next one. Example: `每 3 天浇花，上次是昨天`.
+- `从`, `自`, `开始`, `起始日期`, and similar phrases set the recurrence start date. If that date has already passed, the app advances from that start date to the occurrence that should now be shown. Example: `每周一跑步，从 7月1日 开始`.
+
+Dates can be written as `2026-07-15`, `2026年7月15日`, `7月15日`, `15号`, `明天`, `下周一`, and similar forms. Without an anchor phrase such as `下一次` or `第一次`, the app first uses any direct date in the text; if there is no direct date, it estimates the first shown occurrence from today and the recurrence rule.
 
 ### Where Data Is Saved By Default
 

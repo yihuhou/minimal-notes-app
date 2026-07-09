@@ -75,7 +75,7 @@ DDL 6月10日前交材料
 
 日记日期按凌晨 5 点换天。也就是说，凌晨 5 点前写的日记会显示为前一天，5 点后写的日记才显示为当天。
 
-日记筛选页里的搜索框不仅可以搜索日记内容，也可以搜索日期、月份和星期。
+列表里的搜索框不仅可以搜索记录内容，也可以搜索日期、月份和星期。
 
 日记只能修改最近 3 天内的内容。超过 3 天的日记会变成只读，不能编辑或删除。
 
@@ -392,7 +392,7 @@ When deleting a record, there are two choices:
 
 Journal dates roll over at 5:00 AM. A journal entry written before 5:00 AM is shown as the previous day; entries written at or after 5:00 AM are shown as the current day.
 
-The journal search box can search both journal text and dates, months, or weekdays.
+The list search box can search both record text and dates, months, or weekdays.
 
 Journal entries can only be edited within 3 days. Older journal entries become read-only and cannot be edited or deleted.
 

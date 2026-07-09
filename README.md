@@ -51,6 +51,62 @@ DDL 6月10日前交材料
 
 如果使用类型下拉框，或者在内容开头写 `日记：`、`想法：`、`DDL` 等明确提示，应用会优先按这些明确提示处理。`事项` 和 `已完成` 只是查看范围，不会把新记录固定到某个类别。
 
+### 事项状态、提醒和删除
+
+日程有三种手动状态：未开始、已准备、已完成。点日程左侧圆点时，会按 `未开始 → 已准备 → 已完成 → 未开始` 循环；普通待办和截止事项仍然是完成/未完成。
+
+日程过期后，应用会自动把它显示成 `已结束`，并给出 `确认` 和 `revert`：
+
+- 点 `确认` 后，这条日程才会正式变成已完成。
+- 点 `revert` 会恢复为未完成，适合日程延后、取消或自动判断不准确的情况。
+- 如果写了时间段，例如 `14:00-15:30`，应用按结束时间判断是否过期；如果只写了开始时间，默认按开始后 1 小时结束；如果只写日期，默认到当天 23:59 结束。
+
+提醒类提示：
+
+- 如果两个未完成的日程或循环事项在同一天的时间窗口重叠，会出现 `warning` 标签。鼠标悬停可以看到和哪条记录冲突；点击 `warning` 可以忽略这一组冲突提醒。
+- 如果你同时写了日期和星期，但两者不一致，例如 `2026年7月15日 周一`，应用会标出输入的星期，并在旁边补上按日期计算出的星期。记录仍然按日期保存；这个提示是为了帮你发现可能写错的星期。
+
+删除记录时有两种方式：
+
+- `保留到 JSON`：从列表里删除，但完整内容仍保留在数据文件里。
+- `完全删除`：从列表里删除，并不再保留完整内容。
+
+### 日记规则
+
+日记日期按凌晨 5 点换天。也就是说，凌晨 5 点前写的日记会显示为前一天，5 点后写的日记才显示为当天。
+
+日记只能修改最近 3 天内的内容。超过 3 天的日记会变成只读，不能编辑或删除。
+
+日记底部可以显示一个自定义累计计数，例如“小红花”“小星星”“打卡章”等。这个功能适合已经在别的日记软件里记了很久的人：可以把旧软件里已经累计的数量填进来，应用会把旧计数和这里新增的日记天数加在一起显示。
+
+网页自动创建的 `minimal-notes-records.json` 默认没有 `journalStats`。要使用这个计数功能时，在 JSON 顶层添加或修改 `journalStats.ritual`，不要放进 `records` 数组里。例如：
+
+```json
+{
+  "journalStats": {
+    "ritual": {
+      "baseCount": 365,
+      "startDay": "2026-07-01",
+      "dayBoundaryHour": 5,
+      "label": "朵小红花",
+      "icon": "🌸",
+      "title": "从旧日记软件继承的记录计数",
+      "color": "#e11d48"
+    }
+  }
+}
+```
+
+字段含义：
+
+- `baseCount`：旧软件里已经累计的数量。
+- `startDay`：从哪一天开始用本应用继续累计；比如旧软件已经记到 `2026-06-30`，这里可以写 `2026-07-01`。
+- `dayBoundaryHour`：这个自定义计数统计日记天数时使用的换天时间；写 `5` 表示凌晨 5 点前仍算前一天，通常和上面的日记日期规则保持一致。
+- `label`：数字后面的名称，例如 `朵小红花`、`颗小星星`、`枚打卡章`。
+- `icon`：数字前的小图标，可以是 emoji 或短文本。
+- `title`：鼠标悬浮时显示的说明。
+- `color`：小图标颜色，写成 `#e11d48` 这样的颜色值。
+
 ### 循环事项
 
 应用支持循环待办、日程和截止事项。可以直接写自然语言，例如：
@@ -217,6 +273,8 @@ Token 生成后通常只显示一次，请马上复制保存。
 - `minimal-notes-health-calendar.json` 会显示本月健康月历。
 - `minimal-notes-journal-private-highlights.json` 可以给日记高亮添加自己的地点别名、关键词组、正则规则，或隐藏误识别的词。
 
+点击顶部右侧的未完成事项统计块，可以展开或收起本月健康月历。
+
 健康数据通常很敏感，建议只放在私有仓库里。
 
 ### 常见问题
@@ -307,6 +365,62 @@ If you click a specific category first and then type into the input box, new rec
 - Click `日程` (`Schedule`), `截止` (`Deadline`), or `待办` (`Todo`) to save new entries into that item category.
 
 The type dropdown and explicit prefixes such as `Journal:`, `Idea:`, or `DDL` still take priority. `事项` (`Items`) and `已完成` (`Completed`) are viewing filters only and do not force a category for new records.
+
+### Item States, Warnings, And Deletion
+
+Schedule items have three manual states: not started, prepared, and completed. Clicking the circle on the left cycles through `not started → prepared → completed → not started`. Normal todos and deadlines still use the simpler done/not-done state.
+
+When a schedule item expires, the app shows it as `已结束` and offers `确认` and `revert`:
+
+- Click `确认` to confirm it as completed.
+- Click `revert` to restore it to not completed, useful when the event moved, was canceled, or the automatic judgment is not right.
+- If the text contains a time range such as `14:00-15:30`, the app uses the end time. If it only has a start time, the default duration is 1 hour. If it only has a date, it ends at 23:59 that day.
+
+Warning hints:
+
+- If two unfinished schedule or recurring items overlap on the same day, the app shows a `warning` tag. Hover to see which record may conflict; click `warning` to ignore that conflict pair.
+- If the text contains both a date and a weekday but they do not match, such as `2026年7月15日 周一`, the app highlights the typed weekday and adds the weekday calculated from the date. The record is still saved according to the date; the hint is there to catch a likely weekday typo.
+
+When deleting a record, there are two choices:
+
+- `保留到 JSON`: remove it from the visible list, but keep the full content in the data file.
+- `完全删除`: remove it from the visible list and stop keeping the full content.
+
+### Journal Rules
+
+Journal dates roll over at 5:00 AM. A journal entry written before 5:00 AM is shown as the previous day; entries written at or after 5:00 AM are shown as the current day.
+
+Journal entries can only be edited within 3 days. Older journal entries become read-only and cannot be edited or deleted.
+
+The journal footer can show a custom cumulative counter, such as flowers, stars, or check-in badges. This is useful if you have kept journals in another app for a long time: enter the count you already had there, and the app adds new journal days here to that old count.
+
+The app-created `minimal-notes-records.json` does not include `journalStats` by default. To use this counter, add or edit `journalStats.ritual` at the top level of the JSON file; do not put it inside the `records` array. Example:
+
+```json
+{
+  "journalStats": {
+    "ritual": {
+      "baseCount": 365,
+      "startDay": "2026-07-01",
+      "dayBoundaryHour": 5,
+      "label": "朵小红花",
+      "icon": "🌸",
+      "title": "从旧日记软件继承的记录计数",
+      "color": "#e11d48"
+    }
+  }
+}
+```
+
+Fields:
+
+- `baseCount`: the count already accumulated in the old app.
+- `startDay`: the day this app should start counting from; if the old app counted through `2026-06-30`, use `2026-07-01`.
+- `dayBoundaryHour`: the rollover hour this custom counter uses when counting journal days; `5` means entries before 5:00 AM still count as the previous day, usually matching the journal date rule above.
+- `label`: the name shown after the number, such as `朵小红花`, `颗小星星`, or `枚打卡章`.
+- `icon`: the small icon shown before the number; it can be an emoji or short text.
+- `title`: the hover text.
+- `color`: the icon color, written as a value like `#e11d48`.
 
 ### Recurring Items
 
@@ -473,6 +587,8 @@ Notes:
 - `minimal-notes-health-summary.json` shows a top health summary.
 - `minimal-notes-health-calendar.json` shows a monthly health calendar.
 - `minimal-notes-journal-private-highlights.json` adds your own journal location aliases, keyword groups, regular-expression rules, or suppression rules.
+
+Click the unfinished-items counter in the top-right header to expand or collapse the monthly health calendar.
 
 Health data is usually sensitive, so a private repository is recommended.
 

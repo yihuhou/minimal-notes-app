@@ -5366,7 +5366,8 @@
         applyIdeaPaneDraftToRecords(localPayload.records, activeIdeaDraft);
         const mergedPayload = mergeRecordsPayloads(localPayload, payload);
         applyIdeaPaneDraftToRecords(mergedPayload.records, activeIdeaDraft);
-        const fileNeedsMergedWrite = !recordsPayloadContentEqual(payload, mergedPayload);
+        const fileNeedsMergedWrite = !recordsPayloadContentEqual(payload, mergedPayload)
+          || hasDeprecatedAutoCompletionPayloadFields(raw);
         state.records = mergedPayload.records;
         state.deletedRecords = mergedPayload.deletedRecords;
         state.recurrenceCompletionArchive = mergedPayload.recurrenceCompletionArchive;
@@ -6067,7 +6068,8 @@
           const mergedPayload = mergeRecordsPayloads(localPayload, result);
           applyIdeaPaneDraftToRecords(mergedPayload.records, activeIdeaDraft);
           const localNeedsMerge = !recordsPayloadContentEqual(localPayload, mergedPayload);
-          const remoteNeedsMerge = !recordsPayloadContentEqual(result, mergedPayload);
+          const remoteNeedsMerge = !recordsPayloadContentEqual(result, mergedPayload)
+            || Boolean(result.needsSanitizedWrite);
 
           state.remote.sha = result.sha;
           state.remote.lastSyncAt = new Date().toISOString();
@@ -6143,7 +6145,8 @@
             deletedRecords: [],
             recurrenceCompletionArchive: [],
             journalStats: {},
-            sha: ""
+            sha: "",
+            needsSanitizedWrite: false
           };
         }
 
@@ -6163,7 +6166,8 @@
           sha: typeof data.sha === "string" ? data.sha : "",
           savedAt: payload.savedAt,
           syncedAt: payload.syncedAt,
-          payloadAt: payload.payloadAt
+          payloadAt: payload.payloadAt,
+          needsSanitizedWrite: hasDeprecatedAutoCompletionPayloadFields(text)
         };
       }
 
@@ -6999,7 +7003,7 @@
               queueSyncFileWrite();
               render();
             }
-            if (recordsPayloadContentEqual(latestBeforeWrite, recordsSnapshot)) {
+            if (!latestBeforeWrite.needsSanitizedWrite && recordsPayloadContentEqual(latestBeforeWrite, recordsSnapshot)) {
               markRemoteNoopWriteAsSynced(latestBeforeWrite, revisionAtWriteStart);
               return true;
             }
@@ -7058,7 +7062,7 @@
                 queueSyncFileWrite();
                 render();
               }
-              if (recordsPayloadContentEqual(latest, recordsSnapshot)) {
+              if (!latest.needsSanitizedWrite && recordsPayloadContentEqual(latest, recordsSnapshot)) {
                 markRemoteNoopWriteAsSynced(latest, revisionAtWriteStart);
                 return true;
               }
@@ -13040,6 +13044,13 @@
           payload.journalStats = normalizedJournalStats;
         }
         return payload;
+      }
+
+      function hasDeprecatedAutoCompletionPayloadFields(raw) {
+        const text = String(raw || "");
+        return text.indexOf('"autoCompleteState"') !== -1
+          || text.indexOf('"autoCompleteRef"') !== -1
+          || text.indexOf('"autoCompletedAt"') !== -1;
       }
 
       function sanitizeRecordsForPayload(records) {

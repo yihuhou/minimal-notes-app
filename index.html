@@ -3019,6 +3019,7 @@
       let gTeacherFeedbackMenuRecordId = "";
       let gTeacherFeedbackOpenedAt = 0;
       let todayHeadingTimer = 0;
+      let autoCompletionTimer = 0;
 
       bindEvents();
       updateTodayHeading();
@@ -3974,11 +3975,6 @@
           return;
         }
 
-        if (action === "revert-auto-complete") {
-          revertAutoComplete(id);
-          return;
-        }
-
         if (action === "open-edit") {
           startEditingRecord(id);
           return;
@@ -4709,9 +4705,6 @@
           ignoredConflictKeys: [],
           history: [],
           recurrenceCompletions: [],
-          autoCompleteState: "",
-          autoCompleteRef: "",
-          autoCompletedAt: "",
           prepared: false,
           completed: false,
           updatedAt: now
@@ -4931,24 +4924,6 @@
         persist();
         render();
         setStatus("已确认自动完成。");
-      }
-
-      function revertAutoComplete(id) {
-        const record = state.records.find(function (item) {
-          return item.id === id;
-        });
-        if (!record) {
-          return;
-        }
-
-        const now = new Date().toISOString();
-        record.autoCompleteState = "reverted";
-        record.autoCompleteRef = getAutoCompleteRef(record);
-        record.updatedAt = now;
-        pushHistory(record, "auto_reverted", now);
-        persist();
-        render();
-        setStatus("已恢复为未完成。");
       }
 
       function saveEditedRecord(id) {
@@ -7562,7 +7537,7 @@
       }
 
       function isSyntheticMergeOnlyHistoryAction(action) {
-        return action === "auto_completed";
+        return action === "auto_completed" || action === "auto_reverted";
       }
 
       function recordsEqual(left, right) {
@@ -8039,7 +8014,7 @@
       }
 
       function render() {
-        syncAutoCompletionState();
+        scheduleAutoCompletionRefresh();
         const visible = getVisibleRecords();
         renderFilters();
         renderSummary(visible);
@@ -8481,7 +8456,6 @@
         if (isAutoCompletionPending(record)) {
           parts.push('<span class="code-token token-auto">已结束</span>');
           parts.push('<button type="button" class="code-token token-action" data-action="confirm-auto-complete" data-id="' + escapeHtml(record.id) + '" title="确认自动完成">确认</button>');
-          parts.push('<button type="button" class="code-token token-action" data-action="revert-auto-complete" data-id="' + escapeHtml(record.id) + '" title="恢复为未完成">revert</button>');
         }
         if (record.type === "journal") {
           parts.push('<span class="code-token token-muted">' + escapeHtml(formatJournalDateToken(record)) + "</span>");
@@ -10732,85 +10706,62 @@
         return isCompletionDisplayRecord(record);
       }
 
-      function getAutoCompleteRef(record) {
-        if (!record) {
-          return "";
-        }
-        return [record.eventAt || "", record.text || ""].join("|");
-      }
-
       function clearAutoCompleteState(record) {
         if (!record) {
           return false;
         }
 
-        const changed = Boolean(record.autoCompleteState || record.autoCompleteRef || record.autoCompletedAt);
-        record.autoCompleteState = "";
-        record.autoCompleteRef = "";
-        record.autoCompletedAt = "";
+        const hasOwn = Object.prototype.hasOwnProperty;
+        const changed = hasOwn.call(record, "autoCompleteState")
+          || hasOwn.call(record, "autoCompleteRef")
+          || hasOwn.call(record, "autoCompletedAt");
+        delete record.autoCompleteState;
+        delete record.autoCompleteRef;
+        delete record.autoCompletedAt;
         return changed;
       }
 
-      function syncAutoCompletionState() {
-        const now = new Date().toISOString();
-        let changed = false;
+      function scheduleAutoCompletionRefresh() {
+        window.clearTimeout(autoCompletionTimer);
+        autoCompletionTimer = 0;
 
+        const nowTime = Date.now();
+        let nextAutoCompleteAt = 0;
         state.records.forEach(function (record) {
-          if (!supportsPreparedState(record) || !record.eventAt) {
-            if (clearAutoCompleteState(record)) {
-              changed = true;
-            }
+          if (!supportsPreparedState(record) || record.completed) {
             return;
           }
 
-          const currentRef = getAutoCompleteRef(record);
-          if (record.autoCompleteRef && record.autoCompleteRef !== currentRef) {
-            clearAutoCompleteState(record);
-            changed = true;
-          }
-
-          if (record.completed) {
-            if (clearAutoCompleteState(record)) {
-              changed = true;
-            }
+          const endAt = getMeetingEndAt(record);
+          if (!endAt) {
             return;
           }
 
-          if (!shouldAutoCompleteMeeting(record)) {
-            if (record.autoCompleteState === "pending") {
-              clearAutoCompleteState(record);
-              changed = true;
-            }
+          const endTime = endAt.getTime();
+          if (endTime <= nowTime) {
             return;
           }
 
-          if (record.autoCompleteState === "reverted" && record.autoCompleteRef === currentRef) {
-            return;
-          }
-
-          if (record.autoCompleteState !== "pending") {
-            record.autoCompleteState = "pending";
-            record.autoCompleteRef = currentRef;
-            record.autoCompletedAt = now;
-            pushHistory(record, "auto_completed", now);
-            changed = true;
+          if (!nextAutoCompleteAt || endTime < nextAutoCompleteAt) {
+            nextAutoCompleteAt = endTime;
           }
         });
 
-        if (changed) {
-          persist({
-            preservePayloadTime: true,
-            skipSyncFile: true,
-            skipRemote: true
-          });
+        if (!nextAutoCompleteAt) {
+          return;
         }
+
+        const delay = Math.min(nextAutoCompleteAt - nowTime + 1000, 2147483647);
+        autoCompletionTimer = window.setTimeout(function () {
+          autoCompletionTimer = 0;
+          render();
+        }, Math.max(0, delay));
       }
 
       function isAutoCompletionPending(record) {
         return supportsPreparedState(record)
           && !record.completed
-          && record.autoCompleteState === "pending"
-          && record.autoCompleteRef === getAutoCompleteRef(record);
+          && shouldAutoCompleteMeeting(record);
       }
 
       function shouldAutoCompleteMeeting(record) {
@@ -13077,7 +13028,7 @@
         const payload = Object.assign({
           version: 3,
           savedAt: new Date().toISOString(),
-          records: Array.isArray(payloadRecords) ? payloadRecords : state.records,
+          records: sanitizeRecordsForPayload(Array.isArray(payloadRecords) ? payloadRecords : state.records),
           deletedRecords: normalizeDeletedRecordEntries(
             Array.isArray(payloadDeletedRecords) ? payloadDeletedRecords : state.deletedRecords
           ),
@@ -13089,6 +13040,25 @@
           payload.journalStats = normalizedJournalStats;
         }
         return payload;
+      }
+
+      function sanitizeRecordsForPayload(records) {
+        if (!Array.isArray(records)) {
+          return [];
+        }
+
+        return records.map(sanitizeRecordForPayload).filter(Boolean);
+      }
+
+      function sanitizeRecordForPayload(record) {
+        if (!record || typeof record !== "object") {
+          return null;
+        }
+
+        const cleaned = cloneRecordForMerge(record);
+        clearAutoCompleteState(cleaned);
+        cleaned.history = normalizeHistoryEntries(cleaned.history, cleaned);
+        return cleaned;
       }
 
       function parseRecordsPayload(raw) {
@@ -13147,7 +13117,9 @@
               prepared: Boolean(entry.prepared),
               completed: Boolean(entry.completed)
             };
-          }).filter(Boolean)
+          }).filter(function (entry) {
+            return entry && !isSyntheticMergeOnlyHistoryAction(entry.action);
+          })
           : [];
 
         if (normalized.length) {
@@ -13294,9 +13266,6 @@
             updatedAt: updatedAt
           }),
           recurrenceCompletions: normalizeRecurrenceCompletionEntries(record.recurrenceCompletions),
-          autoCompleteState: typeof record.autoCompleteState === "string" ? record.autoCompleteState : "",
-          autoCompleteRef: typeof record.autoCompleteRef === "string" ? record.autoCompleteRef : "",
-          autoCompletedAt: normalizeDateTime(record.autoCompletedAt),
           prepared: type === "meeting" ? Boolean(record.prepared) && !Boolean(record.completed) : false,
           completed: type === "journal" ? false : Boolean(record.completed),
           updatedAt: updatedAt

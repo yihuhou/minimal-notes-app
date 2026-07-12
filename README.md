@@ -57,10 +57,10 @@ DDL 6月10日前交材料
 
 日程有三种手动状态：未开始、已准备、已完成。点日程左侧圆点时，会按 `未开始 → 已准备 → 已完成 → 未开始` 循环；普通待办和截止事项仍然是完成/未完成。
 
-日程过期后，应用会自动把它显示成 `已结束`，并给出 `确认` 和 `revert`：
+日程过期后，应用会根据当前时间把它显示成 `已结束`，并给出 `确认`：
 
 - 点 `确认` 后，这条日程才会正式变成已完成。
-- 点 `revert` 会恢复为未完成，适合日程延后、取消或自动判断不准确的情况。
+- 在确认前，`已结束` 只是根据日程结束时间实时显示的状态，不会写入数据文件。修改日程日期或时间后，应用会按新的结束时间重新判断。
 - 如果写了时间段，例如 `14:00-15:30`，应用按结束时间判断是否过期；如果只写了开始时间，默认按开始后 1 小时结束；如果只写日期，默认到当天 23:59 结束。
 
 提醒类提示：
@@ -222,7 +222,7 @@ Token 生成后通常只显示一次，请马上复制保存。
 
 之后你的记录会同步到自己的 GitHub 仓库。换手机、换电脑时，再打开同一个网页，填同一套 GitHub 同步信息即可。
 
-如果是在临时设备上使用，可以点击 `临时同步`。它适合临时读取和写入，不会长期保存同步设置和 Token。
+如果是在临时设备上使用，可以点击 `临时同步`。它不会长期保存同步设置和 Token；为了保护隐私，还会隐藏本次临时会话开始前的旧日记，并在手动导出的 JSON 中排除这些旧日记。
 
 ### 云盘同步这个备选项
 
@@ -374,10 +374,10 @@ The list search box can search both record text and dates, months, or weekdays.
 
 Schedule items have three manual states: not started, prepared, and completed. Clicking the circle on the left cycles through `not started → prepared → completed → not started`. Normal todos and deadlines still use the simpler done/not-done state.
 
-When a schedule item expires, the app shows it as `已结束` and offers `确认` and `revert`:
+When a schedule item expires, the app derives an `已结束` status from the current time and offers `确认`:
 
 - Click `确认` to confirm it as completed.
-- Click `revert` to restore it to not completed, useful when the event moved, was canceled, or the automatic judgment is not right.
+- Until confirmed, `已结束` is only a live status derived from the schedule end time and is not stored in the data file. If you edit the date or time, the app recalculates the status from the new end time.
 - If the text contains a time range such as `14:00-15:30`, the app uses the end time. If it only has a start time, the default duration is 1 hour. If it only has a date, it ends at 23:59 that day.
 
 Warning hints:
@@ -539,7 +539,7 @@ Then:
 
 After that, records will sync to your own GitHub repository. On another phone or computer, open the same link and enter the same GitHub sync settings.
 
-Use `临时同步` (`Temporary Sync`) on temporary devices. It can read and write temporarily without keeping sync settings or the token long term.
+Use `临时同步` (`Temporary Sync`) on temporary devices. It does not keep sync settings or the token long term. For privacy, it also hides journal entries from before the temporary session started and excludes those older entries from manually exported JSON.
 
 ### Cloud Drive Sync As An Alternative
 

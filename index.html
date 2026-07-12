@@ -2703,7 +2703,9 @@
       const HEALTH_HISTORY_CACHE_KEY = "minimal-notes-health-history-cache-v1";
       const JOURNAL_PRIVATE_HIGHLIGHTS_PATH = "minimal-notes-journal-private-highlights.json";
       const JOURNAL_PRIVATE_HIGHLIGHTS_CACHE_KEY = "minimal-notes-journal-private-highlights-cache-v1";
-      const REMOTE_SYNC_INTERVAL = 15000;
+      const REMOTE_SYNC_VISIBLE_INTERVAL = 60 * 1000;
+      const REMOTE_SYNC_HIDDEN_INTERVAL = 5 * 60 * 1000;
+      const REMOTE_WRITE_DEBOUNCE = 5000;
       const REMOTE_WRITE_MAX_ATTEMPTS = 5;
       const JOURNAL_ROLLOVER_HOUR = 5;
       const G_TEACHER_SIGNATURE = "——G老师";
@@ -2907,6 +2909,7 @@
           path: DEFAULT_REMOTE_PATH,
           token: "",
           sha: "",
+          etag: "",
           lastSyncAt: "",
           lastPayloadAt: "",
           staleSha: "",
@@ -3143,6 +3146,11 @@
         window.addEventListener("scroll", closeGTeacherFeedbackMenu, { passive: true });
         window.addEventListener("resize", closeGTeacherFeedbackMenu);
         window.addEventListener("resize", scheduleGTeacherTagAlignmentUpdate);
+        window.addEventListener("focus", handleRemoteSyncFocus);
+        window.addEventListener("online", handleRemoteSyncFocus);
+        window.addEventListener("blur", flushPendingRemoteWrite);
+        window.addEventListener("pagehide", flushPendingRemoteWrite);
+        document.addEventListener("visibilitychange", handleRemoteSyncVisibilityChange);
         document.addEventListener("click", handleGTeacherFeedbackOutsideClick);
 
         document.addEventListener("keydown", function (event) {
@@ -5742,6 +5750,7 @@
           state.remote.path = path;
           state.remote.token = token;
           state.remote.sha = typeof saved.sha === "string" ? saved.sha : "";
+          state.remote.etag = typeof saved.etag === "string" ? saved.etag : "";
           state.remote.lastSyncAt = typeof saved.lastSyncAt === "string" ? saved.lastSyncAt : "";
           state.remote.lastPayloadAt = typeof saved.lastPayloadAt === "string" ? saved.lastPayloadAt : "";
           state.remote.staleSha = typeof saved.staleSha === "string" ? saved.staleSha : "";
@@ -5765,6 +5774,7 @@
           path: state.remote.path,
           token: state.remote.token,
           sha: state.remote.sha,
+          etag: state.remote.etag,
           lastSyncAt: state.remote.lastSyncAt,
           lastPayloadAt: state.remote.lastPayloadAt,
           staleSha: state.remote.staleSha,
@@ -5806,6 +5816,7 @@
         state.remote.path = path;
         state.remote.token = token;
         state.remote.sha = "";
+        state.remote.etag = "";
         state.remote.lastSyncAt = "";
         state.remote.lastPayloadAt = "";
         state.remote.staleSha = "";
@@ -5850,6 +5861,7 @@
         state.remote.enabled = false;
         state.remote.token = "";
         state.remote.sha = "";
+        state.remote.etag = "";
         state.remote.lastSyncAt = "";
         state.remote.lastPayloadAt = "";
         state.remote.staleSha = "";
@@ -5864,7 +5876,7 @@
         state.remote.writeInFlight = false;
         state.sessionOnly = false;
         window.clearTimeout(remoteWriteTimer);
-        window.clearInterval(remotePollTimer);
+        window.clearTimeout(remotePollTimer);
         remoteWriteTimer = null;
         remotePollTimer = null;
       }
@@ -5916,7 +5928,8 @@
       }
 
       async function startRemoteSync(runNow) {
-        window.clearInterval(remotePollTimer);
+        window.clearTimeout(remotePollTimer);
+        remotePollTimer = null;
         if (!state.remote.enabled) {
           return;
         }
@@ -5925,9 +5938,73 @@
           await syncRemoteRecords({ createIfMissing: true });
         }
 
-        remotePollTimer = window.setInterval(function () {
-          syncRemoteRecords({ silent: true });
-        }, REMOTE_SYNC_INTERVAL);
+        scheduleRemoteSyncPoll();
+      }
+
+      function getRemoteSyncPollInterval() {
+        return document.visibilityState === "hidden"
+          ? REMOTE_SYNC_HIDDEN_INTERVAL
+          : REMOTE_SYNC_VISIBLE_INTERVAL;
+      }
+
+      function scheduleRemoteSyncPoll() {
+        window.clearTimeout(remotePollTimer);
+        remotePollTimer = null;
+        if (!state.remote.enabled) {
+          return;
+        }
+
+        remotePollTimer = window.setTimeout(async function () {
+          remotePollTimer = null;
+          try {
+            await syncRemoteRecords({
+              silent: true,
+              conditional: true,
+              refreshHealthSummary: false,
+              refreshJournalPrivateHighlights: false
+            });
+          } finally {
+            scheduleRemoteSyncPoll();
+          }
+        }, getRemoteSyncPollInterval());
+      }
+
+      function handleRemoteSyncFocus() {
+        if (!state.remote.enabled || document.visibilityState === "hidden") {
+          return;
+        }
+        if (state.remote.writeQueued) {
+          flushPendingRemoteWrite();
+          return;
+        }
+
+        syncRemoteRecords({ silent: true, conditional: true }).finally(function () {
+          scheduleRemoteSyncPoll();
+        });
+      }
+
+      function handleRemoteSyncVisibilityChange() {
+        scheduleRemoteSyncPoll();
+        if (document.visibilityState === "hidden") {
+          flushPendingRemoteWrite();
+          return;
+        }
+        handleRemoteSyncFocus();
+      }
+
+      function flushPendingRemoteWrite() {
+        if (!state.remote.enabled
+          || !state.remote.writeQueued
+          || state.remote.writeInFlight
+          || state.remote.readInFlight) {
+          return;
+        }
+
+        window.clearTimeout(remoteWriteTimer);
+        remoteWriteTimer = null;
+        writeQueuedRemote().finally(function () {
+          scheduleRemoteSyncPoll();
+        });
       }
 
       async function syncRemoteRecords(options) {
@@ -5969,7 +6046,7 @@
 
           const revisionBeforeFetch = state.recordsRevision;
           const recordsBeforeFetch = getRecordsSnapshot();
-          const result = await fetchRemoteRecords();
+          const result = await fetchRemoteRecords({ conditional: opts.conditional !== false });
           if (revisionBeforeFetch !== state.recordsRevision
             || recordsBeforeFetch !== getRecordsSnapshot()
             || state.remote.pushLocalNext
@@ -5978,6 +6055,18 @@
             updateStorageStatus();
             if (!opts.silent) {
               setStatus("本地有新改动，已跳过 GitHub 旧数据。");
+            }
+            return;
+          }
+
+          if (result.notModified) {
+            state.remote.lastSyncAt = new Date().toISOString();
+            state.remote.checkedThisSession = true;
+            state.remote.error = "";
+            saveRemoteSyncSettingsToLocal();
+            updateStorageStatus();
+            if (!opts.silent) {
+              setStatus("GitHub 已是最新。");
             }
             return;
           }
@@ -6002,6 +6091,8 @@
             }
             return;
           }
+
+          state.remote.etag = result.etag || state.remote.etag;
 
           if (isStaleRemoteResult(result)) {
             state.remote.staleSha = result.sha || state.remote.staleSha;
@@ -6058,6 +6149,7 @@
             && state.records.length
             && result.records.length
             && !window.confirm("GitHub 数据会与当前本地内容合并，是否继续？")) {
+            state.remote.etag = "";
             setStatus("已取消 GitHub 同步。");
             return;
           }
@@ -6132,13 +6224,27 @@
         }
       }
 
-      async function fetchRemoteRecords() {
+      async function fetchRemoteRecords(options) {
+        const opts = options || {};
+        const headers = getRemoteHeaders(false);
+        if (opts.conditional !== false && state.remote.checkedThisSession && state.remote.etag) {
+          headers["If-None-Match"] = state.remote.etag;
+        }
         const response = await fetch(getRemoteContentsUrl(true), {
-          headers: getRemoteHeaders(false),
+          headers: headers,
           cache: "no-store"
         });
 
+        if (response.status === 304) {
+          return {
+            notModified: true,
+            missing: false,
+            sha: state.remote.sha
+          };
+        }
+
         if (response.status === 404) {
+          state.remote.etag = "";
           return {
             missing: true,
             records: [],
@@ -6167,6 +6273,7 @@
           savedAt: payload.savedAt,
           syncedAt: payload.syncedAt,
           payloadAt: payload.payloadAt,
+          etag: response.headers.get("ETag") || "",
           needsSanitizedWrite: hasDeprecatedAutoCompletionPayloadFields(text)
         };
       }
@@ -6983,32 +7090,6 @@
         updateStorageStatus();
 
         try {
-          const latestBeforeWrite = await fetchRemoteRecords();
-          if (latestBeforeWrite.missing) {
-            baseSha = "";
-          } else {
-            baseSha = latestBeforeWrite.sha || baseSha;
-            state.remote.sha = latestBeforeWrite.sha || state.remote.sha;
-            recordsSnapshot = mergeRecordsPayloads(latestBeforeWrite, recordsSnapshot);
-            applyIdeaPaneDraftToRecords(recordsSnapshot.records, activeIdeaDraft);
-            if (state.recordsRevision === revisionAtWriteStart
-              && !state.remote.writeQueued
-              && !recordsPayloadContentEqual(getRecordsPayloadSnapshot(), recordsSnapshot)) {
-              state.records = recordsSnapshot.records;
-              state.deletedRecords = recordsSnapshot.deletedRecords;
-              state.recurrenceCompletionArchive = recordsSnapshot.recurrenceCompletionArchive;
-              state.journalStats = recordsSnapshot.journalStats;
-              state.editingId = null;
-              saveLocalRecords();
-              queueSyncFileWrite();
-              render();
-            }
-            if (!latestBeforeWrite.needsSanitizedWrite && recordsPayloadContentEqual(latestBeforeWrite, recordsSnapshot)) {
-              markRemoteNoopWriteAsSynced(latestBeforeWrite, revisionAtWriteStart);
-              return true;
-            }
-          }
-
           const body = {
             message: "Update minimal notes records",
             branch: state.remote.branch || DEFAULT_REMOTE_BRANCH
@@ -7045,8 +7126,9 @@
               throw await createRemoteHttpError(response, "GitHub 写入失败");
             }
 
-            const latest = await fetchRemoteRecords();
+            const latest = await fetchRemoteRecords({ conditional: false });
             state.remote.sha = latest.sha || "";
+            state.remote.etag = latest.etag || "";
             if (!latest.missing) {
               recordsSnapshot = mergeRecordsPayloads(latest, recordsSnapshot);
               applyIdeaPaneDraftToRecords(recordsSnapshot.records, activeIdeaDraft);
@@ -7077,6 +7159,7 @@
 
           const data = await response.json();
           state.remote.sha = data && data.content && typeof data.content.sha === "string" ? data.content.sha : state.remote.sha;
+          state.remote.etag = "";
           state.remote.lastSyncAt = new Date().toISOString();
           state.remote.lastPayloadAt = payloadAt;
           state.localPayloadAt = payloadAt;
@@ -7101,6 +7184,7 @@
       function markRemoteNoopWriteAsSynced(remotePayload, revisionAtWriteStart) {
         const remotePayloadAt = remotePayload && (remotePayload.payloadAt || getPayloadTimestamp(remotePayload));
         state.remote.sha = remotePayload && remotePayload.sha ? remotePayload.sha : state.remote.sha;
+        state.remote.etag = remotePayload && remotePayload.etag ? remotePayload.etag : state.remote.etag;
         state.remote.lastSyncAt = new Date().toISOString();
         state.remote.lastPayloadAt = remotePayloadAt || state.remote.lastPayloadAt;
         state.localPayloadAt = remotePayloadAt || state.localPayloadAt;
@@ -7124,7 +7208,7 @@
         remoteWriteTimer = window.setTimeout(function () {
           remoteWriteTimer = null;
           writeQueuedRemote();
-        }, 700);
+        }, REMOTE_WRITE_DEBOUNCE);
         updateStorageStatus();
       }
 
@@ -13451,8 +13535,12 @@
       }
 
       function getSyncActionText() {
-        if (state.remote.enabled && (state.remote.readProgressVisible || state.remote.writeInFlight || state.remote.writeQueued)) {
+        if (state.remote.enabled && (state.remote.readProgressVisible || state.remote.writeInFlight)) {
           return state.remote.temporary ? "临时同步中" : "同步中";
+        }
+
+        if (state.remote.enabled && state.remote.writeQueued) {
+          return "待同步";
         }
 
         if (state.remote.enabled && state.remote.error) {
@@ -13523,8 +13611,12 @@
           const suffix = backupText ? "；" + backupText : "";
           const modeText = state.remote.temporary ? "GitHub 临时" : "GitHub";
 
-          if (state.remote.readProgressVisible || state.remote.writeInFlight || state.remote.writeQueued) {
+          if (state.remote.readProgressVisible || state.remote.writeInFlight) {
             return modeText + " 同步中" + suffix;
+          }
+
+          if (state.remote.writeQueued) {
+            return "本地已保存，等待 " + modeText + " 同步" + suffix;
           }
 
           if (state.remote.error) {

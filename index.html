@@ -2697,10 +2697,10 @@
       const DEFAULT_REMOTE_PATH = "minimal-notes-records.json";
       const HEALTH_SUMMARY_PATH = "minimal-notes-health-summary.json";
       const HEALTH_SUMMARY_CACHE_KEY = "minimal-notes-health-summary-cache-v1";
+      const HEALTH_SUMMARY_ETAG_KEY = "minimal-notes-health-summary-etag-v1";
       const HEALTH_CALENDAR_PATH = "minimal-notes-health-calendar.json";
       const HEALTH_CALENDAR_CACHE_KEY = "minimal-notes-health-calendar-cache-v1";
       const HEALTH_HISTORY_PATH = "minimal-notes-health-history.json";
-      const HEALTH_HISTORY_CACHE_KEY = "minimal-notes-health-history-cache-v1";
       const JOURNAL_PRIVATE_HIGHLIGHTS_PATH = "minimal-notes-journal-private-highlights.json";
       const JOURNAL_PRIVATE_HIGHLIGHTS_CACHE_KEY = "minimal-notes-journal-private-highlights-cache-v1";
       const REMOTE_SYNC_VISIBLE_INTERVAL = 60 * 1000;
@@ -2931,6 +2931,10 @@
           suppressions: [],
           signature: "",
           error: ""
+        },
+        healthSummary: {
+          payload: null,
+          etag: ""
         },
         healthCalendar: {
           open: false,
@@ -3243,7 +3247,15 @@
         }
 
         try {
-          const payload = await fetchHealthHistoryPayload();
+          const payload = await fetchHealthCalendarPayload();
+          if (!payload) {
+            state.healthCalendar.payload = null;
+            state.healthCalendar.loaded = true;
+            state.healthCalendar.cached = false;
+            clearHealthCalendarCache();
+            renderHealthCalendarEmpty("没有可显示的健康月历。");
+            return;
+          }
           state.healthCalendar.payload = payload;
           state.healthCalendar.loaded = true;
           state.healthCalendar.cached = false;
@@ -3302,37 +3314,21 @@
       function clearHealthCalendarCache() {
         try {
           localStorage.removeItem(HEALTH_CALENDAR_CACHE_KEY);
-          localStorage.removeItem(HEALTH_HISTORY_CACHE_KEY);
         } catch (error) {
           console.warn("Health calendar cache cleanup failed", error);
         }
       }
 
-      async function fetchHealthHistoryPayload() {
-        const remoteCalendarPayload = await fetchRemoteHealthCalendarPayload();
-        if (remoteCalendarPayload) {
-          return remoteCalendarPayload;
+      async function fetchHealthCalendarPayload() {
+        if (state.remote.enabled && state.remote.token && state.remote.repo) {
+          return fetchRemoteHealthCalendarPayload();
         }
 
-        const remotePayload = await fetchRemoteHealthHistoryPayload();
-        if (remotePayload) {
-          return remotePayload;
-        }
-
-        const localCalendarPayload = await fetchLocalHealthCalendarPayload();
-        if (localCalendarPayload) {
-          return localCalendarPayload;
-        }
-
-        return fetchLocalHealthHistoryPayload();
+        return fetchLocalHealthCalendarPayload();
       }
 
       async function fetchRemoteHealthCalendarPayload() {
         return fetchRemoteHealthJsonPayload(HEALTH_CALENDAR_PATH, "健康月历读取失败");
-      }
-
-      async function fetchRemoteHealthHistoryPayload() {
-        return fetchRemoteHealthJsonPayload(HEALTH_HISTORY_PATH, "健康历史读取失败");
       }
 
       async function fetchRemoteHealthJsonPayload(path, errorMessage) {
@@ -3359,27 +3355,16 @@
       }
 
       async function fetchLocalHealthCalendarPayload() {
-        return fetchLocalHealthJsonPayload(HEALTH_CALENDAR_PATH, true);
-      }
-
-      async function fetchLocalHealthHistoryPayload() {
-        return fetchLocalHealthJsonPayload(HEALTH_HISTORY_PATH, false);
-      }
-
-      async function fetchLocalHealthJsonPayload(path, missingAsNull) {
         if (isLocalFilePage()) {
           throw new Error("本地文件页面不能直接读取健康月历。");
         }
 
-        const response = await fetch(path + "?t=" + encodeURIComponent(String(Date.now())), {
+        const response = await fetch(HEALTH_CALENDAR_PATH + "?t=" + encodeURIComponent(String(Date.now())), {
           cache: "no-store"
         });
 
         if (response.status === 404) {
-          if (missingAsNull) {
-            return null;
-          }
-          throw new Error("未找到 " + path);
+          return null;
         }
 
         if (!response.ok) {
@@ -5914,8 +5899,8 @@
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(REMOTE_SYNC_STORAGE_KEY);
         localStorage.removeItem(HEALTH_SUMMARY_CACHE_KEY);
+        localStorage.removeItem(HEALTH_SUMMARY_ETAG_KEY);
         localStorage.removeItem(HEALTH_CALENDAR_CACHE_KEY);
-        localStorage.removeItem(HEALTH_HISTORY_CACHE_KEY);
         localStorage.removeItem(JOURNAL_PRIVATE_HIGHLIGHTS_CACHE_KEY);
         await deleteStoredSyncFileHandle();
         populateRemoteSyncPanel();
@@ -6609,6 +6594,7 @@
             return;
           }
 
+          state.healthSummary.payload = payload;
           saveHealthSummaryCache(payload);
           renderHealthSummary(summary);
         } catch (error) {
@@ -6652,6 +6638,8 @@
             return false;
           }
 
+          state.healthSummary.payload = payload;
+          state.healthSummary.etag = localStorage.getItem(HEALTH_SUMMARY_ETAG_KEY) || "";
           renderHealthSummary(summary);
           return true;
         } catch (error) {
@@ -6668,14 +6656,22 @@
 
         try {
           localStorage.setItem(HEALTH_SUMMARY_CACHE_KEY, JSON.stringify(payload));
+          if (state.healthSummary.etag) {
+            localStorage.setItem(HEALTH_SUMMARY_ETAG_KEY, state.healthSummary.etag);
+          } else {
+            localStorage.removeItem(HEALTH_SUMMARY_ETAG_KEY);
+          }
         } catch (error) {
           console.warn("Health summary cache unavailable", error);
         }
       }
 
       function clearHealthSummaryCache() {
+        state.healthSummary.payload = null;
+        state.healthSummary.etag = "";
         try {
           localStorage.removeItem(HEALTH_SUMMARY_CACHE_KEY);
+          localStorage.removeItem(HEALTH_SUMMARY_ETAG_KEY);
         } catch (error) {
           console.warn("Health summary cache cleanup failed", error);
         }
@@ -6696,12 +6692,22 @@
         }
 
         try {
+          const headers = getRemoteHeaders(false);
+          if (state.healthSummary.payload && state.healthSummary.etag) {
+            headers["If-None-Match"] = state.healthSummary.etag;
+          }
           const response = await fetch(getRemotePathContentsUrl(HEALTH_SUMMARY_PATH, true), {
-            headers: getRemoteHeaders(false),
+            headers: headers,
             cache: "no-store"
           });
 
+          if (response.status === 304) {
+            return state.healthSummary.payload;
+          }
+
           if (response.status === 404) {
+            state.healthSummary.payload = null;
+            state.healthSummary.etag = "";
             return null;
           }
 
@@ -6711,7 +6717,10 @@
 
           const data = await response.json();
           const text = decodeBase64Utf8(String(data.content || ""));
-          return JSON.parse(text);
+          const payload = JSON.parse(text);
+          state.healthSummary.payload = payload;
+          state.healthSummary.etag = response.headers.get("ETag") || "";
+          return payload;
         } catch (error) {
           console.warn("Remote health summary unavailable", error);
           throw error;
@@ -6736,7 +6745,10 @@
             throw new Error("健康摘要读取失败：" + response.status);
           }
 
-          return response.json();
+          const payload = await response.json();
+          state.healthSummary.payload = payload;
+          state.healthSummary.etag = "";
+          return payload;
         } catch (error) {
           console.warn("Local health summary unavailable", error);
           throw error;

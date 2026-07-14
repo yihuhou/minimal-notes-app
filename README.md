@@ -81,7 +81,10 @@ DDL 6月10日前交材料
 
 日记底部可以显示一个自定义累计计数，例如“小红花”“小星星”“打卡章”等。这个功能适合已经在别的日记软件里记了很久的人：可以把旧软件里已经累计的数量填进来，应用会把旧计数和这里新增的日记天数加在一起显示。
 
-网页自动创建的 `minimal-notes-records.json` 默认没有 `journalStats`。要使用这个计数功能时，在 JSON 顶层添加或修改 `journalStats.ritual`，不要放进 `records` 数组里。例如：
+自动生成的记录数据默认没有 `journalStats`。要使用这个计数功能，最稳妥的方式是先用
+`导出 JSON` 下载备份，在导出的 JSON 顶层添加或修改 `journalStats.ritual`，再用
+`导入 JSON` 导回应用；不要把它放进 `records` 数组。应用会按当前同步格式更新数据。
+使用 v4 分片同步时，不要只手工修改某一个 GitHub 分片。例如：
 
 ```json
 {
@@ -169,7 +172,10 @@ DDL 6月10日前交材料
 minimal-notes-data
 ```
 
-不要把私人记录放在公开仓库里。你不需要提前创建 `minimal-notes-records.json`，应用会在第一次同步时自动创建和更新这个文件。
+不要把私人记录放在公开仓库里，也不需要提前创建同步文件。同步面板默认使用
+`minimal-notes-sync/manifest.json` 作为 v4 入口。已有 v4 数据仓库会从这个入口读取；
+如果仓库仍使用旧版 `minimal-notes-records.json`，或者仓库还是空的，应用会自动使用
+兼容的单文件流程，不需要你手工迁移。
 
 ### Token 是什么
 
@@ -215,12 +221,17 @@ Token 生成后通常只显示一次，请马上复制保存。
 | --- | --- |
 | GitHub 仓库 | `你的用户名/仓库名`，例如 `alice/minimal-notes-data` |
 | GitHub 分支 | 一般填 `main` |
-| 数据文件路径 | 一般填 `minimal-notes-records.json` |
+| 数据文件路径 | 一般保留默认的 `minimal-notes-sync/manifest.json`；旧版单文件仓库仍兼容 `minimal-notes-records.json` |
 | GitHub Token | 粘贴刚刚创建的 Token |
 
 4. 点击 `保存同步`。
 
 之后你的记录会同步到自己的 GitHub 仓库。换手机、换电脑时，再打开同一个网页，填同一套 GitHub 同步信息即可。
+
+v4 会把当前记录、完整修订历史和可恢复删除内容放在 `minimal-notes-sync/` 下的多个
+JSON 文件中，由 `manifest.json` 统一索引。平时只需要在网页里使用，不要手工拼接或
+单独编辑这些分片。旧版 `minimal-notes-records.json` 仍可读取，也继续作为导入导出和
+电脑端云盘备份的兼容格式。
 
 如果是在临时设备上使用，可以点击 `临时同步`。它不会长期保存同步设置和 Token；为了保护隐私，还会隐藏本次临时会话开始前的旧日记，并在手动导出的 JSON 中排除这些旧日记。
 
@@ -289,9 +300,10 @@ Token 生成后通常只显示一次，请马上复制保存。
 
 不一定。只在一个浏览器里临时使用，可以不设置。想多设备同步，推荐设置 GitHub 同步；只在电脑之间同步，也可以用云盘同步文件。
 
-**我需要自己创建 `minimal-notes-records.json` 吗？**
+**我需要自己创建 GitHub 同步文件吗？**
 
-不需要。设置 GitHub 同步后，应用会自动创建和维护这个文件。
+不需要。一般保留默认的 `minimal-notes-sync/manifest.json` 路径即可；应用会读取已有
+v4 存储，或对空仓库和旧版 `minimal-notes-records.json` 使用兼容流程。
 
 **我可以把数据文件放在这个公开仓库里吗？**
 
@@ -323,7 +335,11 @@ Token 没有写入权限。检查 `Contents` 是否设置成 `Read and write`，
 
 ### 给开发者
 
-这个项目是静态网页应用，主要文件是 `index.html`。如果你想自己改代码，可以下载仓库后直接编辑 `index.html`。GitHub Pages 发布时不需要后端服务。
+这个项目是静态网页应用，主要文件是 `index.html` 和共享存储实现
+`minimal-notes-store.js`。GitHub Pages 发布时不需要后端服务。默认 GitHub 同步入口是
+`minimal-notes-sync/manifest.json`；浏览器正常轮询只读取 manifest 和 hot，提交时才
+读取开放的 revision/trash 分片。`minimal-notes-records.json` 是继续支持的 v3、导入
+导出和云盘兼容格式。实际个人数据应放在单独的私有仓库，不属于这个公开 app 仓库。
 
 ---
 
@@ -398,7 +414,10 @@ Journal entries can only be edited within 3 days. Older journal entries become r
 
 The journal footer can show a custom cumulative counter, such as flowers, stars, or check-in badges. This is useful if you have kept journals in another app for a long time: enter the count you already had there, and the app adds new journal days here to that old count.
 
-The app-created `minimal-notes-records.json` does not include `journalStats` by default. To use this counter, add or edit `journalStats.ritual` at the top level of the JSON file; do not put it inside the `records` array. Example:
+Generated records data does not include `journalStats` by default. The safest way to configure
+this counter is to download an `Export JSON` backup, add or edit `journalStats.ritual` at the
+top level, and then use `Import JSON` to load it back into the app. Do not put it inside the
+`records` array, and do not hand-edit only one GitHub shard when using v4 sync. Example:
 
 ```json
 {
@@ -486,7 +505,10 @@ A private repository is recommended, for example:
 minimal-notes-data
 ```
 
-Do not store private notes in a public repository. You do not need to create `minimal-notes-records.json` ahead of time; the app creates and updates it during sync.
+Do not store private notes in a public repository, and do not create sync files ahead of time.
+The sync panel defaults to `minimal-notes-sync/manifest.json`, the v4 entry point. Existing v4
+repositories are read through that manifest. If a repository still uses the legacy
+`minimal-notes-records.json`, or is empty, the app automatically uses the compatible single-file flow.
 
 ### What Is a Token
 
@@ -532,12 +554,17 @@ Then:
 | --- | --- |
 | GitHub repository | `your-username/repository-name`, for example `alice/minimal-notes-data` |
 | GitHub branch | Usually `main` |
-| Data file path | Usually `minimal-notes-records.json` |
+| Data file path | Keep the default `minimal-notes-sync/manifest.json`; legacy single-file repositories remain compatible with `minimal-notes-records.json` |
 | GitHub Token | Paste the Token you created |
 
 4. Click `保存同步` (`Save Sync`).
 
 After that, records will sync to your own GitHub repository. On another phone or computer, open the same link and enter the same GitHub sync settings.
+
+v4 keeps current records, complete revision history, and recoverable deletions in multiple JSON
+files under `minimal-notes-sync/`, indexed by `manifest.json`. Use the app normally; do not splice
+or edit individual shards by hand. The legacy `minimal-notes-records.json` format remains readable
+and continues to be used as the compatible import/export and desktop cloud-drive backup format.
 
 Use `临时同步` (`Temporary Sync`) on temporary devices. It does not keep sync settings or the token long term. For privacy, it also hides journal entries from before the temporary session started and excludes those older entries from manually exported JSON.
 
@@ -606,9 +633,10 @@ No. Normal users can use the hosted link directly.
 
 No. If you only use one browser temporarily, local storage is enough. For multiple devices, GitHub sync is recommended. For desktop-only sync, a cloud-drive sync file can also work.
 
-**Do I need to create `minimal-notes-records.json` myself?**
+**Do I need to create GitHub sync files myself?**
 
-No. After GitHub sync is configured, the app creates and maintains this file automatically.
+No. Keep the default `minimal-notes-sync/manifest.json` path. The app reads an existing v4 store,
+or uses the compatible flow for an empty repository or a legacy `minimal-notes-records.json` file.
 
 **Can I store my data files in this public repository?**
 
@@ -640,4 +668,9 @@ If your data repository is public, they may be able to see them. Use a private r
 
 ### For Developers
 
-This is a static web app. The main file is `index.html`. If you want to modify the app, download the repository and edit `index.html`. GitHub Pages deployment does not require a backend service.
+This is a static web app. Its main files are `index.html` and the shared store implementation,
+`minimal-notes-store.js`; GitHub Pages does not require a backend service. The default GitHub sync
+entry point is `minimal-notes-sync/manifest.json`. Normal browser polling reads only the manifest
+and hot state; writes also load the open revision/trash shards. `minimal-notes-records.json` remains
+the supported v3, import/export, and cloud-drive compatibility format. Personal data belongs in a
+separate private repository, not in this public app repository.

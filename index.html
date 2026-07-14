@@ -4393,6 +4393,97 @@
         focusEditField(id);
       }
 
+      function getActiveInlineEditDraft() {
+        if (!recordList || !document.activeElement || !document.activeElement.closest) {
+          return null;
+        }
+
+        const input = document.activeElement.closest('[data-role="edit-inline-text"]');
+        if (!input || !recordList.contains(input)) {
+          return null;
+        }
+
+        const item = input.closest(".item");
+        const id = item && item.dataset ? item.dataset.id || "" : "";
+        if (!id) {
+          return null;
+        }
+
+        const value = String(input.value || "");
+        const record = state.records.find(function (entry) {
+          return entry.id === id;
+        });
+
+        return {
+          id: id,
+          value: value,
+          dirty: !record || value.trim() !== String(record.text || "").trim(),
+          selectionStart: typeof input.selectionStart === "number" ? input.selectionStart : value.length,
+          selectionEnd: typeof input.selectionEnd === "number" ? input.selectionEnd : value.length,
+          selectionDirection: typeof input.selectionDirection === "string" ? input.selectionDirection : "none"
+        };
+      }
+
+      function hasActiveDirtyInlineEditDraft() {
+        const draft = getActiveInlineEditDraft();
+        return Boolean(draft && draft.dirty);
+      }
+
+      function restoreInlineEditDraft(draft) {
+        if (!draft || state.editingId !== draft.id) {
+          return;
+        }
+
+        const input = recordList.querySelector('.item[data-id="' + cssEscape(draft.id) + '"] [data-role="edit-inline-text"]');
+        if (!input) {
+          return;
+        }
+
+        if (input.value !== draft.value) {
+          input.value = draft.value;
+        }
+        autoSizeInlineEditInput(input);
+
+        requestAnimationFrame(function () {
+          if (!input.isConnected || state.editingId !== draft.id) {
+            return;
+          }
+          const activeElement = document.activeElement;
+          if (activeElement
+            && activeElement !== document.body
+            && activeElement !== document.documentElement
+            && activeElement !== input) {
+            return;
+          }
+          try {
+            input.focus({ preventScroll: true });
+          } catch (error) {
+            input.focus();
+          }
+          const valueLength = String(input.value || "").length;
+          const start = Math.min(Math.max(Number(draft.selectionStart) || 0, 0), valueLength);
+          const end = Math.min(Math.max(Number(draft.selectionEnd) || start, 0), valueLength);
+          try {
+            input.setSelectionRange(start, end, draft.selectionDirection || "none");
+          } catch (error) {
+            input.setSelectionRange(start, end);
+          }
+        });
+      }
+
+      function reconcileEditingStateAfterRecordsUpdate() {
+        if (!state.editingId) {
+          return;
+        }
+
+        const record = state.records.find(function (entry) {
+          return entry.id === state.editingId;
+        });
+        if (!record || isRecordEditLocked(record)) {
+          state.editingId = null;
+        }
+      }
+
       function handleListFocusOut(event) {
         if (event.target.getAttribute("data-role") !== "edit-inline-text") {
           return;
@@ -5366,6 +5457,9 @@
 
         const file = await state.sync.handle.getFile();
         const raw = await file.text();
+        if (hasActiveDirtyInlineEditDraft()) {
+          return "editing";
+        }
         state.sync.lastModified = file.lastModified || 0;
         const activeIdeaDraft = getActiveIdeaPaneDraft();
 
@@ -5387,7 +5481,7 @@
         state.recurrenceCompletionArchive = mergedPayload.recurrenceCompletionArchive;
         state.journalStats = mergedPayload.journalStats;
         state.localPayloadAt = fileNeedsMergedWrite ? state.localPayloadAt : (payload.payloadAt || state.localPayloadAt);
-        state.editingId = null;
+        reconcileEditingStateAfterRecordsUpdate();
         state.sync.permissionNeeded = false;
         state.sync.error = "";
         saveLocalRecords(fileNeedsMergedWrite ? {} : {
@@ -5507,7 +5601,7 @@
         if (!state.sync.handle || state.sync.writeInFlight || state.sync.writeQueued) {
           return;
         }
-        if (hasActiveDirtyIdeaPaneDraft()) {
+        if (hasActiveDirtyIdeaPaneDraft() || hasActiveDirtyInlineEditDraft()) {
           return;
         }
 
@@ -5532,8 +5626,10 @@
           }
 
           if (latestModified !== state.sync.lastModified) {
-            await loadRecordsFromSyncFile();
-            setStatus("已从同步文件更新。");
+            const result = await loadRecordsFromSyncFile();
+            if (result === "loaded") {
+              setStatus("已从同步文件更新。");
+            }
           }
         } catch (error) {
           console.error(error);
@@ -6053,10 +6149,10 @@
           }
           return;
         }
-        if (hasActiveDirtyIdeaPaneDraft()) {
+        if (hasActiveDirtyIdeaPaneDraft() || hasActiveDirtyInlineEditDraft()) {
           updateStorageStatus();
           if (!opts.silent) {
-            setStatus("正在编辑想法，离开输入框后再同步。");
+            setStatus("正在编辑，离开输入框后再同步。");
           }
           return;
         }
@@ -6079,6 +6175,13 @@
           const revisionBeforeFetch = state.recordsRevision;
           const recordsBeforeFetch = getRecordsSnapshot();
           const result = await fetchRemoteRecords({ conditional: opts.conditional !== false });
+          if (hasActiveDirtyInlineEditDraft()) {
+            updateStorageStatus();
+            if (!opts.silent) {
+              setStatus("编辑尚未保存，已延后应用 GitHub 更新。");
+            }
+            return;
+          }
           if (revisionBeforeFetch !== state.recordsRevision
             || recordsBeforeFetch !== getRecordsSnapshot()
             || state.remote.pushLocalNext
@@ -6216,7 +6319,7 @@
             state.deletedRecords = mergedPayload.deletedRecords;
             state.recurrenceCompletionArchive = mergedPayload.recurrenceCompletionArchive;
             state.journalStats = mergedPayload.journalStats;
-            state.editingId = null;
+            reconcileEditingStateAfterRecordsUpdate();
             saveLocalRecords(remoteNeedsMerge ? {} : {
               payloadSavedAt: result.savedAt,
               payloadSyncedAt: result.syncedAt
@@ -7315,7 +7418,7 @@
                 state.deletedRecords = recordsSnapshot.deletedRecords;
                 state.recurrenceCompletionArchive = recordsSnapshot.recurrenceCompletionArchive;
                 state.journalStats = recordsSnapshot.journalStats;
-                state.editingId = null;
+                reconcileEditingStateAfterRecordsUpdate();
                 saveLocalRecords();
                 queueSyncFileWrite();
                 render();
@@ -7545,6 +7648,7 @@
               state.deletedRecords = normalizeDeletedRecordEntries(reconciled.payload.deletedRecords);
               state.recurrenceCompletionArchive = normalizeRecurrenceCompletionArchiveEntries(reconciled.payload.recurrenceCompletionArchive);
               state.journalStats = normalizeJournalStats(reconciled.payload.journalStats);
+              reconcileEditingStateAfterRecordsUpdate();
               saveLocalRecords({ payloadSyncedAt: syncedAt });
               render();
             }
@@ -8887,6 +8991,7 @@
       }
 
       function renderList(visible) {
+        const activeInlineEditDraft = getActiveInlineEditDraft();
         const conflictMap = buildConflictMap(state.records);
 
         if (!visible.length) {
@@ -8897,6 +9002,7 @@
         recordList.innerHTML = visible.map(function (record) {
           return renderItem(record, conflictMap[record.id] || []);
         }).join("");
+        restoreInlineEditDraft(activeInlineEditDraft);
       }
 
       function renderItem(record, conflicts) {

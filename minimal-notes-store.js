@@ -587,7 +587,7 @@
   }
 
   function jsonText(value) {
-    return JSON.stringify(value) + "\n";
+    return JSON.stringify(value, null, 2) + "\n";
   }
 
   function jsonBytes(value) {

@@ -2597,7 +2597,7 @@
               <label class="sr-only" for="remoteBranchInput">GitHub 分支</label>
               <input id="remoteBranchInput" type="text" autocomplete="off" spellcheck="false" placeholder="main">
               <label class="sr-only" for="remotePathInput">数据文件路径</label>
-              <input id="remotePathInput" type="text" autocomplete="off" spellcheck="false" placeholder="minimal-notes-records.json">
+              <input id="remotePathInput" type="text" autocomplete="off" spellcheck="false" placeholder="minimal-notes-sync/manifest.json">
               <label class="sr-only" for="remoteTokenInput">GitHub Token</label>
               <input id="remoteTokenInput" type="password" autocomplete="off" spellcheck="false" placeholder="GitHub token">
               <div class="remote-sync-actions">
@@ -2679,9 +2679,15 @@
     </div>
   </div>
 
+  <script src="minimal-notes-store.js"></script>
   <script>
     (function () {
       "use strict";
+
+      const RECORDS_STORE = window.MinimalNotesStore;
+      if (!RECORDS_STORE) {
+        throw new Error("Minimal Notes v4 store helper failed to load.");
+      }
 
       const STORAGE_KEY = "minimal-record-tool-v1";
       const SYNC_DB_NAME = "minimal-notes-sync-v1";
@@ -2694,7 +2700,8 @@
       const REMOTE_SYNC_STORAGE_KEY = "minimal-notes-github-sync-v1";
       const DEFAULT_REMOTE_REPO = "yihuhou/minimal-notes";
       const DEFAULT_REMOTE_BRANCH = "main";
-      const DEFAULT_REMOTE_PATH = "minimal-notes-records.json";
+      const DEFAULT_REMOTE_PATH = "minimal-notes-sync/manifest.json";
+      const LEGACY_REMOTE_PATH = "minimal-notes-records.json";
       const HEALTH_SUMMARY_PATH = "minimal-notes-health-summary.json";
       const HEALTH_SUMMARY_CACHE_KEY = "minimal-notes-health-summary-cache-v1";
       const HEALTH_SUMMARY_ETAG_KEY = "minimal-notes-health-summary-etag-v1";
@@ -2907,9 +2914,16 @@
           repo: DEFAULT_REMOTE_REPO,
           branch: DEFAULT_REMOTE_BRANCH,
           path: DEFAULT_REMOTE_PATH,
+          format: "v4",
           token: "",
           sha: "",
           etag: "",
+          manifestSha: "",
+          manifestEtag: "",
+          hotSha: "",
+          hotEtag: "",
+          manifest: null,
+          hot: null,
           lastSyncAt: "",
           lastPayloadAt: "",
           staleSha: "",
@@ -5719,7 +5733,10 @@
           const saved = JSON.parse(raw);
           const repo = normalizeRemoteRepo(saved.repo || "");
           const branch = normalizeRemoteBranch(saved.branch || "");
-          const path = normalizeRemotePath(saved.path || "");
+          let path = normalizeRemotePath(saved.path || "");
+          if (path === LEGACY_REMOTE_PATH) {
+            path = DEFAULT_REMOTE_PATH;
+          }
           const token = typeof saved.token === "string" ? saved.token.trim() : "";
           if (!repo || !path || !token) {
             return;
@@ -5733,9 +5750,14 @@
           state.remote.repo = repo;
           state.remote.branch = branch || DEFAULT_REMOTE_BRANCH;
           state.remote.path = path;
+          state.remote.format = saved.format === "v3" ? "v3" : "v4";
           state.remote.token = token;
           state.remote.sha = typeof saved.sha === "string" ? saved.sha : "";
           state.remote.etag = typeof saved.etag === "string" ? saved.etag : "";
+          state.remote.manifestSha = typeof saved.manifestSha === "string" ? saved.manifestSha : "";
+          state.remote.manifestEtag = typeof saved.manifestEtag === "string" ? saved.manifestEtag : "";
+          state.remote.hotSha = typeof saved.hotSha === "string" ? saved.hotSha : "";
+          state.remote.hotEtag = typeof saved.hotEtag === "string" ? saved.hotEtag : "";
           state.remote.lastSyncAt = typeof saved.lastSyncAt === "string" ? saved.lastSyncAt : "";
           state.remote.lastPayloadAt = typeof saved.lastPayloadAt === "string" ? saved.lastPayloadAt : "";
           state.remote.staleSha = typeof saved.staleSha === "string" ? saved.staleSha : "";
@@ -5757,9 +5779,14 @@
           repo: state.remote.repo,
           branch: state.remote.branch,
           path: state.remote.path,
+          format: state.remote.format,
           token: state.remote.token,
           sha: state.remote.sha,
           etag: state.remote.etag,
+          manifestSha: state.remote.manifestSha,
+          manifestEtag: state.remote.manifestEtag,
+          hotSha: state.remote.hotSha,
+          hotEtag: state.remote.hotEtag,
           lastSyncAt: state.remote.lastSyncAt,
           lastPayloadAt: state.remote.lastPayloadAt,
           staleSha: state.remote.staleSha,
@@ -5799,9 +5826,22 @@
         state.remote.repo = repo;
         state.remote.branch = branch || DEFAULT_REMOTE_BRANCH;
         state.remote.path = path;
+        state.remote.format = path.endsWith("/manifest.json") ? "v4" : "v3";
         state.remote.token = token;
         state.remote.sha = "";
         state.remote.etag = "";
+        state.remote.manifestSha = "";
+        state.remote.manifestEtag = "";
+        state.remote.hotSha = "";
+        state.remote.hotEtag = "";
+        state.remote.manifest = null;
+        state.remote.hot = null;
+        state.remote.manifestSha = "";
+        state.remote.manifestEtag = "";
+        state.remote.hotSha = "";
+        state.remote.hotEtag = "";
+        state.remote.manifest = null;
+        state.remote.hot = null;
         state.remote.lastSyncAt = "";
         state.remote.lastPayloadAt = "";
         state.remote.staleSha = "";
@@ -6078,6 +6118,11 @@
           }
 
           state.remote.etag = result.etag || state.remote.etag;
+          state.remote.format = result.format || state.remote.format;
+          state.remote.manifestSha = result.manifestSha || state.remote.manifestSha;
+          state.remote.manifestEtag = result.manifestEtag || state.remote.manifestEtag;
+          state.remote.hotSha = result.hotSha || state.remote.hotSha;
+          state.remote.hotEtag = result.hotEtag || state.remote.hotEtag;
 
           if (isStaleRemoteResult(result)) {
             state.remote.staleSha = result.sha || state.remote.staleSha;
@@ -6135,6 +6180,8 @@
             && result.records.length
             && !window.confirm("GitHub 数据会与当前本地内容合并，是否继续？")) {
             state.remote.etag = "";
+            state.remote.manifestEtag = "";
+            state.remote.hotEtag = "";
             setStatus("已取消 GitHub 同步。");
             return;
           }
@@ -6211,11 +6258,110 @@
 
       async function fetchRemoteRecords(options) {
         const opts = options || {};
+        if (state.remote.path.endsWith("/manifest.json")) {
+          return fetchRemoteV4Records(opts);
+        }
+        return fetchRemoteLegacyRecords(state.remote.path, opts);
+      }
+
+      async function fetchRemoteJsonFile(pathValue, options) {
+        const opts = options || {};
+        const headers = getRemoteHeaders(false);
+        if (opts.conditional !== false && state.remote.checkedThisSession && opts.etag) {
+          headers["If-None-Match"] = opts.etag;
+        }
+        const response = await fetch(getRemotePathContentsUrl(pathValue, true), {
+          headers: headers,
+          cache: "no-store"
+        });
+        if (response.status === 304) {
+          return { notModified: true, missing: false, sha: opts.sha || "", etag: opts.etag || "" };
+        }
+        if (response.status === 404) {
+          return { notModified: false, missing: true, sha: "", etag: "" };
+        }
+        if (!response.ok) {
+          throw await createRemoteHttpError(response, "GitHub 读取失败");
+        }
+        const data = await response.json();
+        const text = decodeBase64Utf8(String(data.content || ""));
+        return {
+          notModified: false,
+          missing: false,
+          value: JSON.parse(text),
+          text: text,
+          sha: typeof data.sha === "string" ? data.sha : "",
+          etag: response.headers.get("ETag") || ""
+        };
+      }
+
+      async function fetchRemoteV4Records(options) {
+        const opts = options || {};
+        let manifestResult = await fetchRemoteJsonFile(state.remote.path, {
+          conditional: opts.conditional,
+          etag: state.remote.manifestEtag,
+          sha: state.remote.manifestSha
+        });
+        if (manifestResult.missing) {
+          state.remote.format = "v3";
+          return fetchRemoteLegacyRecords(LEGACY_REMOTE_PATH, opts);
+        }
+        if (manifestResult.notModified && !state.remote.manifest) {
+          manifestResult = await fetchRemoteJsonFile(state.remote.path, { conditional: false });
+        }
+        const manifest = manifestResult.notModified ? state.remote.manifest : manifestResult.value;
+        if (!manifest || manifest.version !== 4 || !manifest.hot || !manifest.hot.path) {
+          throw new Error("GitHub v4 manifest 格式不正确");
+        }
+        let hotResult = await fetchRemoteJsonFile(manifest.hot.path, {
+          conditional: opts.conditional,
+          etag: state.remote.hotEtag,
+          sha: state.remote.hotSha
+        });
+        if (hotResult.notModified && !state.remote.hot) {
+          hotResult = await fetchRemoteJsonFile(manifest.hot.path, { conditional: false });
+        }
+        if (hotResult.missing) {
+          throw new Error("GitHub v4 hot.json 不存在");
+        }
+        const hot = hotResult.notModified ? state.remote.hot : hotResult.value;
+        if (!hot || hot.version !== 4 || hot.generation !== manifest.generation) {
+          throw new Error("GitHub v4 manifest 与 hot.json 不一致");
+        }
+        state.remote.format = "v4";
+        state.remote.manifest = manifest;
+        state.remote.hot = hot;
+        state.remote.manifestSha = manifestResult.sha || state.remote.manifestSha;
+        state.remote.manifestEtag = manifestResult.etag || state.remote.manifestEtag;
+        state.remote.hotSha = hotResult.sha || state.remote.hotSha;
+        state.remote.hotEtag = hotResult.etag || state.remote.hotEtag;
+        state.remote.sha = state.remote.hotSha;
+        state.remote.etag = state.remote.hotEtag;
+        if (manifestResult.notModified && hotResult.notModified) {
+          return { notModified: true, missing: false, sha: state.remote.hotSha, format: "v4" };
+        }
+        const payload = RECORDS_STORE.payloadFromV4Hot(hot);
+        return Object.assign({}, payload, {
+          missing: false,
+          sha: state.remote.hotSha,
+          etag: state.remote.hotEtag,
+          manifestSha: state.remote.manifestSha,
+          manifestEtag: state.remote.manifestEtag,
+          hotSha: state.remote.hotSha,
+          hotEtag: state.remote.hotEtag,
+          format: "v4",
+          needsSanitizedWrite: false,
+          payloadAt: getPayloadTimestamp(payload)
+        });
+      }
+
+      async function fetchRemoteLegacyRecords(pathValue, options) {
+        const opts = options || {};
         const headers = getRemoteHeaders(false);
         if (opts.conditional !== false && state.remote.checkedThisSession && state.remote.etag) {
           headers["If-None-Match"] = state.remote.etag;
         }
-        const response = await fetch(getRemoteContentsUrl(true), {
+        const response = await fetch(getRemotePathContentsUrl(pathValue, true), {
           headers: headers,
           cache: "no-store"
         });
@@ -6224,7 +6370,8 @@
           return {
             notModified: true,
             missing: false,
-            sha: state.remote.sha
+            sha: state.remote.sha,
+            format: "v3"
           };
         }
 
@@ -6237,7 +6384,8 @@
             recurrenceCompletionArchive: [],
             journalStats: {},
             sha: "",
-            needsSanitizedWrite: false
+            needsSanitizedWrite: false,
+            format: "v3"
           };
         }
 
@@ -6259,7 +6407,8 @@
           syncedAt: payload.syncedAt,
           payloadAt: payload.payloadAt,
           etag: response.headers.get("ETag") || "",
-          needsSanitizedWrite: hasDeprecatedAutoCompletionPayloadFields(text)
+          needsSanitizedWrite: hasDeprecatedAutoCompletionPayloadFields(text),
+          format: "v3"
         };
       }
 
@@ -7080,6 +7229,13 @@
       }
 
       async function writeCurrentRecordsToRemote() {
+        if (state.remote.format === "v4" && state.remote.path.endsWith("/manifest.json")) {
+          return writeCurrentRecordsToRemoteV4();
+        }
+        return writeCurrentRecordsToRemoteLegacy();
+      }
+
+      async function writeCurrentRecordsToRemoteLegacy() {
         if (!state.remote.enabled) {
           return false;
         }
@@ -7123,7 +7279,8 @@
               delete body.sha;
             }
 
-            response = await fetch(getRemoteContentsUrl(false), {
+            const legacyPath = state.remote.path.endsWith("/manifest.json") ? LEGACY_REMOTE_PATH : state.remote.path;
+            response = await fetch(getRemotePathContentsUrl(legacyPath, false), {
               method: "PUT",
               headers: getRemoteHeaders(true),
               body: JSON.stringify(body),
@@ -7182,6 +7339,140 @@
           saveRemoteSyncSettingsToLocal();
           updateStorageStatus();
           return true;
+        } catch (error) {
+          console.error(error);
+          state.remote.error = formatRemoteError("GitHub 写入失败", error);
+          updateStorageStatus();
+          return false;
+        } finally {
+          state.remote.writeInFlight = false;
+          updateStorageStatus();
+        }
+      }
+
+      async function fetchRemoteV4CommitLayout() {
+        const latest = await fetchRemoteV4Records({ conditional: false });
+        if (latest.missing || latest.format !== "v4") {
+          throw new Error("GitHub v4 存储尚未就绪");
+        }
+        const manifest = state.remote.manifest;
+        const revisionResult = await fetchRemoteJsonFile(manifest.openRevisionShard, { conditional: false });
+        const trashResult = await fetchRemoteJsonFile(manifest.openTrashShard, { conditional: false });
+        if (revisionResult.missing || trashResult.missing) {
+          throw new Error("GitHub v4 开放分片不存在");
+        }
+        const files = {};
+        files[state.remote.path] = manifest;
+        files[manifest.hot.path] = state.remote.hot;
+        files[manifest.openRevisionShard] = revisionResult.value;
+        files[manifest.openTrashShard] = trashResult.value;
+        const shas = {};
+        shas[state.remote.path] = state.remote.manifestSha;
+        shas[manifest.hot.path] = state.remote.hotSha;
+        shas[manifest.openRevisionShard] = revisionResult.sha;
+        shas[manifest.openTrashShard] = trashResult.sha;
+        return {
+          layout: RECORDS_STORE.layoutFromFiles(state.remote.path, manifest, files),
+          payload: latest,
+          shas: shas
+        };
+      }
+
+      async function putRemoteV4File(pathValue, value, sha, role) {
+        const body = {
+          message: "Update minimal notes v4 " + role,
+          branch: state.remote.branch || DEFAULT_REMOTE_BRANCH,
+          content: encodeBase64Utf8(RECORDS_STORE.jsonText(value))
+        };
+        if (sha) {
+          body.sha = sha;
+        }
+        const response = await fetch(getRemotePathContentsUrl(pathValue, false), {
+          method: "PUT",
+          headers: getRemoteHeaders(true),
+          body: JSON.stringify(body),
+          cache: "no-store"
+        });
+        if (response.ok) {
+          const data = await response.json();
+          return data && data.content && typeof data.content.sha === "string" ? data.content.sha : sha;
+        }
+        if (isRemoteShaConflict(response)) {
+          const current = await fetchRemoteJsonFile(pathValue, { conditional: false });
+          if (!current.missing && RECORDS_STORE.stableStringify(current.value) === RECORDS_STORE.stableStringify(value)) {
+            return current.sha;
+          }
+          const conflict = await createRemoteHttpError(response, "GitHub v4 写入冲突");
+          conflict.retryableV4Conflict = true;
+          throw conflict;
+        }
+        throw await createRemoteHttpError(response, "GitHub v4 写入失败");
+      }
+
+      async function writeCurrentRecordsToRemoteV4() {
+        if (!state.remote.enabled) {
+          return false;
+        }
+        const activeIdeaDraft = getActiveIdeaPaneDraft();
+        const revisionAtWriteStart = state.recordsRevision;
+        let recordsSnapshot = getRecordsPayloadSnapshot();
+        applyIdeaPaneDraftToRecords(recordsSnapshot.records, activeIdeaDraft);
+        state.remote.writeInFlight = true;
+        updateStorageStatus();
+
+        try {
+          for (let attempt = 0; attempt < REMOTE_WRITE_MAX_ATTEMPTS; attempt += 1) {
+            const remote = await fetchRemoteV4CommitLayout();
+            recordsSnapshot = mergeRecordsPayloads(remote.payload, recordsSnapshot);
+            applyIdeaPaneDraftToRecords(recordsSnapshot.records, activeIdeaDraft);
+            const syncedAt = new Date().toISOString();
+            const payload = buildRecordsPayload({ syncedAt: syncedAt }, recordsSnapshot);
+            const reconciled = RECORDS_STORE.reconcileV3Payload(remote.layout, payload, { now: syncedAt });
+            try {
+              for (let index = 0; index < reconciled.writes.length; index += 1) {
+                const write = reconciled.writes[index];
+                const nextSha = await putRemoteV4File(write.path, write.value, remote.shas[write.path] || "", write.role);
+                remote.shas[write.path] = nextSha;
+                if (write.role === "manifest") {
+                  state.remote.manifestSha = nextSha;
+                  state.remote.manifestEtag = "";
+                } else if (write.role === "hot") {
+                  state.remote.hotSha = nextSha;
+                  state.remote.hotEtag = "";
+                }
+              }
+            } catch (error) {
+              if (error && error.retryableV4Conflict && attempt < REMOTE_WRITE_MAX_ATTEMPTS - 1) {
+                await waitForRemoteWriteRetry(attempt);
+                continue;
+              }
+              throw error;
+            }
+
+            state.remote.manifest = reconciled.layout.manifest;
+            state.remote.hot = reconciled.layout.hot;
+            state.remote.sha = state.remote.hotSha;
+            state.remote.etag = "";
+            state.remote.lastSyncAt = new Date().toISOString();
+            state.remote.lastPayloadAt = getPayloadTimestamp(reconciled.payload) || syncedAt;
+            state.localPayloadAt = state.remote.lastPayloadAt;
+            state.remote.staleSha = "";
+            state.remote.checkedThisSession = true;
+            state.remote.error = "";
+            state.remote.pushLocalNext = state.recordsRevision !== revisionAtWriteStart || state.remote.writeQueued;
+            if (state.recordsRevision === revisionAtWriteStart && !state.remote.writeQueued) {
+              state.records = reconciled.payload.records.map(normalizeImportedRecord).filter(Boolean);
+              state.deletedRecords = normalizeDeletedRecordEntries(reconciled.payload.deletedRecords);
+              state.recurrenceCompletionArchive = normalizeRecurrenceCompletionArchiveEntries(reconciled.payload.recurrenceCompletionArchive);
+              state.journalStats = normalizeJournalStats(reconciled.payload.journalStats);
+              saveLocalRecords({ payloadSyncedAt: syncedAt });
+              render();
+            }
+            saveRemoteSyncSettingsToLocal();
+            updateStorageStatus();
+            return true;
+          }
+          throw new Error("GitHub v4 写入冲突重试次数已用完");
         } catch (error) {
           console.error(error);
           state.remote.error = formatRemoteError("GitHub 写入失败", error);
@@ -7524,7 +7815,15 @@
           return cloneRecordForMerge(left);
         }
 
-        const winner = getRecordMergeTimestamp(right) > getRecordMergeTimestamp(left) ? right : left;
+        const rightMergeTime = getRecordMergeTimestamp(right);
+        const leftMergeTime = getRecordMergeTimestamp(left);
+        const winner = rightMergeTime > leftMergeTime
+          || (rightMergeTime === leftMergeTime
+            && typeof right.headRevisionId === "string"
+            && right.headRevisionId
+            && right.headRevisionId !== left.headRevisionId)
+          ? right
+          : left;
         const merged = cloneRecordForMerge(winner);
         merged.history = mergeHistoryEntryLists(left.history, right.history, merged);
         merged.recurrenceCompletions = mergeRecurrenceCompletionEntries(
@@ -7641,7 +7940,19 @@
       }
 
       function recordsEqual(left, right) {
-        return JSON.stringify(left || []) === JSON.stringify(right || []);
+        function comparable(records) {
+          return (Array.isArray(records) ? records : []).map(function (record) {
+            const normalized = normalizeImportedRecord(record);
+            if (!normalized) {
+              return null;
+            }
+            return {
+              state: RECORDS_STORE.canonicalizeRecord(normalized),
+              headRevisionId: typeof normalized.headRevisionId === "string" ? normalized.headRevisionId : ""
+            };
+          }).filter(Boolean);
+        }
+        return RECORDS_STORE.stableStringify(comparable(left)) === RECORDS_STORE.stableStringify(comparable(right));
       }
 
       function deletedRecordsEqual(left, right) {
@@ -11765,6 +12076,14 @@
             purged: true
           };
         }
+        if (value.v4Tombstone && fallbackId) {
+          return {
+            recordId: fallbackId,
+            deletedAt: deletedAt,
+            purged: false,
+            v4Tombstone: true
+          };
+        }
 
         const sourceRecord = value.record && typeof value.record === "object" ? value.record : value;
         const recordSource = fallbackId && (!sourceRecord.id || typeof sourceRecord.id !== "string")
@@ -13379,6 +13698,9 @@
         };
         if (typeLock) {
           normalizedRecord.typeLock = typeLock;
+        }
+        if (typeof record.headRevisionId === "string" && record.headRevisionId) {
+          normalizedRecord.headRevisionId = record.headRevisionId;
         }
         reconcileNonRecurringCompletionState(normalizedRecord);
         return normalizedRecord;

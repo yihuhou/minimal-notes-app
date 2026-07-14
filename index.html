@@ -2714,6 +2714,13 @@
       const REMOTE_SYNC_HIDDEN_INTERVAL = 5 * 60 * 1000;
       const REMOTE_WRITE_DEBOUNCE = 5000;
       const REMOTE_WRITE_MAX_ATTEMPTS = 5;
+      const REMOTE_V4_ATOMIC_COMMIT_MUTATION = [
+        "mutation MinimalNotesV4AtomicCommit($input: CreateCommitOnBranchInput!) {",
+        "  createCommitOnBranch(input: $input) {",
+        "    commit { oid }",
+        "  }",
+        "}"
+      ].join("\n");
       const JOURNAL_ROLLOVER_HOUR = 5;
       const G_TEACHER_SIGNATURE = "——G老师";
       const G_TEACHER_ID_PATTERN = /^g-teacher-\d{4}-\d{2}-\d{2}-(?:morning|evening|pulse-[123])$/;
@@ -6270,7 +6277,7 @@
         if (opts.conditional !== false && state.remote.checkedThisSession && opts.etag) {
           headers["If-None-Match"] = opts.etag;
         }
-        const response = await fetch(getRemotePathContentsUrl(pathValue, true), {
+        const response = await fetch(getRemotePathContentsUrl(pathValue, true, opts.ref), {
           headers: headers,
           cache: "no-store"
         });
@@ -7351,62 +7358,137 @@
       }
 
       async function fetchRemoteV4CommitLayout() {
-        const latest = await fetchRemoteV4Records({ conditional: false });
-        if (latest.missing || latest.format !== "v4") {
+        const expectedHeadOid = await fetchRemoteBranchHeadOid();
+        const manifestResult = await fetchRemoteJsonFile(state.remote.path, {
+          conditional: false,
+          ref: expectedHeadOid
+        });
+        if (manifestResult.missing) {
           throw new Error("GitHub v4 存储尚未就绪");
         }
-        const manifest = state.remote.manifest;
-        const revisionResult = await fetchRemoteJsonFile(manifest.openRevisionShard, { conditional: false });
-        const trashResult = await fetchRemoteJsonFile(manifest.openTrashShard, { conditional: false });
-        if (revisionResult.missing || trashResult.missing) {
-          throw new Error("GitHub v4 开放分片不存在");
+        const manifest = manifestResult.value;
+        if (!manifest || manifest.version !== 4 || !manifest.hot || !manifest.hot.path
+          || !manifest.openRevisionShard || !manifest.openTrashShard) {
+          throw new Error("GitHub v4 manifest 格式不正确");
         }
+        const openResults = await Promise.all([
+          fetchRemoteJsonFile(manifest.hot.path, { conditional: false, ref: expectedHeadOid }),
+          fetchRemoteJsonFile(manifest.openRevisionShard, { conditional: false, ref: expectedHeadOid }),
+          fetchRemoteJsonFile(manifest.openTrashShard, { conditional: false, ref: expectedHeadOid })
+        ]);
+        const hotResult = openResults[0];
+        const revisionResult = openResults[1];
+        const trashResult = openResults[2];
+        if (hotResult.missing || revisionResult.missing || trashResult.missing) {
+          throw new Error("GitHub v4 hot 或开放分片不存在");
+        }
+        const hot = hotResult.value;
+        if (!hot || hot.version !== 4 || hot.generation !== manifest.generation) {
+          throw new Error("GitHub v4 manifest 与 hot.json 不一致");
+        }
+        state.remote.format = "v4";
+        state.remote.manifest = manifest;
+        state.remote.hot = hot;
+        state.remote.manifestSha = manifestResult.sha || "";
+        state.remote.manifestEtag = manifestResult.etag || "";
+        state.remote.hotSha = hotResult.sha || "";
+        state.remote.hotEtag = hotResult.etag || "";
+        state.remote.sha = state.remote.hotSha;
+        state.remote.etag = state.remote.hotEtag;
+        const payload = RECORDS_STORE.payloadFromV4Hot(hot);
         const files = {};
         files[state.remote.path] = manifest;
-        files[manifest.hot.path] = state.remote.hot;
+        files[manifest.hot.path] = hot;
         files[manifest.openRevisionShard] = revisionResult.value;
         files[manifest.openTrashShard] = trashResult.value;
-        const shas = {};
-        shas[state.remote.path] = state.remote.manifestSha;
-        shas[manifest.hot.path] = state.remote.hotSha;
-        shas[manifest.openRevisionShard] = revisionResult.sha;
-        shas[manifest.openTrashShard] = trashResult.sha;
         return {
           layout: RECORDS_STORE.layoutFromFiles(state.remote.path, manifest, files),
-          payload: latest,
-          shas: shas
+          payload: Object.assign({}, payload, {
+            missing: false,
+            sha: hotResult.sha || "",
+            etag: hotResult.etag || "",
+            format: "v4",
+            payloadAt: getPayloadTimestamp(payload)
+          }),
+          expectedHeadOid: expectedHeadOid
         };
       }
 
-      async function putRemoteV4File(pathValue, value, sha, role) {
-        const body = {
-          message: "Update minimal notes v4 " + role,
-          branch: state.remote.branch || DEFAULT_REMOTE_BRANCH,
-          content: encodeBase64Utf8(RECORDS_STORE.jsonText(value))
-        };
-        if (sha) {
-          body.sha = sha;
+      async function fetchRemoteBranchHeadOid() {
+        const response = await fetch(getRemoteGitRefUrl(), {
+          headers: getRemoteHeaders(false),
+          cache: "no-store"
+        });
+        if (!response.ok) {
+          throw await createRemoteHttpError(response, "GitHub 分支 HEAD 读取失败");
         }
-        const response = await fetch(getRemotePathContentsUrl(pathValue, false), {
-          method: "PUT",
+        const data = await response.json();
+        const oid = data && data.object && typeof data.object.sha === "string" ? data.object.sha : "";
+        if (!oid) {
+          throw new Error("GitHub 分支 HEAD 响应缺少 commit OID");
+        }
+        return oid;
+      }
+
+      async function commitRemoteV4FilesAtomically(writes, expectedHeadOid) {
+        if (!expectedHeadOid) {
+          throw new Error("GitHub v4 原子提交缺少 expectedHeadOid");
+        }
+        const additions = (Array.isArray(writes) ? writes : []).map(function (write) {
+          return {
+            path: write.path,
+            contents: encodeBase64Utf8(RECORDS_STORE.jsonText(write.value))
+          };
+        });
+        if (!additions.length) {
+          return expectedHeadOid;
+        }
+        const body = {
+          query: REMOTE_V4_ATOMIC_COMMIT_MUTATION,
+          variables: {
+            input: {
+              branch: {
+                repositoryNameWithOwner: state.remote.repo,
+                branchName: state.remote.branch || DEFAULT_REMOTE_BRANCH
+              },
+              expectedHeadOid: expectedHeadOid,
+              message: { headline: "Update minimal notes v4" },
+              fileChanges: { additions: additions }
+            }
+          }
+        };
+        const response = await fetch("https://api.github.com/graphql", {
+          method: "POST",
           headers: getRemoteHeaders(true),
           body: JSON.stringify(body),
           cache: "no-store"
         });
-        if (response.ok) {
-          const data = await response.json();
-          return data && data.content && typeof data.content.sha === "string" ? data.content.sha : sha;
+        let data = null;
+        try {
+          data = await response.json();
+        } catch (error) {
+          data = null;
         }
-        if (isRemoteShaConflict(response)) {
-          const current = await fetchRemoteJsonFile(pathValue, { conditional: false });
-          if (!current.missing && RECORDS_STORE.stableStringify(current.value) === RECORDS_STORE.stableStringify(value)) {
-            return current.sha;
-          }
-          const conflict = await createRemoteHttpError(response, "GitHub v4 写入冲突");
-          conflict.retryableV4Conflict = true;
-          throw conflict;
+        const graphQLErrors = data && Array.isArray(data.errors) ? data.errors : [];
+        if (!response.ok || graphQLErrors.length) {
+          const messages = graphQLErrors.map(function (entry) {
+            return entry && typeof entry.message === "string" ? entry.message : "";
+          }).filter(Boolean);
+          const atomicError = new Error(messages.length
+            ? "GitHub v4 原子提交失败：" + messages.join("；")
+            : "GitHub v4 原子提交失败（HTTP " + response.status + "）");
+          atomicError.status = response.status;
+          atomicError.retryableV4Conflict = graphQLErrors.some(function (entry) {
+            return entry && entry.type === "STALE_DATA";
+          });
+          throw atomicError;
         }
-        throw await createRemoteHttpError(response, "GitHub v4 写入失败");
+        const commit = data && data.data && data.data.createCommitOnBranch
+          && data.data.createCommitOnBranch.commit;
+        if (!commit || typeof commit.oid !== "string" || !commit.oid) {
+          throw new Error("GitHub v4 原子提交响应缺少 commit OID");
+        }
+        return commit.oid;
       }
 
       async function writeCurrentRecordsToRemoteV4() {
@@ -7428,19 +7510,13 @@
             const syncedAt = new Date().toISOString();
             const payload = buildRecordsPayload({ syncedAt: syncedAt }, recordsSnapshot);
             const reconciled = RECORDS_STORE.reconcileV3Payload(remote.layout, payload, { now: syncedAt });
+            if (!reconciled.newRevisions.length
+              && v4CommitPayloadContentEqual(remote.payload, reconciled.payload)) {
+              markRemoteNoopWriteAsSynced(remote.payload, revisionAtWriteStart);
+              return true;
+            }
             try {
-              for (let index = 0; index < reconciled.writes.length; index += 1) {
-                const write = reconciled.writes[index];
-                const nextSha = await putRemoteV4File(write.path, write.value, remote.shas[write.path] || "", write.role);
-                remote.shas[write.path] = nextSha;
-                if (write.role === "manifest") {
-                  state.remote.manifestSha = nextSha;
-                  state.remote.manifestEtag = "";
-                } else if (write.role === "hot") {
-                  state.remote.hotSha = nextSha;
-                  state.remote.hotEtag = "";
-                }
-              }
+              await commitRemoteV4FilesAtomically(reconciled.writes, remote.expectedHeadOid);
             } catch (error) {
               if (error && error.retryableV4Conflict && attempt < REMOTE_WRITE_MAX_ATTEMPTS - 1) {
                 await waitForRemoteWriteRetry(attempt);
@@ -7451,7 +7527,11 @@
 
             state.remote.manifest = reconciled.layout.manifest;
             state.remote.hot = reconciled.layout.hot;
-            state.remote.sha = state.remote.hotSha;
+            state.remote.manifestSha = "";
+            state.remote.manifestEtag = "";
+            state.remote.hotSha = "";
+            state.remote.hotEtag = "";
+            state.remote.sha = "";
             state.remote.etag = "";
             state.remote.lastSyncAt = new Date().toISOString();
             state.remote.lastPayloadAt = getPayloadTimestamp(reconciled.payload) || syncedAt;
@@ -7573,7 +7653,7 @@
         return getRemotePathContentsUrl(state.remote.path, withRef);
       }
 
-      function getRemotePathContentsUrl(pathValue, withRef) {
+      function getRemotePathContentsUrl(pathValue, withRef, refValue) {
         const parts = state.remote.repo.split("/");
         const owner = encodeURIComponent(parts[0]);
         const repo = encodeURIComponent(parts[1]);
@@ -7583,7 +7663,15 @@
           return base;
         }
 
-        return base + "?ref=" + encodeURIComponent(state.remote.branch || DEFAULT_REMOTE_BRANCH);
+        return base + "?ref=" + encodeURIComponent(refValue || state.remote.branch || DEFAULT_REMOTE_BRANCH);
+      }
+
+      function getRemoteGitRefUrl() {
+        const parts = state.remote.repo.split("/");
+        const owner = encodeURIComponent(parts[0]);
+        const repo = encodeURIComponent(parts[1]);
+        const refPath = encodeRemotePath("heads/" + (state.remote.branch || DEFAULT_REMOTE_BRANCH));
+        return "https://api.github.com/repos/" + owner + "/" + repo + "/git/ref/" + refPath;
       }
 
       function getRemoteHeaders(includeJsonContentType) {
@@ -7715,6 +7803,26 @@
       function recordsPayloadContentEqual(left, right) {
         return recordsEqual(left && left.records, right && right.records)
           && deletedRecordsEqual(left && left.deletedRecords, right && right.deletedRecords)
+          && recurrenceCompletionArchivesEqual(
+            left && left.recurrenceCompletionArchive,
+            right && right.recurrenceCompletionArchive
+          )
+          && journalStatsEqual(left && left.journalStats, right && right.journalStats);
+      }
+
+      function v4CommitPayloadContentEqual(left, right) {
+        function comparableTombstones(value) {
+          return normalizeDeletedRecordEntries(value).map(function (entry) {
+            return {
+              recordId: entry.recordId,
+              deletedAt: entry.deletedAt,
+              purged: Boolean(entry.purged)
+            };
+          });
+        }
+        return recordsEqual(left && left.records, right && right.records)
+          && RECORDS_STORE.stableStringify(comparableTombstones(left && left.deletedRecords))
+            === RECORDS_STORE.stableStringify(comparableTombstones(right && right.deletedRecords))
           && recurrenceCompletionArchivesEqual(
             left && left.recurrenceCompletionArchive,
             right && right.recurrenceCompletionArchive

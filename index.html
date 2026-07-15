@@ -3048,6 +3048,8 @@
       let gTeacherFeedbackOpenedAt = 0;
       let todayHeadingTimer = 0;
       let autoCompletionTimer = 0;
+      let inlineEditDraft = null;
+      let recordListRenderInProgress = false;
 
       bindEvents();
       updateTodayHeading();
@@ -4068,6 +4070,7 @@
         }
 
         autoSizeInlineEditInput(input);
+        updateInlineEditDraftFromInput(input, true);
       }
 
       function handleGTeacherLongPressStart(event) {
@@ -4389,23 +4392,53 @@
         }
 
         state.editingId = id;
+        const value = String(record.text || "");
+        inlineEditDraft = {
+          id: id,
+          value: value,
+          dirty: false,
+          selectionStart: value.length,
+          selectionEnd: value.length,
+          selectionDirection: "none",
+          restoreFocus: true
+        };
         render();
         focusEditField(id);
       }
 
       function getActiveInlineEditDraft() {
-        if (!recordList || !document.activeElement || !document.activeElement.closest) {
+        if (!state.editingId || !recordList) {
+          inlineEditDraft = null;
           return null;
         }
 
-        const input = document.activeElement.closest('[data-role="edit-inline-text"]');
+        if (document.activeElement && document.activeElement.closest) {
+          const input = document.activeElement.closest('[data-role="edit-inline-text"]');
+          if (input && recordList.contains(input)) {
+            updateInlineEditDraftFromInput(input, true);
+          }
+        }
+
+        if (!inlineEditDraft || inlineEditDraft.id !== state.editingId) {
+          return null;
+        }
+
+        const record = state.records.find(function (entry) {
+          return entry.id === inlineEditDraft.id;
+        });
+        inlineEditDraft.dirty = !record
+          || inlineEditDraft.value.trim() !== String(record.text || "").trim();
+        return inlineEditDraft;
+      }
+
+      function updateInlineEditDraftFromInput(input, restoreFocus) {
         if (!input || !recordList.contains(input)) {
           return null;
         }
 
         const item = input.closest(".item");
         const id = item && item.dataset ? item.dataset.id || "" : "";
-        if (!id) {
+        if (!id || state.editingId !== id) {
           return null;
         }
 
@@ -4414,14 +4447,16 @@
           return entry.id === id;
         });
 
-        return {
+        inlineEditDraft = {
           id: id,
           value: value,
           dirty: !record || value.trim() !== String(record.text || "").trim(),
           selectionStart: typeof input.selectionStart === "number" ? input.selectionStart : value.length,
           selectionEnd: typeof input.selectionEnd === "number" ? input.selectionEnd : value.length,
-          selectionDirection: typeof input.selectionDirection === "string" ? input.selectionDirection : "none"
+          selectionDirection: typeof input.selectionDirection === "string" ? input.selectionDirection : "none",
+          restoreFocus: Boolean(restoreFocus)
         };
+        return inlineEditDraft;
       }
 
       function hasActiveDirtyInlineEditDraft() {
@@ -4430,19 +4465,23 @@
       }
 
       function restoreInlineEditDraft(draft) {
-        if (!draft || state.editingId !== draft.id) {
+        const id = draft && draft.id ? draft.id : state.editingId;
+        if (!id || state.editingId !== id) {
           return;
         }
 
-        const input = recordList.querySelector('.item[data-id="' + cssEscape(draft.id) + '"] [data-role="edit-inline-text"]');
+        const input = recordList.querySelector('.item[data-id="' + cssEscape(id) + '"] [data-role="edit-inline-text"]');
         if (!input) {
           return;
         }
 
-        if (input.value !== draft.value) {
+        if (draft && input.value !== draft.value) {
           input.value = draft.value;
         }
         autoSizeInlineEditInput(input);
+        if (!draft || !draft.restoreFocus) {
+          return;
+        }
 
         requestAnimationFrame(function () {
           if (!input.isConnected || state.editingId !== draft.id) {
@@ -4468,6 +4507,7 @@
           } catch (error) {
             input.setSelectionRange(start, end);
           }
+          updateInlineEditDraftFromInput(input, true);
         });
       }
 
@@ -4481,11 +4521,15 @@
         });
         if (!record || isRecordEditLocked(record)) {
           state.editingId = null;
+          inlineEditDraft = null;
         }
       }
 
       function handleListFocusOut(event) {
         if (event.target.getAttribute("data-role") !== "edit-inline-text") {
+          return;
+        }
+        if (recordListRenderInProgress || !recordList.contains(event.target)) {
           return;
         }
 
@@ -8995,13 +9039,23 @@
         const conflictMap = buildConflictMap(state.records);
 
         if (!visible.length) {
-          recordList.innerHTML = '<div class="empty">没有匹配的记录。可以直接在上方写下第一条。</div>';
+          recordListRenderInProgress = true;
+          try {
+            recordList.innerHTML = '<div class="empty">没有匹配的记录。可以直接在上方写下第一条。</div>';
+          } finally {
+            recordListRenderInProgress = false;
+          }
           return;
         }
 
-        recordList.innerHTML = visible.map(function (record) {
-          return renderItem(record, conflictMap[record.id] || []);
-        }).join("");
+        recordListRenderInProgress = true;
+        try {
+          recordList.innerHTML = visible.map(function (record) {
+            return renderItem(record, conflictMap[record.id] || []);
+          }).join("");
+        } finally {
+          recordListRenderInProgress = false;
+        }
         restoreInlineEditDraft(activeInlineEditDraft);
       }
 
@@ -13973,6 +14027,7 @@
             autoSizeInlineEditInput(item);
             item.focus();
             item.setSelectionRange(item.value.length, item.value.length);
+            updateInlineEditDraftFromInput(item, true);
           }
         });
       }

@@ -5907,7 +5907,10 @@
           state.remote.hotEtag = typeof saved.hotEtag === "string" ? saved.hotEtag : "";
           state.remote.lastSyncAt = typeof saved.lastSyncAt === "string" ? saved.lastSyncAt : "";
           state.remote.lastPayloadAt = typeof saved.lastPayloadAt === "string" ? saved.lastPayloadAt : "";
-          state.remote.staleSha = typeof saved.staleSha === "string" ? saved.staleSha : "";
+          // A stale SHA only describes the response immediately preceding a
+          // successful write in this page session. Persisting it can make a
+          // later, legitimate cross-device update look stale forever.
+          state.remote.staleSha = "";
           state.remote.pushLocalNext = Boolean(saved.pushLocalNext);
           state.remote.temporary = false;
           state.remote.temporaryStartedAt = "";
@@ -5936,7 +5939,6 @@
           hotEtag: state.remote.hotEtag,
           lastSyncAt: state.remote.lastSyncAt,
           lastPayloadAt: state.remote.lastPayloadAt,
-          staleSha: state.remote.staleSha,
           pushLocalNext: Boolean(state.remote.pushLocalNext)
         }));
       }
@@ -6279,12 +6281,15 @@
           state.remote.hotEtag = result.hotEtag || state.remote.hotEtag;
 
           if (isStaleRemoteResult(result)) {
-            state.remote.staleSha = result.sha || state.remote.staleSha;
+            // Skip a known pre-write response once. If GitHub returns it
+            // again, the normal merge path below repairs it without trusting
+            // cross-device payload timestamps.
+            state.remote.staleSha = "";
             state.remote.error = "";
             saveRemoteSyncSettingsToLocal();
             updateStorageStatus();
             if (!opts.silent) {
-              setStatus("GitHub 返回了旧数据，已跳过。");
+              setStatus("GitHub 刚返回了写入前的数据，已跳过一次并会重试。");
             }
             return;
           }
@@ -6296,23 +6301,6 @@
             result.recurrenceCompletionArchive
           );
           const journalStatsChanged = !journalStatsEqual(state.journalStats, result.journalStats);
-          if ((recordsChanged || deletedRecordsChanged || archiveChanged || journalStatsChanged) && isRemoteOlderThanLocal(result)) {
-            state.remote.sha = result.sha || state.remote.sha;
-            state.remote.lastSyncAt = new Date().toISOString();
-            state.remote.lastPayloadAt = state.localPayloadAt || state.remote.lastPayloadAt;
-            state.remote.staleSha = result.sha || state.remote.staleSha;
-            state.remote.checkedThisSession = true;
-            state.remote.error = "";
-            state.remote.pushLocalNext = true;
-            saveRemoteSyncSettingsToLocal();
-            updateStorageStatus();
-            queueRemoteWrite();
-            if (!opts.silent) {
-              setStatus("GitHub 数据比本地旧，已保留本地并准备写回。");
-            }
-            return;
-          }
-
           if (!recordsChanged && !deletedRecordsChanged && !archiveChanged && !journalStatsChanged) {
             state.remote.sha = result.sha;
             state.remote.lastSyncAt = new Date().toISOString();
@@ -8634,50 +8622,15 @@
           return false;
         }
 
-        const lastPayloadTime = isValidDate(state.remote.lastPayloadAt)
-          ? new Date(state.remote.lastPayloadAt).getTime()
-          : 0;
-        const resultPayloadTime = isValidDate(result.payloadAt)
-          ? new Date(result.payloadAt).getTime()
-          : 0;
-        const matchesKnownStaleSha = Boolean(
+        // Payload timestamps are produced by different devices and clients,
+        // so their ordering cannot prove that a GitHub response is stale.
+        // Only an exact blob SHA remembered immediately before this session's
+        // own successful write is safe to skip.
+        return Boolean(
           state.remote.staleSha
           && result.sha
           && result.sha === state.remote.staleSha
         );
-
-        if (matchesKnownStaleSha && (!lastPayloadTime || !resultPayloadTime || resultPayloadTime <= lastPayloadTime)) {
-          return true;
-        }
-
-        return Boolean(lastPayloadTime && resultPayloadTime && resultPayloadTime < lastPayloadTime);
-      }
-
-      function isRemoteOlderThanLocal(result) {
-        const localDeletedRecords = normalizeDeletedRecordEntries(state.deletedRecords);
-        const remoteDeletedRecords = normalizeDeletedRecordEntries(result && result.deletedRecords);
-        const localArchive = normalizeRecurrenceCompletionArchiveEntries(state.recurrenceCompletionArchive);
-        const remoteArchive = normalizeRecurrenceCompletionArchiveEntries(result && result.recurrenceCompletionArchive);
-        const hasLocalData = state.records.length
-          || localDeletedRecords.length
-          || localArchive.length
-          || hasJournalStats(state.journalStats);
-        if (!result || result.missing || !hasLocalData) {
-          return false;
-        }
-
-        const localPayloadTime = isValidDate(state.localPayloadAt)
-          ? new Date(state.localPayloadAt).getTime()
-          : 0;
-        const resultPayloadTime = isValidDate(result.payloadAt)
-          ? new Date(result.payloadAt).getTime()
-          : 0;
-
-        const hasRemoteData = (Array.isArray(result.records) ? result.records.length : 0)
-          || remoteDeletedRecords.length
-          || remoteArchive.length
-          || hasJournalStats(result && result.journalStats);
-        return Boolean(localPayloadTime && (!hasRemoteData || !resultPayloadTime || resultPayloadTime < localPayloadTime));
       }
 
       function render() {

@@ -11967,9 +11967,12 @@
         const timePeriodPattern = getTimePeriodPatternSource();
         const datePattern = "(?:" + getDisplayDatePatternSource() + "|" + getStandaloneDayPatternSource() + ")";
         const dateOrTimePattern = "(?:" + datePattern + "(?:\\s*" + timePeriodPattern + ")?|" + timePeriodPattern + "|" + getTimeFragmentPatternSource() + ")";
-        const relativeDurationPattern = "(?:半|几|数|[0-9一二两三四五六七八九十百]+)\\s*(?:个)?\\s*(?:分钟|小时|工作日|天|日|周|星期|礼拜|月|年)";
         return new RegExp(dateOrTimePattern + "\\s*(?:前|之前)").test(source)
-          || new RegExp(relativeDurationPattern + "\\s*(?:以内|内)").test(source);
+          || new RegExp(getRelativeDurationPatternSource() + "\\s*(?:以内|内)").test(source);
+      }
+
+      function getRelativeDurationPatternSource() {
+        return "(半|几|数|[0-9一二两三四五六七八九十百]+)\\s*(?:个)?\\s*(分钟|小时|工作日|天|日|周|星期|礼拜|月|年)";
       }
 
       function inferTimedTypeFromText(text) {
@@ -13092,6 +13095,14 @@
           return { hasTemporalHint: true, eventAt: "", date: null };
         }
 
+        if (dateInfo.eventAt && !timeInfo.matched) {
+          return {
+            hasTemporalHint: true,
+            eventAt: dateInfo.eventAt,
+            date: dateInfo.date
+          };
+        }
+
         const date = new Date(dateInfo.date.getTime());
         if (timeInfo.matched) {
           date.setHours(timeInfo.hours, timeInfo.minutes, 0, 0);
@@ -13271,6 +13282,11 @@
           return explicitDateInfo;
         }
 
+        const relativeDurationInfo = parseRelativeDurationDateInfo(text, now);
+        if (relativeDurationInfo.matched) {
+          return relativeDurationInfo;
+        }
+
         const relativeMap = [
           { pattern: /大后天/, offset: 3 },
           { pattern: /后天/, offset: 2 },
@@ -13308,6 +13324,55 @@
         }
 
         return { matched: false, date: null };
+      }
+
+      function parseRelativeDurationDateInfo(text, referenceNow) {
+        const match = String(text || "").match(
+          new RegExp(getRelativeDurationPatternSource() + "\\s*(?:以内|内)")
+        );
+        if (!match) {
+          return { matched: false, date: null };
+        }
+
+        const amount = parsePositiveIntegerToken(match[1]);
+        if (!amount) {
+          return { matched: false, date: null };
+        }
+
+        const now = isValidDate(referenceNow) ? new Date(referenceNow) : new Date();
+        const unit = match[2];
+        if (unit === "分钟" || unit === "小时") {
+          const eventAt = new Date(now.getTime());
+          eventAt.setMinutes(eventAt.getMinutes() + amount * (unit === "小时" ? 60 : 1));
+          return {
+            matched: true,
+            date: eventAt,
+            eventAt: eventAt.toISOString()
+          };
+        }
+
+        let date = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        if (unit === "工作日") {
+          let remaining = amount;
+          while (remaining > 0) {
+            date.setDate(date.getDate() + 1);
+            if (date.getDay() !== 0 && date.getDay() !== 6) {
+              remaining -= 1;
+            }
+          }
+        } else if (unit === "天" || unit === "日") {
+          date.setDate(date.getDate() + amount);
+        } else if (unit === "周" || unit === "星期" || unit === "礼拜") {
+          date.setDate(date.getDate() + amount * 7);
+        } else if (unit === "月") {
+          date = addMonthsClamped(date, amount, date.getDate());
+        } else if (unit === "年") {
+          date = addYearsClamped(date, amount);
+        } else {
+          return { matched: false, date: null };
+        }
+
+        return { matched: true, date: date };
       }
 
       function parseTimeFromText(text) {

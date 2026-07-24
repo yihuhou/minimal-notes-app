@@ -10364,13 +10364,14 @@
         const timeFragmentPattern = getTimeFragmentPatternSource();
         const periodTimePattern = timePeriodPattern + "(?:\\s*" + timeFragmentPattern + ")?";
         const relativeDatePattern = getRelativeDayPatternSource() + "|" + getCompactRelativePeriodDatePatternSource() + "|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]";
+        const relativeDurationPattern = getRelativeDurationPatternSource() + "\\s*(?:以内|内)";
         const deadlinePattern = "截止|截至|过期|到期|失效|期满|有效期|DDL|ddl|deadline|之前|前";
         const knownLocationPattern = getKnownLocationPatternSource();
         const roomLocationPattern = "[在去到]\\s*" + getBareRoomLocationPatternSource();
         const locationPattern = "(?:" + roomLocationPattern + "|(?:[在去到]\\s*)?(?:" + knownLocationPattern + "))(?!\\d|\\s*(?:字|词|页|元|块|个|人|次|篇|本|分钟|小时|天|周|月|年|%))";
         const calendarDatePattern = "\\d{4}(?:年|[\\/.-])\\d{1,2}(?:月|[\\/.-])\\d{1,2}|\\d{1,2}(?:月|[\\/.-])\\d{1,2}(?:日|号)?|\\d{1,2}(?:日|号)";
         const tokenPattern = new RegExp(
-          "((?:想法|记录|日记)[:：]?|" + periodTimePattern + "|" + relativeDatePattern + "|" + deadlinePattern + "|" + locationPattern + "|" + timeFragmentPattern + "|" + calendarDatePattern + ")",
+          "((?:想法|记录|日记)[:：]?|" + periodTimePattern + "|" + relativeDurationPattern + "|" + relativeDatePattern + "|" + deadlinePattern + "|" + locationPattern + "|" + timeFragmentPattern + "|" + calendarDatePattern + ")",
           "g"
         );
         let lastIndex = 0;
@@ -10390,6 +10391,13 @@
       }
 
       function wrapHighlightedToken(token, source, index, options) {
+        const relativeDurationDeadline = splitRelativeDurationDeadlineToken(token);
+        if (relativeDurationDeadline) {
+          return '<span class="code-inline-date">' + escapeHtml(relativeDurationDeadline.duration) + "</span>"
+            + escapeHtml(relativeDurationDeadline.gap)
+            + '<span class="code-inline-keyword">' + escapeHtml(relativeDurationDeadline.marker) + "</span>";
+        }
+
         if (/^(?:想法|记录|日记)/.test(token) || isDeadlineKeywordToken(token, source, index)) {
           return '<span class="code-inline-keyword">' + escapeHtml(token) + "</span>";
         }
@@ -10417,6 +10425,15 @@
         }
 
         return '<span class="code-inline-date">' + escapeHtml(token) + "</span>";
+      }
+
+      function splitRelativeDurationDeadlineToken(token) {
+        const match = String(token || "").match(
+          new RegExp("^(" + getRelativeDurationPatternSource() + ")(\\s*)(以内|内)$")
+        );
+        return match
+          ? { duration: match[1], gap: match[2], marker: match[3] }
+          : null;
       }
 
       function isTimeHighlightToken(token) {
@@ -11971,8 +11988,12 @@
           || new RegExp(getRelativeDurationPatternSource() + "\\s*(?:以内|内)").test(source);
       }
 
-      function getRelativeDurationPatternSource() {
-        return "(半|几|数|[0-9一二两三四五六七八九十百]+)\\s*(?:个)?\\s*(分钟|小时|工作日|天|日|周|星期|礼拜|月|年)";
+      function getRelativeDurationPatternSource(captureParts) {
+        const amountPattern = "半|几|数|[0-9一二两三四五六七八九十百]+";
+        const unitPattern = "分钟|小时|工作日|天|日|周|星期|礼拜|月|年";
+        const amount = captureParts ? "(" + amountPattern + ")" : "(?:" + amountPattern + ")";
+        const unit = captureParts ? "(" + unitPattern + ")" : "(?:" + unitPattern + ")";
+        return amount + "\\s*(?:个)?\\s*" + unit;
       }
 
       function inferTimedTypeFromText(text) {
@@ -13328,7 +13349,7 @@
 
       function parseRelativeDurationDateInfo(text, referenceNow) {
         const match = String(text || "").match(
-          new RegExp(getRelativeDurationPatternSource() + "\\s*(?:以内|内)")
+          new RegExp(getRelativeDurationPatternSource(true) + "\\s*(?:以内|内)")
         );
         if (!match) {
           return { matched: false, date: null };

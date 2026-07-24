@@ -33,6 +33,7 @@ No download, installation, or coding required.
 ```text
 明天 10 点开会
 DDL 6月10日前交材料
+一个月以内交缓冲期申请
 想法：以后做一个手机端快捷入口
 日记：今天把论文引言改完了
 ```
@@ -41,7 +42,9 @@ DDL 6月10日前交材料
 
 输入框下方有 `事项`、`待办`、`日程`、`截止`、`想法`、`日记`、`已完成` 这些筛选按钮。
 
-`待办`、`日程`、`截止` 可以自动识别：普通内容默认是待办；带时间的内容通常会识别为日程；带 `DDL`、`截止`、`前`、`之前` 等截止提示的内容会识别为截止事项。`想法` 和 `日记` 不会自动猜测，需要在内容开头写 `想法：`、`日记：`，或者先点到对应筛选按钮再输入。
+`待办`、`日程`、`截止` 可以自动识别：普通内容默认是待办；带时间的内容通常会识别为日程；带 `DDL`、`截止`、`前`、`之前`、`内`、`以内` 等截止提示的内容会识别为截止事项。`想法` 和 `日记` 不会自动猜测，需要在内容开头写 `想法：`、`日记：`，或者先点到对应筛选按钮再输入。
+
+`一个月以内交缓冲期申请`、`两周内提交材料` 这类“时长 + 内/以内”表达会从写入这段相对时限的日期或时刻开始计算具体截止时间。天、周、月、年按目标日期当天 23:59 截止；工作日会跳过周末；小时和分钟按写入时刻精确顺延。列表会把时长部分按日期样式高亮，并把 `内`、`以内` 按与 `前`、`之前` 相同的截止关键词样式高亮。
 
 如果你先点到某个具体类别，再直接输入内容，新的记录会默认保存到这个类别里。例如：
 
@@ -366,6 +369,7 @@ Examples:
 ```text
 Meeting tomorrow at 10
 DDL before June 10 submit materials
+一个月以内交缓冲期申请
 Idea: add a mobile shortcut
 Journal: finished revising the introduction today
 ```
@@ -374,7 +378,9 @@ Journal: finished revising the introduction today
 
 The filter buttons under the input box include `事项` (Items), `待办` (Todo), `日程` (Schedule), `截止` (Deadline), `想法` (Idea), `日记` (Journal), and `已完成` (Completed).
 
-`待办` (Todo), `日程` (Schedule), and `截止` (Deadline) can be detected automatically: plain text defaults to todo; text with a time is usually treated as a schedule item; text with deadline hints such as `DDL`, `截止`, `前`, or `之前` is treated as a deadline. `想法` (Idea) and `日记` (Journal) are not guessed automatically; use an `Idea:` / `Journal:` prefix, or click the matching filter before typing.
+`待办` (Todo), `日程` (Schedule), and `截止` (Deadline) can be detected automatically: plain text defaults to todo; text with a time is usually treated as a schedule item; text with deadline hints such as `DDL`, `截止`, `前`, `之前`, `内`, or `以内` is treated as a deadline. `想法` (Idea) and `日记` (Journal) are not guessed automatically; use an `Idea:` / `Journal:` prefix, or click the matching filter before typing.
+
+The Chinese-first parser also resolves relative limits such as `一个月以内交缓冲期申请` (within one month) and `两周内提交材料` (within two weeks) into concrete deadlines, using the date or time when that relative phrase is entered as the reference. Day, week, month, and year limits end at 23:59 on the target date; business-day limits skip weekends; hour and minute limits advance from the exact entry time. In the list, the duration uses the date highlight style, while `内` / `以内` use the same deadline-keyword style as `前` / `之前`.
 
 If you click a specific category first and then type into the input box, new records are saved to that category by default. For example:
 

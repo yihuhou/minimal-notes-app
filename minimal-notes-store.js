@@ -14,6 +14,16 @@
   const SCHEMA_VERSION = 4;
   const RECORD_TYPES = ["todo", "meeting", "deadline", "idea", "journal"];
   const REVISION_ENCODING = "full";
+  const DEFAULT_SNAPSHOT_POLICY = {
+    enabled: false,
+    triggerBytes: 280 * 1024,
+    warningBytes: 300 * 1024,
+    snapshotBytes: 250 * 1024,
+    journalEditWindowHours: 72,
+    completedAgeDays: 30
+  };
+  const G_TEACHER_ID_PATTERN = /^g-teacher-\d{4}-\d{2}-\d{2}-(?:morning|evening|pulse-[123])$/;
+  const G_TEACHER_SIGNATURE = "——G老师";
 
   function clone(value) {
     return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
@@ -594,6 +604,191 @@
     return utf8Bytes(jsonText(value)).length;
   }
 
+  function normalizeSnapshotPolicy(value) {
+    const source = value && typeof value === "object" ? value : {};
+    function positiveInteger(input, fallback) {
+      const number = Number(input);
+      return Number.isFinite(number) && number > 0 ? Math.floor(number) : fallback;
+    }
+    return {
+      enabled: source.enabled === true,
+      triggerBytes: positiveInteger(source.triggerBytes, DEFAULT_SNAPSHOT_POLICY.triggerBytes),
+      warningBytes: positiveInteger(source.warningBytes, DEFAULT_SNAPSHOT_POLICY.warningBytes),
+      snapshotBytes: positiveInteger(source.snapshotBytes, DEFAULT_SNAPSHOT_POLICY.snapshotBytes),
+      journalEditWindowHours: positiveInteger(
+        source.journalEditWindowHours,
+        DEFAULT_SNAPSHOT_POLICY.journalEditWindowHours
+      ),
+      completedAgeDays: positiveInteger(source.completedAgeDays, DEFAULT_SNAPSHOT_POLICY.completedAgeDays)
+    };
+  }
+
+  function isGTeacherRecord(record) {
+    const id = record && typeof record.id === "string" ? record.id : "";
+    const text = record && typeof record.text === "string" ? record.text.trim() : "";
+    return G_TEACHER_ID_PATTERN.test(id) || text.endsWith(G_TEACHER_SIGNATURE);
+  }
+
+  function journalDayKey(record) {
+    const createdAt = normalizeIso(record && record.createdAt);
+    if (!createdAt) {
+      return "";
+    }
+    const chinaJournalOffsetMs = 3 * 60 * 60 * 1000;
+    return new Date(new Date(createdAt).getTime() + chinaJournalOffsetMs).toISOString().slice(0, 10);
+  }
+
+  function countTextCharacters(value) {
+    return Array.from(String(value || "").replace(/\s+/g, "")).length;
+  }
+
+  function emptyCurrentStats() {
+    return {
+      activeRecords: 0,
+      typeCounts: {
+        todo: 0,
+        meeting: 0,
+        deadline: 0,
+        idea: 0,
+        journal: 0
+      },
+      completedRecords: 0,
+      userJournals: 0,
+      gTeacherJournals: 0,
+      userJournalCharacters: 0,
+      userJournalByDate: {}
+    };
+  }
+
+  function normalizeCurrentStats(value) {
+    const source = value && typeof value === "object" ? value : {};
+    const result = emptyCurrentStats();
+    function count(input) {
+      const number = Number(input);
+      return Number.isFinite(number) && number > 0 ? Math.floor(number) : 0;
+    }
+    result.activeRecords = count(source.activeRecords);
+    RECORD_TYPES.forEach(function (type) {
+      result.typeCounts[type] = count(source.typeCounts && source.typeCounts[type]);
+    });
+    result.completedRecords = count(source.completedRecords);
+    result.userJournals = count(source.userJournals);
+    result.gTeacherJournals = count(source.gTeacherJournals);
+    result.userJournalCharacters = count(source.userJournalCharacters);
+    Object.keys(source.userJournalByDate || {}).sort().forEach(function (day) {
+      const dayCount = count(source.userJournalByDate[day]);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(day) && dayCount) {
+        result.userJournalByDate[day] = dayCount;
+      }
+    });
+    return result;
+  }
+
+  function adjustCurrentStats(stats, record, amount) {
+    if (!record || !amount) {
+      return stats;
+    }
+    const canonical = canonicalizeRecord(record);
+    stats.activeRecords = Math.max(0, stats.activeRecords + amount);
+    stats.typeCounts[canonical.type] = Math.max(0, (stats.typeCounts[canonical.type] || 0) + amount);
+    if (canonical.completed) {
+      stats.completedRecords = Math.max(0, stats.completedRecords + amount);
+    }
+    if (canonical.type !== "journal") {
+      return stats;
+    }
+    if (isGTeacherRecord(canonical)) {
+      stats.gTeacherJournals = Math.max(0, stats.gTeacherJournals + amount);
+      return stats;
+    }
+    stats.userJournals = Math.max(0, stats.userJournals + amount);
+    stats.userJournalCharacters = Math.max(
+      0,
+      stats.userJournalCharacters + amount * countTextCharacters(canonical.text)
+    );
+    const day = journalDayKey(canonical);
+    if (day) {
+      const nextDayCount = Math.max(0, (stats.userJournalByDate[day] || 0) + amount);
+      if (nextDayCount) {
+        stats.userJournalByDate[day] = nextDayCount;
+      } else {
+        delete stats.userJournalByDate[day];
+      }
+    }
+    return stats;
+  }
+
+  function computeCurrentStats(records) {
+    const stats = emptyCurrentStats();
+    (Array.isArray(records) ? records : []).forEach(function (record) {
+      try {
+        adjustCurrentStats(stats, record, 1);
+      } catch (error) {
+        // Invalid records are rejected elsewhere; stats only cover canonical records.
+      }
+    });
+    return normalizeCurrentStats(stats);
+  }
+
+  function updateCurrentStats(value, changes) {
+    const stats = normalizeCurrentStats(value);
+    (Array.isArray(changes) ? changes : []).forEach(function (change) {
+      if (change && change.before) {
+        adjustCurrentStats(stats, change.before, -1);
+      }
+      if (change && change.after) {
+        adjustCurrentStats(stats, change.after, 1);
+      }
+    });
+    return normalizeCurrentStats(stats);
+  }
+
+  function snapshotSortAt(record) {
+    return normalizeIso(record && record.headRevisionAt, normalizeIso(record && record.createdAt));
+  }
+
+  function buildSnapshotEnvelope(generation, records) {
+    return {
+      version: SCHEMA_VERSION,
+      generation: generation,
+      kind: "snapshots",
+      open: false,
+      records: clone(Array.isArray(records) ? records : [])
+    };
+  }
+
+  function buildSnapshotDescriptor(pathValue, envelope, maxBytes) {
+    if (!envelope || envelope.kind !== "snapshots" || !Array.isArray(envelope.records)) {
+      throw new Error("A snapshot descriptor requires a snapshot envelope.");
+    }
+    const dates = envelope.records.map(snapshotSortAt).filter(Boolean).sort();
+    const typeCounts = {};
+    RECORD_TYPES.forEach(function (type) { typeCounts[type] = 0; });
+    let completedCount = 0;
+    envelope.records.forEach(function (record) {
+      const type = normalizeRecordType(record && record.type);
+      typeCounts[type] += 1;
+      if (record && record.completed) {
+        completedCount += 1;
+      }
+    });
+    const text = jsonText(envelope);
+    const bytes = utf8Bytes(text).length;
+    return {
+      path: pathValue,
+      open: false,
+      bytes: bytes,
+      contentHash: sha256(text),
+      mutable: false,
+      firstSortAt: dates[0] || "",
+      lastSortAt: dates[dates.length - 1] || "",
+      itemCount: envelope.records.length,
+      typeCounts: typeCounts,
+      completedCount: completedCount,
+      oversize: bytes > (Number(maxBytes) || DEFAULT_SNAPSHOT_POLICY.snapshotBytes)
+    };
+  }
+
   function shardMonth(value, fallback) {
     const at = normalizeIso(value);
     return at ? at.slice(0, 7) : fallback;
@@ -670,6 +865,7 @@
     const basePath = String(opts.basePath || "minimal-notes-sync").replace(/^\/+|\/+$/g, "");
     const hotMaxBytes = Number(opts.hotMaxBytes) || 300 * 1024;
     const shardMaxBytes = Number(opts.shardMaxBytes) || 250 * 1024;
+    const snapshotPolicy = normalizeSnapshotPolicy(opts.snapshotPolicy);
     const currentMonth = (normalizeIso(opts.now, normalizeIso(source.migratedAt, source.savedAt)) || "1970-01").slice(0, 7);
     const generation = source.generation;
     const hotPath = basePath + "/hot.json";
@@ -700,10 +896,20 @@
     });
     const recordIndex = {};
     (source.records || []).forEach(function (record) {
-      recordIndex[record.id] = { location: hotPath, revisionShards: [] };
+      recordIndex[record.id] = {
+        location: hotPath,
+        headRevisionId: typeof record.headRevisionId === "string" ? record.headRevisionId : "",
+        headRevisionAt: normalizeIso(record.headRevisionAt, record.createdAt),
+        revisionShards: []
+      };
     });
     (source.trash || []).forEach(function (entry) {
-      recordIndex[entry.recordId] = { location: "", revisionShards: [] };
+      recordIndex[entry.recordId] = {
+        location: "",
+        headRevisionId: typeof entry.headRevisionId === "string" ? entry.headRevisionId : "",
+        headRevisionAt: normalizeIso(entry.deletedAt),
+        revisionShards: []
+      };
     });
     (source.tombstones || []).forEach(function (entry) {
       if (!recordIndex[entry.recordId]) {
@@ -754,6 +960,7 @@
       createdAt: source.migratedAt || source.savedAt,
       updatedAt: source.savedAt,
       limits: { hotBytes: hotMaxBytes, shardBytes: shardMaxBytes },
+      snapshotPolicy: snapshotPolicy,
       hot: {
         path: hotPath,
         bytes: utf8Bytes(hotText).length,
@@ -766,6 +973,7 @@
       snapshots: [],
       revisions: revisionShards.map(descriptor),
       trash: trashShards.map(descriptor),
+      currentStats: computeCurrentStats(source.records || []),
       recordIndex: recordIndex
     };
     const files = {};
@@ -807,13 +1015,26 @@
 
   function collectLayoutSnapshots(layout) {
     const records = [];
+    const recordIndex = layout && layout.manifest && layout.manifest.recordIndex || {};
     Object.keys(layout && layout.files || {}).forEach(function (path) {
       const file = layout.files[path];
       if (file && file.kind === "snapshots" && Array.isArray(file.records)) {
-        records.push.apply(records, clone(file.records));
+        file.records.forEach(function (record) {
+          const indexEntry = record && recordIndex[record.id];
+          if (indexEntry && indexEntry.location === path) {
+            records.push(clone(record));
+          }
+        });
       }
     });
     return records;
+  }
+
+  function hasCompleteSnapshotFiles(layout) {
+    return (layout && layout.manifest && layout.manifest.snapshots || []).every(function (descriptor) {
+      const file = layout && layout.files && layout.files[descriptor.path];
+      return file && file.kind === "snapshots" && Array.isArray(file.records);
+    });
   }
 
   function validateV4Layout(layout) {
@@ -829,18 +1050,43 @@
     }
     const revisions = collectLayoutRevisions(layout);
     const revisionsById = new Map(revisions.map(function (revision) { return [revision.id, revision]; }));
-    (layout.hot.records || []).forEach(function (record) {
+    const activeRecords = collectLayoutSnapshots(layout).concat(layout.hot.records || []);
+    activeRecords.forEach(function (record) {
       const head = revisionsById.get(record.headRevisionId);
       if (!head) {
-        errors.push("Hot head revision is missing for " + record.id + ".");
+        errors.push("Active head revision is missing for " + record.id + ".");
         return;
       }
       if (head.state.deleted) {
-        errors.push("Hot head revision is deleted for " + record.id + ".");
+        errors.push("Active head revision is deleted for " + record.id + ".");
       }
-      const hotCanonical = canonicalizeRecord(record);
-      if (stableStringify(hotCanonical) !== stableStringify(head.state.record)) {
-        errors.push("Hot state differs from head revision for " + record.id + ".");
+      const activeCanonical = canonicalizeRecord(record);
+      if (stableStringify(activeCanonical) !== stableStringify(head.state.record)) {
+        errors.push("Active state differs from head revision for " + record.id + ".");
+      }
+    });
+    if (hasCompleteSnapshotFiles(layout)) {
+      const activeIds = new Set(activeRecords.map(function (record) { return record.id; }));
+      const activeLocations = new Set([layout.manifest.hot.path].concat(
+        (layout.manifest.snapshots || []).map(function (descriptor) { return descriptor.path; })
+      ));
+      Object.keys(layout.manifest.recordIndex || {}).forEach(function (recordId) {
+        const indexEntry = layout.manifest.recordIndex[recordId];
+        if (indexEntry && activeLocations.has(indexEntry.location) && !activeIds.has(recordId)) {
+          errors.push("Record index points to a missing active state for " + recordId + ".");
+        }
+      });
+    }
+    activeRecords.forEach(function (record) {
+      const indexEntry = layout.manifest.recordIndex && layout.manifest.recordIndex[record.id];
+      const expectedLocation = (layout.hot.records || []).some(function (item) { return item.id === record.id; })
+        ? layout.manifest.hot.path
+        : indexEntry && indexEntry.location;
+      if (!indexEntry || indexEntry.location !== expectedLocation) {
+        errors.push("Active record index location is missing for " + record.id + ".");
+      }
+      if (indexEntry && indexEntry.headRevisionId && indexEntry.headRevisionId !== record.headRevisionId) {
+        errors.push("Active record index head differs for " + record.id + ".");
       }
     });
     const tombstoneIds = new Set((layout.hot.tombstones || []).map(function (item) { return item.recordId; }));
@@ -862,7 +1108,7 @@
         return;
       }
       const text = jsonText(file);
-      if (!expected.mutable && (expected.bytes !== utf8Bytes(text).length || expected.contentHash !== sha256(text))) {
+      if (expected.bytes !== utf8Bytes(text).length || expected.contentHash !== sha256(text)) {
         errors.push("Manifest bytes or hash differ for " + path + ".");
       }
       const limit = path === layout.manifest.hot.path
@@ -871,12 +1117,23 @@
       if (utf8Bytes(text).length > limit && !expected.oversize) {
         errors.push("Unmarked oversize file: " + path + ".");
       }
+      if (file.kind === "snapshots" && Array.isArray(file.records)) {
+        if (file.open || file.generation !== layout.manifest.generation || expected.mutable) {
+          errors.push("Snapshot envelope must be immutable and match the manifest generation: " + path + ".");
+        }
+      }
     });
+    if (layout.manifest.currentStats && hasCompleteSnapshotFiles(layout)) {
+      const expectedStats = computeCurrentStats(activeRecords);
+      if (stableStringify(normalizeCurrentStats(layout.manifest.currentStats)) !== stableStringify(expectedStats)) {
+        errors.push("Manifest currentStats differ from canonical active records.");
+      }
+    }
     return {
       valid: errors.length === 0,
       errors: errors,
       revisionCount: revisions.length,
-      recordCount: (layout.hot.records || []).length,
+      recordCount: activeRecords.length,
       trashCount: collectLayoutTrash(layout).length
     };
   }
@@ -1077,7 +1334,7 @@
     });
   }
 
-  function descriptorForEnvelope(pathValue, envelope, mutable) {
+  function descriptorForEnvelope(pathValue, envelope, mutable, maxBytes) {
     const items = envelope.kind === "revisions" ? envelope.revisions : envelope.entries;
     const dates = items.map(function (item) {
       return normalizeIso(envelope.kind === "revisions" ? item.at : item.deletedAt);
@@ -1092,7 +1349,7 @@
       firstAt: dates[0] || "",
       lastAt: dates[dates.length - 1] || "",
       itemCount: items.length,
-      oversize: false
+      oversize: utf8Bytes(text).length > (Number(maxBytes) || 250 * 1024)
     };
   }
 
@@ -1146,7 +1403,7 @@
     let targetPath = openPath;
     if (shouldRoll) {
       openEnvelope.open = false;
-      const frozenDescriptor = descriptorForEnvelope(openPath, openEnvelope, false);
+      const frozenDescriptor = descriptorForEnvelope(openPath, openEnvelope, false, shardMaxBytes);
       const descriptorIndex = (manifest[descriptorKey] || []).findIndex(function (item) { return item.path === openPath; });
       if (descriptorIndex !== -1) {
         manifest[descriptorKey][descriptorIndex] = frozenDescriptor;
@@ -1155,12 +1412,21 @@
       targetPath = nextShardPath(manifest, kind, month, layout.basePath);
       const nextEnvelope = buildShardEnvelope(kind, manifest.generation, true, clone(uniqueAdditions));
       layout.files[targetPath] = nextEnvelope;
-      manifest[descriptorKey].push(descriptorForEnvelope(targetPath, nextEnvelope, true));
+      manifest[descriptorKey].push(descriptorForEnvelope(targetPath, nextEnvelope, true, shardMaxBytes));
       manifest[openKey] = targetPath;
       paths.push(targetPath);
     } else {
       openEnvelope[itemKey] = candidate[itemKey];
       layout.files[openPath] = openEnvelope;
+      const descriptorIndex = (manifest[descriptorKey] || []).findIndex(function (item) {
+        return item.path === openPath;
+      });
+      const currentDescriptor = descriptorForEnvelope(openPath, openEnvelope, true, shardMaxBytes);
+      if (descriptorIndex !== -1) {
+        manifest[descriptorKey][descriptorIndex] = currentDescriptor;
+      } else {
+        manifest[descriptorKey].push(currentDescriptor);
+      }
       paths.push(openPath);
     }
 
@@ -1171,7 +1437,7 @@
     return {
       paths: paths,
       itemPathById: itemPathById,
-      manifestChanged: shouldRoll
+      manifestChanged: true
     };
   }
 
@@ -1190,11 +1456,22 @@
     });
     const knownRevisionsById = new Map(partialRevisions.map(function (revision) { return [revision.id, revision]; }));
     const currentRecords = new Map((hot.records || []).map(function (record) { return [record.id, record]; }));
+    const snapshotRecords = collectLayoutSnapshots(next);
+    const baseRecords = new Map(snapshotRecords.map(function (record) { return [record.id, record]; }));
+    currentRecords.forEach(function (record, id) {
+      baseRecords.set(id, record);
+    });
+    Object.keys(opts.baseRecordById || {}).forEach(function (id) {
+      if (!baseRecords.has(id) && opts.baseRecordById[id]) {
+        baseRecords.set(id, clone(opts.baseRecordById[id]));
+      }
+    });
     const currentTombstones = new Map((hot.tombstones || []).map(function (item) { return [item.recordId, item]; }));
     const incomingRecords = Array.isArray(payload && payload.records) ? payload.records : [];
     const incomingDeleted = Array.isArray(payload && payload.deletedRecords) ? payload.deletedRecords : [];
     const newRevisions = [];
     const recordForRevision = new Map();
+    const touchedRecordIds = new Set();
 
     incomingRecords.forEach(function (record) {
       let canonical = null;
@@ -1203,7 +1480,7 @@
       } catch (error) {
         return;
       }
-      const existing = currentRecords.get(canonical.id);
+      const existing = currentRecords.get(canonical.id) || baseRecords.get(canonical.id);
       const metadata = recordChangeMetadata(record, now, !existing);
       const tombstone = currentTombstones.get(canonical.id);
       if (tombstone && new Date(tombstone.deletedAt).getTime() >= new Date(metadata.at).getTime()) {
@@ -1215,6 +1492,7 @@
       if (existing && stableStringify(canonicalizeRecord(existing)) === stableStringify(canonical)) {
         return;
       }
+      touchedRecordIds.add(canonical.id);
       const parentRevisionId = typeof record.headRevisionId === "string" && record.headRevisionId
         ? record.headRevisionId
         : (opts.baseHeadByRecord && opts.baseHeadByRecord[canonical.id]) || (existing && existing.headRevisionId) || "";
@@ -1244,11 +1522,12 @@
       if (!tombstone) {
         return;
       }
+      touchedRecordIds.add(tombstone.recordId);
       const existingTombstone = currentTombstones.get(tombstone.recordId);
       if (existingTombstone && new Date(existingTombstone.deletedAt).getTime() > new Date(tombstone.deletedAt).getTime()) {
         return;
       }
-      const existingRecord = currentRecords.get(tombstone.recordId);
+      const existingRecord = currentRecords.get(tombstone.recordId) || baseRecords.get(tombstone.recordId);
       if (existingTombstone
         && !existingRecord
         && new Date(existingTombstone.deletedAt).getTime() === new Date(tombstone.deletedAt).getTime()) {
@@ -1299,6 +1578,26 @@
     const revisionAppend = appendOpenShard(next, "revisions", uniqueNewRevisions, { now: now });
     const trashAppend = appendOpenShard(next, "trash", trashEntries, { now: now });
     let manifestChanged = revisionAppend.manifestChanged || trashAppend.manifestChanged;
+    ["revisions", "trash"].forEach(function (kind) {
+      const openPath = kind === "revisions" ? manifest.openRevisionShard : manifest.openTrashShard;
+      const envelope = next.files[openPath];
+      const descriptorIndex = (manifest[kind] || []).findIndex(function (descriptor) {
+        return descriptor.path === openPath;
+      });
+      if (!envelope || descriptorIndex === -1) {
+        return;
+      }
+      const descriptor = descriptorForEnvelope(
+        openPath,
+        envelope,
+        true,
+        manifest.limits && manifest.limits.shardBytes
+      );
+      if (stableStringify(manifest[kind][descriptorIndex]) !== stableStringify(descriptor)) {
+        manifest[kind][descriptorIndex] = descriptor;
+        manifestChanged = true;
+      }
+    });
     uniqueNewRevisions.forEach(function (revision) {
       const shardPath = revisionAppend.itemPathById[revision.id] || manifest.openRevisionShard;
       const indexEntry = manifest.recordIndex[revision.recordId] || { location: "", revisionShards: [] };
@@ -1309,6 +1608,8 @@
       if (currentRecords.has(revision.recordId)) {
         indexEntry.location = manifest.hot.path;
       }
+      indexEntry.headRevisionId = revision.id;
+      indexEntry.headRevisionAt = revision.at;
       manifest.recordIndex[revision.recordId] = indexEntry;
     });
     trashEntries.forEach(function (entry) {
@@ -1318,12 +1619,17 @@
         indexEntry.location = trashPath;
         manifestChanged = true;
       }
+      indexEntry.headRevisionId = entry.headRevisionId || indexEntry.headRevisionId || "";
+      indexEntry.headRevisionAt = normalizeIso(entry.deletedAt, indexEntry.headRevisionAt);
       manifest.recordIndex[entry.recordId] = indexEntry;
     });
     currentTombstones.forEach(function (tombstone) {
       if (!manifest.recordIndex[tombstone.recordId]) {
         manifest.recordIndex[tombstone.recordId] = { location: "", revisionShards: [] };
         manifestChanged = true;
+      }
+      if (tombstone.purged) {
+        manifest.recordIndex[tombstone.recordId].location = "";
       }
     });
 
@@ -1337,6 +1643,48 @@
     hot.journalStats = clone(payload && payload.journalStats || hot.journalStats || {});
     next.files[manifest.hot.path] = hot;
     next.hot = hot;
+
+    let currentStats = null;
+    if (hasCompleteSnapshotFiles(next)) {
+      currentStats = computeCurrentStats(collectLayoutSnapshots(next).concat(Array.from(currentRecords.values())));
+    } else if (manifest.currentStats) {
+      currentStats = normalizeCurrentStats(manifest.currentStats);
+      touchedRecordIds.forEach(function (recordId) {
+        const previous = baseRecords.get(recordId);
+        if (previous) {
+          adjustCurrentStats(currentStats, previous, -1);
+        }
+        const current = currentRecords.get(recordId);
+        const indexEntry = manifest.recordIndex[recordId];
+        if (current && indexEntry && indexEntry.location === manifest.hot.path) {
+          adjustCurrentStats(currentStats, current, 1);
+        }
+      });
+      currentStats = normalizeCurrentStats(currentStats);
+    } else if (!(manifest.snapshots || []).length) {
+      currentStats = computeCurrentStats(Array.from(currentRecords.values()));
+    }
+    if (currentStats
+      && stableStringify(normalizeCurrentStats(manifest.currentStats)) !== stableStringify(currentStats)) {
+      manifest.currentStats = currentStats;
+      manifestChanged = true;
+    }
+
+    const hotText = jsonText(hot);
+    const warningBytes = manifest.snapshotPolicy
+      ? normalizeSnapshotPolicy(manifest.snapshotPolicy).warningBytes
+      : (manifest.limits && manifest.limits.hotBytes || DEFAULT_SNAPSHOT_POLICY.warningBytes);
+    const hotDescriptor = {
+      path: manifest.hot.path,
+      bytes: utf8Bytes(hotText).length,
+      contentHash: sha256(hotText),
+      mutable: true,
+      oversize: utf8Bytes(hotText).length > warningBytes
+    };
+    if (stableStringify(manifest.hot) !== stableStringify(hotDescriptor)) {
+      manifest.hot = hotDescriptor;
+      manifestChanged = true;
+    }
 
     if (manifestChanged) {
       manifest.updatedAt = now;
@@ -1471,6 +1819,7 @@
   }
 
   return {
+    DEFAULT_SNAPSHOT_POLICY: clone(DEFAULT_SNAPSHOT_POLICY),
     RECORD_TYPES: RECORD_TYPES.slice(),
     REVISION_ENCODING: REVISION_ENCODING,
     SCHEMA_VERSION: SCHEMA_VERSION,
@@ -1479,10 +1828,13 @@
     createFullRevision: createFullRevision,
     dedupeRevisions: dedupeRevisions,
     buildV4Layout: buildV4Layout,
+    buildSnapshotDescriptor: buildSnapshotDescriptor,
+    buildSnapshotEnvelope: buildSnapshotEnvelope,
     collectLayoutRevisions: collectLayoutRevisions,
     collectLayoutSnapshots: collectLayoutSnapshots,
     collectLayoutTrash: collectLayoutTrash,
     commitRepositoryPayload: commitRepositoryPayload,
+    computeCurrentStats: computeCurrentStats,
     exportV3Snapshot: exportV3Snapshot,
     hashState: hashState,
     jsonBytes: jsonBytes,
@@ -1490,14 +1842,17 @@
     layoutFromFiles: layoutFromFiles,
     migrateRecordRevisions: migrateRecordRevisions,
     migrateV3Payload: migrateV3Payload,
+    normalizeCurrentStats: normalizeCurrentStats,
     normalizeIso: normalizeIso,
     normalizeRecurrence: normalizeRecurrence,
     normalizeRecurrenceCompletions: normalizeRecurrenceCompletions,
+    normalizeSnapshotPolicy: normalizeSnapshotPolicy,
     payloadFromV4Hot: payloadFromV4Hot,
     reconcileV3Payload: reconcileV3Payload,
     sha256: sha256,
     stableStringify: stableStringify,
     utf8Bytes: utf8Bytes,
+    updateCurrentStats: updateCurrentStats,
     readJsonUtf8: readJsonUtf8,
     readRepositoryPayload: readRepositoryPayload,
     readV4Layout: readV4Layout,

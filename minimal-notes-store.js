@@ -789,6 +789,203 @@
     };
   }
 
+  function getSnapshotEligibility(record, options) {
+    const opts = options || {};
+    const policy = normalizeSnapshotPolicy(opts.snapshotPolicy);
+    const now = normalizeIso(opts.now, new Date().toISOString());
+    const nowMs = new Date(now).getTime();
+    let canonical = null;
+    try {
+      canonical = canonicalizeRecord(record);
+    } catch (error) {
+      return { eligible: false, reason: "invalid", sortAt: "" };
+    }
+    if (canonical.type === "journal") {
+      const createdAt = normalizeIso(canonical.createdAt);
+      const cutoffMs = nowMs - policy.journalEditWindowHours * 60 * 60 * 1000;
+      return {
+        eligible: Boolean(createdAt) && new Date(createdAt).getTime() <= cutoffMs,
+        reason: "journal-edit-window",
+        sortAt: snapshotSortAt(record)
+      };
+    }
+    const completedTypes = ["todo", "meeting", "deadline"];
+    if (!completedTypes.includes(canonical.type) || !canonical.completed || canonical.recurrence) {
+      return { eligible: false, reason: "active", sortAt: snapshotSortAt(record) };
+    }
+    const headRevisionAt = normalizeIso(record && record.headRevisionAt, canonical.createdAt);
+    const completedCutoffMs = nowMs - policy.completedAgeDays * 24 * 60 * 60 * 1000;
+    return {
+      eligible: Boolean(headRevisionAt) && new Date(headRevisionAt).getTime() <= completedCutoffMs,
+      reason: "completed-age",
+      sortAt: snapshotSortAt(record)
+    };
+  }
+
+  function nextSnapshotSequence(manifest, month) {
+    const pattern = new RegExp("/snapshots/" + month.replace("-", "\\-") + "-(\\d{3})\\.json$");
+    return (manifest.snapshots || []).reduce(function (current, descriptor) {
+      const match = String(descriptor.path || "").match(pattern);
+      return match ? Math.max(current, Number.parseInt(match[1], 10)) : current;
+    }, 0) + 1;
+  }
+
+  function archiveEligibleHotRecords(layout, options) {
+    const opts = options || {};
+    const next = layoutFromFiles(layout.manifestPath, layout.manifest, layout.files);
+    const manifest = next.manifest;
+    const hot = next.hot;
+    manifest.snapshots = Array.isArray(manifest.snapshots) ? manifest.snapshots : [];
+    manifest.recordIndex = manifest.recordIndex && typeof manifest.recordIndex === "object"
+      ? manifest.recordIndex
+      : {};
+    const now = normalizeIso(opts.now, new Date().toISOString());
+    const previousPolicy = normalizeSnapshotPolicy(manifest.snapshotPolicy);
+    const policy = normalizeSnapshotPolicy(Object.assign(
+      {},
+      previousPolicy,
+      opts.snapshotPolicy && typeof opts.snapshotPolicy === "object" ? opts.snapshotPolicy : {}
+    ));
+    const beforeHotText = jsonText(hot);
+    const beforeHotBytes = utf8Bytes(beforeHotText).length;
+    const shouldArchive = opts.force === true
+      || (policy.enabled && beforeHotBytes > policy.triggerBytes);
+    const completeBefore = hasCompleteSnapshotFiles(next);
+    const activeBefore = completeBefore
+      ? collectLayoutSnapshots(next).concat(hot.records || [])
+      : [];
+    const candidates = [];
+    if (shouldArchive) {
+      (hot.records || []).forEach(function (record) {
+        const eligibility = getSnapshotEligibility(record, {
+          now: now,
+          snapshotPolicy: policy
+        });
+        if (eligibility.eligible) {
+          candidates.push({
+            record: record,
+            reason: eligibility.reason,
+            sortAt: eligibility.sortAt
+          });
+        }
+      });
+    }
+    candidates.sort(function (left, right) {
+      return String(left.sortAt || "").localeCompare(String(right.sortAt || ""))
+        || left.record.id.localeCompare(right.record.id);
+    });
+
+    const groups = [];
+    const sequences = {};
+    let current = null;
+    function startGroup(month) {
+      sequences[month] = sequences[month] || nextSnapshotSequence(manifest, month);
+      current = {
+        month: month,
+        sequence: sequences[month],
+        records: []
+      };
+      sequences[month] += 1;
+      groups.push(current);
+    }
+    candidates.forEach(function (candidate) {
+      const month = shardMonth(candidate.sortAt, now.slice(0, 7));
+      if (!current || current.month !== month) {
+        startGroup(month);
+      }
+      const envelope = buildSnapshotEnvelope(
+        manifest.generation,
+        current.records.concat([candidate.record])
+      );
+      if (current.records.length && jsonBytes(envelope) > policy.snapshotBytes) {
+        startGroup(month);
+      }
+      current.records.push(candidate.record);
+    });
+
+    const snapshotPaths = [];
+    const candidateIds = new Set(candidates.map(function (item) { return item.record.id; }));
+    groups.forEach(function (group) {
+      const pathValue = next.basePath + "/snapshots/" + group.month + "-"
+        + String(group.sequence).padStart(3, "0") + ".json";
+      const envelope = buildSnapshotEnvelope(manifest.generation, group.records);
+      const descriptor = buildSnapshotDescriptor(pathValue, envelope, policy.snapshotBytes);
+      next.files[pathValue] = envelope;
+      manifest.snapshots.push(descriptor);
+      snapshotPaths.push(pathValue);
+      group.records.forEach(function (record) {
+        const indexEntry = manifest.recordIndex[record.id] || { revisionShards: [] };
+        indexEntry.location = pathValue;
+        indexEntry.headRevisionId = typeof record.headRevisionId === "string" ? record.headRevisionId : "";
+        indexEntry.headRevisionAt = normalizeIso(record.headRevisionAt, record.createdAt);
+        indexEntry.revisionShards = Array.isArray(indexEntry.revisionShards)
+          ? indexEntry.revisionShards
+          : [];
+        manifest.recordIndex[record.id] = indexEntry;
+      });
+    });
+    manifest.snapshots.sort(function (left, right) {
+      return String(left.firstSortAt || "").localeCompare(String(right.firstSortAt || ""))
+        || left.path.localeCompare(right.path);
+    });
+    if (candidateIds.size) {
+      hot.records = (hot.records || []).filter(function (record) {
+        return !candidateIds.has(record.id);
+      });
+    }
+    manifest.snapshotPolicy = policy;
+    if (completeBefore) {
+      manifest.currentStats = computeCurrentStats(activeBefore);
+    } else if (manifest.currentStats) {
+      manifest.currentStats = normalizeCurrentStats(manifest.currentStats);
+    }
+    const afterHotText = jsonText(hot);
+    const afterHotBytes = utf8Bytes(afterHotText).length;
+    manifest.hot = {
+      path: manifest.hot.path,
+      bytes: afterHotBytes,
+      contentHash: sha256(afterHotText),
+      mutable: true,
+      oversize: afterHotBytes > policy.warningBytes
+    };
+    const policyChanged = stableStringify(previousPolicy) !== stableStringify(policy);
+    const changed = Boolean(candidateIds.size || policyChanged);
+    if (changed) {
+      manifest.updatedAt = now;
+    }
+    next.files[manifest.hot.path] = hot;
+    next.files[next.manifestPath] = manifest;
+    next.hot = hot;
+    return {
+      layout: next,
+      changed: changed,
+      candidates: candidates.map(function (item) {
+        return {
+          id: item.record.id,
+          type: item.record.type,
+          reason: item.reason,
+          sortAt: item.sortAt,
+          headRevisionId: item.record.headRevisionId || "",
+          headRevisionAt: normalizeIso(item.record.headRevisionAt, item.record.createdAt)
+        };
+      }),
+      snapshotPaths: snapshotPaths,
+      snapshotDescriptors: snapshotPaths.map(function (pathValue) {
+        return manifest.snapshots.find(function (descriptor) {
+          return descriptor.path === pathValue;
+        });
+      }),
+      beforeHotBytes: beforeHotBytes,
+      afterHotBytes: afterHotBytes,
+      writes: snapshotPaths.map(function (pathValue) {
+        return { role: "snapshot", path: pathValue, value: next.files[pathValue] };
+      }).concat(changed ? [
+        { role: "manifest", path: next.manifestPath, value: manifest },
+        { role: "hot", path: manifest.hot.path, value: hot }
+      ] : [])
+    };
+  }
+
   function shardMonth(value, fallback) {
     const at = normalizeIso(value);
     return at ? at.slice(0, 7) : fallback;
@@ -1443,9 +1640,9 @@
 
   function reconcileV3Payload(layout, payload, options) {
     const opts = options || {};
-    const next = layoutFromFiles(layout.manifestPath, layout.manifest, layout.files);
-    const manifest = next.manifest;
-    const hot = next.hot;
+    let next = layoutFromFiles(layout.manifestPath, layout.manifest, layout.files);
+    let manifest = next.manifest;
+    let hot = next.hot;
     const now = normalizeIso(opts.now, new Date().toISOString());
     const partialRevisions = [];
     Object.keys(next.files).forEach(function (pathValue) {
@@ -1686,6 +1883,19 @@
       manifestChanged = true;
     }
 
+    let archival = {
+      changed: false,
+      snapshotPaths: []
+    };
+    if (manifest.snapshotPolicy && normalizeSnapshotPolicy(manifest.snapshotPolicy).enabled) {
+      archival = archiveEligibleHotRecords(next, { now: now });
+      if (archival.changed) {
+        next = archival.layout;
+        manifest = next.manifest;
+        hot = next.hot;
+        manifestChanged = true;
+      }
+    }
     if (manifestChanged) {
       manifest.updatedAt = now;
       next.files[next.manifestPath] = manifest;
@@ -1697,6 +1907,9 @@
     trashAppend.paths.forEach(function (pathValue) {
       writes.push({ role: "trash", path: pathValue, value: next.files[pathValue] });
     });
+    archival.snapshotPaths.forEach(function (pathValue) {
+      writes.push({ role: "snapshot", path: pathValue, value: next.files[pathValue] });
+    });
     if (manifestChanged) {
       writes.push({ role: "manifest", path: next.manifestPath, value: manifest });
     }
@@ -1705,6 +1918,7 @@
       layout: next,
       writes: writes,
       newRevisions: uniqueNewRevisions,
+      archivedRecords: archival.candidates || [],
       manifestChanged: manifestChanged,
       payload: payloadFromV4Hot(hot)
     };
@@ -1825,6 +2039,7 @@
     SCHEMA_VERSION: SCHEMA_VERSION,
     canonicalizeRecord: canonicalizeRecord,
     canonicalizeState: canonicalizeState,
+    archiveEligibleHotRecords: archiveEligibleHotRecords,
     createFullRevision: createFullRevision,
     dedupeRevisions: dedupeRevisions,
     buildV4Layout: buildV4Layout,
@@ -1837,6 +2052,7 @@
     computeCurrentStats: computeCurrentStats,
     exportV3Snapshot: exportV3Snapshot,
     hashState: hashState,
+    getSnapshotEligibility: getSnapshotEligibility,
     jsonBytes: jsonBytes,
     jsonText: jsonText,
     layoutFromFiles: layoutFromFiles,

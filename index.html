@@ -6846,7 +6846,8 @@
         return records;
       }
 
-      async function loadSnapshotDescriptor(descriptor) {
+      async function loadSnapshotDescriptor(descriptor, options) {
+        const opts = options || {};
         if (!descriptor || state.remote.temporary) {
           return [];
         }
@@ -6885,7 +6886,9 @@
               await writeSnapshotCache(descriptor, envelope);
             }
             const records = applyLoadedSnapshot(descriptor, envelope);
-            render();
+            if (opts.render !== false) {
+              render();
+            }
             return records;
           } catch (error) {
             console.error(error);
@@ -6929,7 +6932,7 @@
           return false;
         }
         const dateRange = opts.dateRange;
-        if (dateRange) {
+        if (dateRange && filter === "journal") {
           const firstAt = normalizeDateTime(descriptor.firstSortAt || descriptor.firstAt);
           const lastAt = normalizeDateTime(descriptor.lastSortAt || descriptor.lastAt);
           if (firstAt && lastAt
@@ -7042,11 +7045,17 @@
         if (documentBottom > SNAPSHOT_LOAD_DISTANCE_PX) {
           return;
         }
-        state.snapshots.browsePromise = loadSnapshotDescriptor(remaining[0]).catch(function () {
-          return [];
+        const batch = RECORDS_STORE.selectSnapshotBrowseBatch(remaining);
+        state.snapshots.browsePromise = Promise.all(batch.map(function (descriptor) {
+          return loadSnapshotDescriptor(descriptor, { render: false }).catch(function () {
+            return [];
+          });
+        })).then(function () {
+          render();
         }).finally(function () {
           state.snapshots.browsePromise = null;
           renderSnapshotLoadStatus();
+          scheduleSnapshotBrowseLoad();
         });
       }
 

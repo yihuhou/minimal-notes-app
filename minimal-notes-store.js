@@ -744,7 +744,7 @@
   }
 
   function snapshotSortAt(record) {
-    return normalizeIso(record && record.headRevisionAt, normalizeIso(record && record.createdAt));
+    return normalizeIso(record && record.createdAt, normalizeIso(record && record.headRevisionAt));
   }
 
   function buildSnapshotEnvelope(generation, records) {
@@ -787,6 +787,42 @@
       completedCount: completedCount,
       oversize: bytes > (Number(maxBytes) || DEFAULT_SNAPSHOT_POLICY.snapshotBytes)
     };
+  }
+
+  function snapshotDescriptorRange(descriptor) {
+    const firstAt = normalizeIso(descriptor && (descriptor.firstSortAt || descriptor.firstAt));
+    const lastAt = normalizeIso(descriptor && (descriptor.lastSortAt || descriptor.lastAt));
+    if (!firstAt || !lastAt) {
+      return null;
+    }
+    const firstTime = new Date(firstAt).getTime();
+    const lastTime = new Date(lastAt).getTime();
+    return {
+      firstTime: Math.min(firstTime, lastTime),
+      lastTime: Math.max(firstTime, lastTime)
+    };
+  }
+
+  function selectSnapshotBrowseBatch(descriptors) {
+    const remaining = Array.isArray(descriptors) ? descriptors : [];
+    if (!remaining.length) {
+      return [];
+    }
+    const batch = [remaining[0]];
+    const firstRange = snapshotDescriptorRange(remaining[0]);
+    if (!firstRange) {
+      return batch;
+    }
+    let oldestLoadedTime = firstRange.firstTime;
+    for (let index = 1; index < remaining.length; index += 1) {
+      const range = snapshotDescriptorRange(remaining[index]);
+      if (!range || range.lastTime < oldestLoadedTime) {
+        break;
+      }
+      batch.push(remaining[index]);
+      oldestLoadedTime = Math.min(oldestLoadedTime, range.firstTime);
+    }
+    return batch;
   }
 
   function getSnapshotEligibility(record, options) {
@@ -983,6 +1019,114 @@
         { role: "manifest", path: next.manifestPath, value: manifest },
         { role: "hot", path: manifest.hot.path, value: hot }
       ] : [])
+    };
+  }
+
+  function repackSnapshots(layout, options) {
+    const opts = options || {};
+    const next = layoutFromFiles(layout.manifestPath, layout.manifest, layout.files);
+    const manifest = next.manifest;
+    const hot = next.hot;
+    const now = normalizeIso(opts.now, new Date().toISOString());
+    const policy = normalizeSnapshotPolicy(Object.assign(
+      {},
+      manifest.snapshotPolicy,
+      opts.snapshotPolicy && typeof opts.snapshotPolicy === "object" ? opts.snapshotPolicy : {}
+    ));
+    const replacedSnapshotPaths = (manifest.snapshots || []).map(function (descriptor) {
+      return descriptor.path;
+    });
+    const records = collectLayoutSnapshots(next).sort(function (left, right) {
+      return String(snapshotSortAt(left) || "").localeCompare(String(snapshotSortAt(right) || ""))
+        || left.id.localeCompare(right.id);
+    });
+    replacedSnapshotPaths.forEach(function (pathValue) {
+      delete next.files[pathValue];
+    });
+    const groups = [];
+    const sequences = {};
+    let current = null;
+
+    function startGroup(month) {
+      sequences[month] = sequences[month] || nextSnapshotSequence(manifest, month);
+      current = {
+        month: month,
+        sequence: sequences[month],
+        records: []
+      };
+      sequences[month] += 1;
+      groups.push(current);
+    }
+
+    records.forEach(function (record) {
+      const sortAt = snapshotSortAt(record);
+      const month = shardMonth(sortAt, now.slice(0, 7));
+      if (!current || current.month !== month) {
+        startGroup(month);
+      }
+      const envelope = buildSnapshotEnvelope(
+        manifest.generation,
+        current.records.concat([record])
+      );
+      if (current.records.length && jsonBytes(envelope) > policy.snapshotBytes) {
+        startGroup(month);
+      }
+      current.records.push(record);
+    });
+
+    manifest.snapshots = [];
+    const snapshotPaths = [];
+    groups.forEach(function (group) {
+      const pathValue = next.basePath + "/snapshots/" + group.month + "-"
+        + String(group.sequence).padStart(3, "0") + ".json";
+      const envelope = buildSnapshotEnvelope(manifest.generation, group.records);
+      const descriptor = buildSnapshotDescriptor(pathValue, envelope, policy.snapshotBytes);
+      next.files[pathValue] = envelope;
+      manifest.snapshots.push(descriptor);
+      snapshotPaths.push(pathValue);
+      group.records.forEach(function (record) {
+        const indexEntry = manifest.recordIndex[record.id] || { revisionShards: [] };
+        indexEntry.location = pathValue;
+        indexEntry.headRevisionId = typeof record.headRevisionId === "string" ? record.headRevisionId : "";
+        indexEntry.headRevisionAt = normalizeIso(record.headRevisionAt, record.createdAt);
+        indexEntry.revisionShards = Array.isArray(indexEntry.revisionShards)
+          ? indexEntry.revisionShards
+          : [];
+        manifest.recordIndex[record.id] = indexEntry;
+      });
+    });
+    manifest.snapshots.sort(function (left, right) {
+      return String(left.firstSortAt || "").localeCompare(String(right.firstSortAt || ""))
+        || left.path.localeCompare(right.path);
+    });
+    manifest.snapshotPolicy = policy;
+    manifest.currentStats = computeCurrentStats(records.concat(hot.records || []));
+    manifest.updatedAt = now;
+    next.files[next.manifestPath] = manifest;
+    next.hot = hot;
+    return {
+      layout: next,
+      changed: snapshotPaths.length > 0,
+      candidates: records.map(function (record) {
+        return {
+          id: record.id,
+          type: record.type,
+          reason: "snapshot-repack",
+          sortAt: snapshotSortAt(record),
+          headRevisionId: record.headRevisionId || "",
+          headRevisionAt: normalizeIso(record.headRevisionAt, record.createdAt)
+        };
+      }),
+      replacedSnapshotPaths: replacedSnapshotPaths,
+      snapshotPaths: snapshotPaths,
+      snapshotDescriptors: manifest.snapshots.slice(),
+      beforeHotBytes: jsonBytes(hot),
+      afterHotBytes: jsonBytes(hot),
+      writes: snapshotPaths.map(function (pathValue) {
+        return { role: "snapshot", path: pathValue, value: next.files[pathValue] };
+      }).concat([
+        { role: "manifest", path: next.manifestPath, value: manifest }
+      ])
     };
   }
 
@@ -2064,7 +2208,9 @@
     normalizeRecurrenceCompletions: normalizeRecurrenceCompletions,
     normalizeSnapshotPolicy: normalizeSnapshotPolicy,
     payloadFromV4Hot: payloadFromV4Hot,
+    repackSnapshots: repackSnapshots,
     reconcileV3Payload: reconcileV3Payload,
+    selectSnapshotBrowseBatch: selectSnapshotBrowseBatch,
     sha256: sha256,
     stableStringify: stableStringify,
     utf8Bytes: utf8Bytes,

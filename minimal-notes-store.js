@@ -789,42 +789,6 @@
     };
   }
 
-  function snapshotDescriptorRange(descriptor) {
-    const firstAt = normalizeIso(descriptor && (descriptor.firstSortAt || descriptor.firstAt));
-    const lastAt = normalizeIso(descriptor && (descriptor.lastSortAt || descriptor.lastAt));
-    if (!firstAt || !lastAt) {
-      return null;
-    }
-    const firstTime = new Date(firstAt).getTime();
-    const lastTime = new Date(lastAt).getTime();
-    return {
-      firstTime: Math.min(firstTime, lastTime),
-      lastTime: Math.max(firstTime, lastTime)
-    };
-  }
-
-  function selectSnapshotBrowseBatch(descriptors) {
-    const remaining = Array.isArray(descriptors) ? descriptors : [];
-    if (!remaining.length) {
-      return [];
-    }
-    const batch = [remaining[0]];
-    const firstRange = snapshotDescriptorRange(remaining[0]);
-    if (!firstRange) {
-      return batch;
-    }
-    let oldestLoadedTime = firstRange.firstTime;
-    for (let index = 1; index < remaining.length; index += 1) {
-      const range = snapshotDescriptorRange(remaining[index]);
-      if (!range || range.lastTime < oldestLoadedTime) {
-        break;
-      }
-      batch.push(remaining[index]);
-      oldestLoadedTime = Math.min(oldestLoadedTime, range.firstTime);
-    }
-    return batch;
-  }
-
   function getSnapshotEligibility(record, options) {
     const opts = options || {};
     const policy = normalizeSnapshotPolicy(opts.snapshotPolicy);
@@ -2210,7 +2174,6 @@
     payloadFromV4Hot: payloadFromV4Hot,
     repackSnapshots: repackSnapshots,
     reconcileV3Payload: reconcileV3Payload,
-    selectSnapshotBrowseBatch: selectSnapshotBrowseBatch,
     sha256: sha256,
     stableStringify: stableStringify,
     utf8Bytes: utf8Bytes,

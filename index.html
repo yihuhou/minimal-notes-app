@@ -6846,8 +6846,7 @@
         return records;
       }
 
-      async function loadSnapshotDescriptor(descriptor, options) {
-        const opts = options || {};
+      async function loadSnapshotDescriptor(descriptor) {
         if (!descriptor || state.remote.temporary) {
           return [];
         }
@@ -6886,9 +6885,7 @@
               await writeSnapshotCache(descriptor, envelope);
             }
             const records = applyLoadedSnapshot(descriptor, envelope);
-            if (opts.render !== false) {
-              render();
-            }
+            render();
             return records;
           } catch (error) {
             console.error(error);
@@ -7045,13 +7042,8 @@
         if (documentBottom > SNAPSHOT_LOAD_DISTANCE_PX) {
           return;
         }
-        const batch = RECORDS_STORE.selectSnapshotBrowseBatch(remaining);
-        state.snapshots.browsePromise = Promise.all(batch.map(function (descriptor) {
-          return loadSnapshotDescriptor(descriptor, { render: false }).catch(function () {
-            return [];
-          });
-        })).then(function () {
-          render();
+        state.snapshots.browsePromise = loadSnapshotDescriptor(remaining[0]).catch(function () {
+          return [];
         }).finally(function () {
           state.snapshots.browsePromise = null;
           renderSnapshotLoadStatus();

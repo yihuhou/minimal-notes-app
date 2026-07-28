@@ -743,18 +743,79 @@
     return normalizeCurrentStats(stats);
   }
 
+  function snapshotBrowseKind(record) {
+    const type = normalizeRecordType(record && record.type);
+    if (type === "journal") {
+      return "journal";
+    }
+    if (["todo", "meeting", "deadline"].includes(type)
+      && record && record.completed && !record.recurrence) {
+      return "completed";
+    }
+    return "";
+  }
+
+  function latestCompletedAtByRecordId(revisions) {
+    const latestByRecordId = new Map();
+    (Array.isArray(revisions) ? revisions : []).forEach(function (revision) {
+      if (!revision || revision.action !== "completed" || !revision.recordId) {
+        return;
+      }
+      const at = normalizeIso(revision.at);
+      const previous = latestByRecordId.get(revision.recordId);
+      if (at && (!previous || new Date(at).getTime() > new Date(previous).getTime())) {
+        latestByRecordId.set(revision.recordId, at);
+      }
+    });
+    return latestByRecordId;
+  }
+
+  function snapshotRecordWithBrowseMetadata(record, completedAtByRecordId) {
+    const result = clone(record);
+    if (snapshotBrowseKind(result) !== "completed") {
+      return result;
+    }
+    const revisionCompletedAt = completedAtByRecordId && completedAtByRecordId.get(result.id);
+    result.completedAt = latestIso([
+      result.completedAt,
+      revisionCompletedAt
+    ], normalizeIso(result.headRevisionAt,
+      normalizeIso(result.updatedAt, result.createdAt)));
+    return result;
+  }
+
   function snapshotSortAt(record) {
+    if (snapshotBrowseKind(record) === "completed") {
+      return normalizeIso(record && record.completedAt,
+        normalizeIso(record && record.headRevisionAt,
+          normalizeIso(record && record.updatedAt, normalizeIso(record && record.createdAt))));
+    }
     return normalizeIso(record && record.createdAt, normalizeIso(record && record.headRevisionAt));
   }
 
-  function buildSnapshotEnvelope(generation, records) {
-    return {
+  function inferSnapshotBrowseKind(records) {
+    const kinds = Array.from(new Set((Array.isArray(records) ? records : [])
+      .map(snapshotBrowseKind)
+      .filter(Boolean)));
+    return kinds.length === 1 ? kinds[0] : (kinds.length ? "mixed" : "");
+  }
+
+  function buildSnapshotEnvelope(generation, records, browseKind) {
+    const items = Array.isArray(records) ? records : [];
+    const envelope = {
       version: SCHEMA_VERSION,
       generation: generation,
       kind: "snapshots",
       open: false,
-      records: clone(Array.isArray(records) ? records : [])
+      records: clone(items)
     };
+    const normalizedBrowseKind = ["journal", "completed"].includes(browseKind)
+      ? browseKind
+      : inferSnapshotBrowseKind(items);
+    if (normalizedBrowseKind) {
+      envelope.browseKind = normalizedBrowseKind;
+    }
+    return envelope;
   }
 
   function buildSnapshotDescriptor(pathValue, envelope, maxBytes) {
@@ -776,6 +837,9 @@
     const bytes = utf8Bytes(text).length;
     return {
       path: pathValue,
+      browseKind: ["journal", "completed"].includes(envelope.browseKind)
+        ? envelope.browseKind
+        : inferSnapshotBrowseKind(envelope.records),
       open: false,
       bytes: bytes,
       contentHash: sha256(text),
@@ -813,17 +877,21 @@
     if (!completedTypes.includes(canonical.type) || !canonical.completed || canonical.recurrence) {
       return { eligible: false, reason: "active", sortAt: snapshotSortAt(record) };
     }
-    const headRevisionAt = normalizeIso(record && record.headRevisionAt, canonical.createdAt);
+    const completedAt = snapshotSortAt(record);
     const completedCutoffMs = nowMs - policy.completedAgeDays * 24 * 60 * 60 * 1000;
     return {
-      eligible: Boolean(headRevisionAt) && new Date(headRevisionAt).getTime() <= completedCutoffMs,
+      eligible: Boolean(completedAt) && new Date(completedAt).getTime() <= completedCutoffMs,
       reason: "completed-age",
-      sortAt: snapshotSortAt(record)
+      sortAt: completedAt
     };
   }
 
-  function nextSnapshotSequence(manifest, month) {
-    const pattern = new RegExp("/snapshots/" + month.replace("-", "\\-") + "-(\\d{3})\\.json$");
+  function nextSnapshotSequence(manifest, month, browseKind) {
+    const kindPath = ["journal", "completed"].includes(browseKind)
+      ? browseKind + "/"
+      : "";
+    const pattern = new RegExp("/snapshots/" + kindPath
+      + month.replace("-", "\\-") + "-(\\d{3})\\.json$");
     return (manifest.snapshots || []).reduce(function (current, descriptor) {
       const match = String(descriptor.path || "").match(pattern);
       return match ? Math.max(current, Number.parseInt(match[1], 10)) : current;
@@ -854,16 +922,19 @@
     const activeBefore = completeBefore
       ? collectLayoutSnapshots(next).concat(hot.records || [])
       : [];
+    const completedAtByRecordId = latestCompletedAtByRecordId(collectLayoutRevisions(next));
     const candidates = [];
     if (shouldArchive) {
       (hot.records || []).forEach(function (record) {
-        const eligibility = getSnapshotEligibility(record, {
+        const snapshotRecord = snapshotRecordWithBrowseMetadata(record, completedAtByRecordId);
+        const eligibility = getSnapshotEligibility(snapshotRecord, {
           now: now,
           snapshotPolicy: policy
         });
         if (eligibility.eligible) {
           candidates.push({
-            record: record,
+            record: snapshotRecord,
+            browseKind: snapshotBrowseKind(snapshotRecord),
             reason: eligibility.reason,
             sortAt: eligibility.sortAt
           });
@@ -871,34 +942,39 @@
       });
     }
     candidates.sort(function (left, right) {
-      return String(left.sortAt || "").localeCompare(String(right.sortAt || ""))
+      return String(left.browseKind || "").localeCompare(String(right.browseKind || ""))
+        || String(left.sortAt || "").localeCompare(String(right.sortAt || ""))
         || left.record.id.localeCompare(right.record.id);
     });
 
     const groups = [];
     const sequences = {};
     let current = null;
-    function startGroup(month) {
-      sequences[month] = sequences[month] || nextSnapshotSequence(manifest, month);
+    function startGroup(browseKind, month) {
+      const sequenceKey = browseKind + ":" + month;
+      sequences[sequenceKey] = sequences[sequenceKey]
+        || nextSnapshotSequence(manifest, month, browseKind);
       current = {
+        browseKind: browseKind,
         month: month,
-        sequence: sequences[month],
+        sequence: sequences[sequenceKey],
         records: []
       };
-      sequences[month] += 1;
+      sequences[sequenceKey] += 1;
       groups.push(current);
     }
     candidates.forEach(function (candidate) {
       const month = shardMonth(candidate.sortAt, now.slice(0, 7));
-      if (!current || current.month !== month) {
-        startGroup(month);
+      if (!current || current.browseKind !== candidate.browseKind || current.month !== month) {
+        startGroup(candidate.browseKind, month);
       }
       const envelope = buildSnapshotEnvelope(
         manifest.generation,
-        current.records.concat([candidate.record])
+        current.records.concat([candidate.record]),
+        candidate.browseKind
       );
       if (current.records.length && jsonBytes(envelope) > policy.snapshotBytes) {
-        startGroup(month);
+        startGroup(candidate.browseKind, month);
       }
       current.records.push(candidate.record);
     });
@@ -906,9 +982,9 @@
     const snapshotPaths = [];
     const candidateIds = new Set(candidates.map(function (item) { return item.record.id; }));
     groups.forEach(function (group) {
-      const pathValue = next.basePath + "/snapshots/" + group.month + "-"
+      const pathValue = next.basePath + "/snapshots/" + group.browseKind + "/" + group.month + "-"
         + String(group.sequence).padStart(3, "0") + ".json";
-      const envelope = buildSnapshotEnvelope(manifest.generation, group.records);
+      const envelope = buildSnapshotEnvelope(manifest.generation, group.records, group.browseKind);
       const descriptor = buildSnapshotDescriptor(pathValue, envelope, policy.snapshotBytes);
       next.files[pathValue] = envelope;
       manifest.snapshots.push(descriptor);
@@ -925,7 +1001,8 @@
       });
     });
     manifest.snapshots.sort(function (left, right) {
-      return String(left.firstSortAt || "").localeCompare(String(right.firstSortAt || ""))
+      return String(left.browseKind || "").localeCompare(String(right.browseKind || ""))
+        || String(left.firstSortAt || "").localeCompare(String(right.firstSortAt || ""))
         || left.path.localeCompare(right.path);
     });
     if (candidateIds.size) {
@@ -965,6 +1042,7 @@
           type: item.record.type,
           reason: item.reason,
           sortAt: item.sortAt,
+          completedAt: normalizeIso(item.record.completedAt),
           headRevisionId: item.record.headRevisionId || "",
           headRevisionAt: normalizeIso(item.record.headRevisionAt, item.record.createdAt)
         };
@@ -1000,8 +1078,12 @@
     const replacedSnapshotPaths = (manifest.snapshots || []).map(function (descriptor) {
       return descriptor.path;
     });
-    const records = collectLayoutSnapshots(next).sort(function (left, right) {
-      return String(snapshotSortAt(left) || "").localeCompare(String(snapshotSortAt(right) || ""))
+    const completedAtByRecordId = latestCompletedAtByRecordId(collectLayoutRevisions(next));
+    const records = collectLayoutSnapshots(next).map(function (record) {
+      return snapshotRecordWithBrowseMetadata(record, completedAtByRecordId);
+    }).sort(function (left, right) {
+      return String(snapshotBrowseKind(left) || "").localeCompare(String(snapshotBrowseKind(right) || ""))
+        || String(snapshotSortAt(left) || "").localeCompare(String(snapshotSortAt(right) || ""))
         || left.id.localeCompare(right.id);
     });
     replacedSnapshotPaths.forEach(function (pathValue) {
@@ -1011,29 +1093,34 @@
     const sequences = {};
     let current = null;
 
-    function startGroup(month) {
-      sequences[month] = sequences[month] || nextSnapshotSequence(manifest, month);
+    function startGroup(browseKind, month) {
+      const sequenceKey = browseKind + ":" + month;
+      sequences[sequenceKey] = sequences[sequenceKey]
+        || nextSnapshotSequence(manifest, month, browseKind);
       current = {
+        browseKind: browseKind,
         month: month,
-        sequence: sequences[month],
+        sequence: sequences[sequenceKey],
         records: []
       };
-      sequences[month] += 1;
+      sequences[sequenceKey] += 1;
       groups.push(current);
     }
 
     records.forEach(function (record) {
+      const browseKind = snapshotBrowseKind(record);
       const sortAt = snapshotSortAt(record);
       const month = shardMonth(sortAt, now.slice(0, 7));
-      if (!current || current.month !== month) {
-        startGroup(month);
+      if (!current || current.browseKind !== browseKind || current.month !== month) {
+        startGroup(browseKind, month);
       }
       const envelope = buildSnapshotEnvelope(
         manifest.generation,
-        current.records.concat([record])
+        current.records.concat([record]),
+        browseKind
       );
       if (current.records.length && jsonBytes(envelope) > policy.snapshotBytes) {
-        startGroup(month);
+        startGroup(browseKind, month);
       }
       current.records.push(record);
     });
@@ -1041,9 +1128,9 @@
     manifest.snapshots = [];
     const snapshotPaths = [];
     groups.forEach(function (group) {
-      const pathValue = next.basePath + "/snapshots/" + group.month + "-"
+      const pathValue = next.basePath + "/snapshots/" + group.browseKind + "/" + group.month + "-"
         + String(group.sequence).padStart(3, "0") + ".json";
-      const envelope = buildSnapshotEnvelope(manifest.generation, group.records);
+      const envelope = buildSnapshotEnvelope(manifest.generation, group.records, group.browseKind);
       const descriptor = buildSnapshotDescriptor(pathValue, envelope, policy.snapshotBytes);
       next.files[pathValue] = envelope;
       manifest.snapshots.push(descriptor);
@@ -1060,7 +1147,8 @@
       });
     });
     manifest.snapshots.sort(function (left, right) {
-      return String(left.firstSortAt || "").localeCompare(String(right.firstSortAt || ""))
+      return String(left.browseKind || "").localeCompare(String(right.browseKind || ""))
+        || String(left.firstSortAt || "").localeCompare(String(right.firstSortAt || ""))
         || left.path.localeCompare(right.path);
     });
     manifest.snapshotPolicy = policy;
@@ -1077,6 +1165,7 @@
           type: record.type,
           reason: "snapshot-repack",
           sortAt: snapshotSortAt(record),
+          completedAt: normalizeIso(record.completedAt),
           headRevisionId: record.headRevisionId || "",
           headRevisionAt: normalizeIso(record.headRevisionAt, record.createdAt)
         };
@@ -1425,6 +1514,24 @@
       if (file.kind === "snapshots" && Array.isArray(file.records)) {
         if (file.open || file.generation !== layout.manifest.generation || expected.mutable) {
           errors.push("Snapshot envelope must be immutable and match the manifest generation: " + path + ".");
+        }
+        const descriptorBrowseKind = ["journal", "completed"].includes(expected.browseKind)
+          ? expected.browseKind
+          : "";
+        if (descriptorBrowseKind) {
+          if (file.browseKind !== descriptorBrowseKind) {
+            errors.push("Snapshot browse kind differs from the manifest: " + path + ".");
+          }
+          if (file.records.some(function (record) {
+            return snapshotBrowseKind(record) !== descriptorBrowseKind;
+          })) {
+            errors.push("Snapshot contains a record from another browse kind: " + path + ".");
+          }
+          const sortDates = file.records.map(snapshotSortAt).filter(Boolean).sort();
+          if ((expected.firstSortAt || "") !== (sortDates[0] || "")
+            || (expected.lastSortAt || "") !== (sortDates[sortDates.length - 1] || "")) {
+            errors.push("Snapshot sort range differs from its browse records: " + path + ".");
+          }
         }
       }
     });

@@ -6819,6 +6819,15 @@
           && new TextEncoder().encode(text).length !== Number(descriptor.bytes)) {
           throw new Error("snapshot 缓存 bytes 不一致");
         }
+        const descriptorBrowseKind = ["journal", "completed"].includes(descriptor.browseKind)
+          ? descriptor.browseKind
+          : "";
+        const envelopeBrowseKind = ["journal", "completed"].includes(envelope.browseKind)
+          ? envelope.browseKind
+          : "";
+        if (descriptorBrowseKind && envelopeBrowseKind !== descriptorBrowseKind) {
+          throw new Error("snapshot 浏览类别与 manifest 不一致");
+        }
         return envelope;
       }
 
@@ -6910,6 +6919,13 @@
         const typeCounts = descriptor && descriptor.typeCounts || {};
         const hasTypeCounts = Object.keys(typeCounts).length > 0;
         const filter = opts.filter || state.filter;
+        const browseKind = descriptor && descriptor.browseKind;
+        if (!opts.includeAllTypes && filter === "journal" && browseKind === "completed") {
+          return false;
+        }
+        if (!opts.includeAllTypes && filter === "completed" && browseKind === "journal") {
+          return false;
+        }
         if (!opts.includeAllTypes && hasTypeCounts && filter === "journal"
           && Number(typeCounts.journal || 0) <= 0) {
           return false;
@@ -12033,6 +12049,10 @@
           return new Date(completedAt).getTime();
         }
 
+        if (isValidDate(record && record.completedAt)) {
+          return new Date(record.completedAt).getTime();
+        }
+
         if (isValidDate(record && record.updatedAt)) {
           return new Date(record.updatedAt).getTime();
         }
@@ -14717,10 +14737,17 @@
         const entries = [];
         const createdAt = isValidDate(fallbackRecord.createdAt) ? new Date(fallbackRecord.createdAt).toISOString() : new Date().toISOString();
         const updatedAt = isValidDate(fallbackRecord.updatedAt) ? new Date(fallbackRecord.updatedAt).toISOString() : createdAt;
+        const completedAt = isValidDate(fallbackRecord.completedAt)
+          ? new Date(fallbackRecord.completedAt).toISOString()
+          : updatedAt;
 
         entries.push(createHistorySnapshot("created", createdAt, fallbackRecord));
         if (Boolean(fallbackRecord.completed)) {
-          entries.push(createHistorySnapshot("completed", updatedAt, fallbackRecord));
+          entries.push(createHistorySnapshot("completed", completedAt, fallbackRecord));
+          if (new Date(updatedAt).getTime() > new Date(completedAt).getTime()
+            && hasVisibleTimeDifference(completedAt, updatedAt)) {
+            entries.push(createHistorySnapshot("edited", updatedAt, fallbackRecord));
+          }
         } else if (Boolean(fallbackRecord.prepared)) {
           entries.push(createHistorySnapshot("prepared", updatedAt, fallbackRecord));
         } else if (hasVisibleTimeDifference(createdAt, updatedAt)) {
@@ -14804,7 +14831,11 @@
           type = "deadline";
         }
         const createdAt = isValidDate(record.createdAt) ? new Date(record.createdAt).toISOString() : new Date().toISOString();
-        const updatedAt = isValidDate(record.updatedAt) ? new Date(record.updatedAt).toISOString() : createdAt;
+        const headRevisionAt = normalizeDateTime(record.headRevisionAt);
+        const completedAt = normalizeDateTime(record.completedAt);
+        const updatedAt = isValidDate(record.updatedAt)
+          ? new Date(record.updatedAt).toISOString()
+          : (headRevisionAt || createdAt);
         const importedRecurrence = isPassiveRecord({ type: type }) ? null : normalizeRecurrenceInfo(record.recurrence);
         const inferredRecurrence = isPassiveRecord({ type: type }) ? null : extractRecurrenceInfo(text);
         const recurrence = importedRecurrence || inferredRecurrence;
@@ -14845,6 +14876,7 @@
             recurrence: recurrence,
             prepared: type === "meeting" ? Boolean(record.prepared) && !Boolean(record.completed) : false,
             completed: type === "journal" ? false : Boolean(record.completed),
+            completedAt: completedAt,
             updatedAt: updatedAt
           }),
           recurrenceCompletions: normalizeRecurrenceCompletionEntries(record.recurrenceCompletions),
@@ -14857,6 +14889,12 @@
         }
         if (typeof record.headRevisionId === "string" && record.headRevisionId) {
           normalizedRecord.headRevisionId = record.headRevisionId;
+        }
+        if (headRevisionAt) {
+          normalizedRecord.headRevisionAt = headRevisionAt;
+        }
+        if (completedAt && normalizedRecord.completed) {
+          normalizedRecord.completedAt = completedAt;
         }
         reconcileNonRecurringCompletionState(normalizedRecord);
         return normalizedRecord;

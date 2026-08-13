@@ -2353,7 +2353,6 @@
       if (!tombstone) {
         return;
       }
-      touchedRecordIds.add(tombstone.recordId);
       const existingTombstone = currentTombstones.get(tombstone.recordId);
       if (existingTombstone && new Date(existingTombstone.deletedAt).getTime() > new Date(tombstone.deletedAt).getTime()) {
         return;
@@ -2361,9 +2360,11 @@
       const existingRecord = currentRecords.get(tombstone.recordId) || baseRecords.get(tombstone.recordId);
       if (existingTombstone
         && !existingRecord
-        && new Date(existingTombstone.deletedAt).getTime() === new Date(tombstone.deletedAt).getTime()) {
+        && new Date(existingTombstone.deletedAt).getTime() === new Date(tombstone.deletedAt).getTime()
+        && Boolean(existingTombstone.purged) === Boolean(tombstone.purged)) {
         return;
       }
+      touchedRecordIds.add(tombstone.recordId);
       const archivedSource = !entry.purged && entry.record ? entry.record : existingRecord;
       if (!entry.purged && archivedSource) {
         const canonical = canonicalizeRecord(archivedSource);

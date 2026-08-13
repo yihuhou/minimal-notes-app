@@ -2712,6 +2712,7 @@
       const SYNC_DB_NAME = "minimal-notes-sync-v1";
       const SYNC_DB_STORE = "handles";
       const SNAPSHOT_DB_STORE = "snapshot-cache";
+      const RECORD_INDEX_DB_STORE = "record-index-cache";
       const SYNC_FILE_HANDLE_KEY = "records";
       const DEFAULT_SYNC_FILE_NAME = "minimal-notes-records.json";
       const SYNC_FILE_PICKER_ID = "minimal-notes-records-sync-file";
@@ -2968,11 +2969,19 @@
           panelOpen: false,
           error: ""
         },
+        recordIndexes: {
+          entriesById: {},
+          loadedPaths: {},
+          recordIdsByPath: {},
+          loadingPaths: {},
+          failedPaths: {}
+        },
         snapshots: {
           descriptors: [],
           loadedPaths: {},
           recordIdsByPath: {},
           baseRecordsById: {},
+          basePathById: {},
           loadingPaths: {},
           failedPaths: {},
           browsePromise: null,
@@ -5872,7 +5881,7 @@
 
       async function openSyncDb() {
         return new Promise(function (resolve, reject) {
-          const request = window.indexedDB.open(SYNC_DB_NAME, 2);
+          const request = window.indexedDB.open(SYNC_DB_NAME, 3);
 
           request.onupgradeneeded = function () {
             const db = request.result;
@@ -5881,6 +5890,9 @@
             }
             if (!db.objectStoreNames.contains(SNAPSHOT_DB_STORE)) {
               db.createObjectStore(SNAPSHOT_DB_STORE);
+            }
+            if (!db.objectStoreNames.contains(RECORD_INDEX_DB_STORE)) {
+              db.createObjectStore(RECORD_INDEX_DB_STORE);
             }
           };
 
@@ -5948,8 +5960,9 @@
         });
       }
 
-      function getSnapshotCacheKey(descriptor) {
-        const generation = state.remote.manifest && state.remote.manifest.generation || "";
+      function getSnapshotCacheKey(descriptor, generationValue) {
+        const generation = generationValue
+          || state.remote.manifest && state.remote.manifest.generation || "";
         return [
           state.remote.repo,
           state.remote.branch,
@@ -6040,6 +6053,221 @@
             resolve();
           };
         });
+      }
+
+      async function readRecordIndexCache(manifest, descriptor) {
+        if (!window.indexedDB || state.remote.temporary || !descriptor) {
+          return null;
+        }
+        const db = await openSyncDb();
+        const key = getSnapshotCacheKey(descriptor, manifest && manifest.generation);
+        return new Promise(function (resolve) {
+          const transaction = db.transaction(RECORD_INDEX_DB_STORE, "readonly");
+          const request = transaction.objectStore(RECORD_INDEX_DB_STORE).get(key);
+          let value = null;
+          request.onsuccess = function () {
+            value = request.result || null;
+          };
+          transaction.oncomplete = function () {
+            db.close();
+            resolve(value);
+          };
+          transaction.onerror = function () {
+            db.close();
+            resolve(null);
+          };
+        });
+      }
+
+      async function writeRecordIndexCache(manifest, descriptor, envelope) {
+        if (!window.indexedDB || state.remote.temporary || !descriptor || !envelope) {
+          return;
+        }
+        const db = await openSyncDb();
+        const key = getSnapshotCacheKey(descriptor, manifest && manifest.generation);
+        const entry = {
+          key: key,
+          repo: state.remote.repo,
+          branch: state.remote.branch,
+          generation: manifest && manifest.generation || "",
+          path: descriptor.path,
+          contentHash: descriptor.contentHash,
+          bytes: Number(descriptor.bytes) || RECORDS_STORE.jsonBytes(envelope),
+          accessedAt: Date.now(),
+          envelope: envelope
+        };
+        await new Promise(function (resolve) {
+          const transaction = db.transaction(RECORD_INDEX_DB_STORE, "readwrite");
+          const store = transaction.objectStore(RECORD_INDEX_DB_STORE);
+          const allRequest = store.getAll();
+          allRequest.onsuccess = function () {
+            const entries = Array.isArray(allRequest.result) ? allRequest.result : [];
+            entries.forEach(function (cached) {
+              if (cached && cached.key !== key
+                && cached.repo === entry.repo
+                && cached.branch === entry.branch
+                && cached.path === entry.path) {
+                store.delete(cached.key);
+              }
+            });
+            store.put(entry, key);
+          };
+          transaction.oncomplete = function () {
+            db.close();
+            resolve();
+          };
+          transaction.onerror = function () {
+            db.close();
+            resolve();
+          };
+        });
+      }
+
+      function resetRecordIndexState() {
+        state.recordIndexes.entriesById = {};
+        state.recordIndexes.loadedPaths = {};
+        state.recordIndexes.recordIdsByPath = {};
+        state.recordIndexes.loadingPaths = {};
+        state.recordIndexes.failedPaths = {};
+      }
+
+      function removeLoadedRecordIndexPath(pathValue) {
+        (state.recordIndexes.recordIdsByPath[pathValue] || []).forEach(function (recordId) {
+          delete state.recordIndexes.entriesById[recordId];
+        });
+        delete state.recordIndexes.loadedPaths[pathValue];
+        delete state.recordIndexes.recordIdsByPath[pathValue];
+        delete state.recordIndexes.loadingPaths[pathValue];
+        delete state.recordIndexes.failedPaths[pathValue];
+      }
+
+      function applyRecordIndexManifest(manifest) {
+        if (manifest && manifest.recordIndex && typeof manifest.recordIndex === "object") {
+          resetRecordIndexState();
+          state.recordIndexes.entriesById = JSON.parse(JSON.stringify(manifest.recordIndex));
+          return;
+        }
+        const layout = RECORDS_STORE.normalizeRecordIndexLayout(manifest && manifest.recordIndexLayout);
+        if (!layout) {
+          resetRecordIndexState();
+          return;
+        }
+        const descriptorsByPath = new Map(layout.shards.map(function (descriptor) {
+          return [descriptor.path, descriptor];
+        }));
+        Object.keys(state.recordIndexes.loadedPaths).forEach(function (pathValue) {
+          const descriptor = descriptorsByPath.get(pathValue);
+          const cacheIdentity = String(manifest.generation || "") + "\n" + String(descriptor && descriptor.contentHash || "");
+          if (!descriptor || state.recordIndexes.loadedPaths[pathValue] !== cacheIdentity) {
+            removeLoadedRecordIndexPath(pathValue);
+          }
+        });
+      }
+
+      function getRecordIndexEntry(recordId) {
+        const manifest = state.remote.manifest;
+        if (manifest && manifest.recordIndex && manifest.recordIndex[recordId]) {
+          return manifest.recordIndex[recordId];
+        }
+        return state.recordIndexes.entriesById[recordId] || null;
+      }
+
+      function applyLoadedRecordIndexEnvelope(manifest, descriptor, envelope) {
+        const validation = RECORDS_STORE.validateRecordIndexEnvelope(manifest, descriptor, envelope);
+        if (!validation.valid) {
+          throw new Error(validation.errors.join(" "));
+        }
+        removeLoadedRecordIndexPath(descriptor.path);
+        const recordIds = Object.keys(envelope.entries);
+        recordIds.forEach(function (recordId) {
+          state.recordIndexes.entriesById[recordId] = JSON.parse(JSON.stringify(envelope.entries[recordId]));
+        });
+        state.recordIndexes.recordIdsByPath[descriptor.path] = recordIds;
+        state.recordIndexes.loadedPaths[descriptor.path] = String(manifest.generation || "")
+          + "\n" + String(descriptor.contentHash || "");
+        delete state.recordIndexes.failedPaths[descriptor.path];
+        return envelope;
+      }
+
+      async function loadRecordIndexDescriptor(manifest, descriptor, options) {
+        const opts = options || {};
+        const cacheIdentity = String(manifest && manifest.generation || "")
+          + "\n" + String(descriptor && descriptor.contentHash || "");
+        if (state.recordIndexes.loadedPaths[descriptor.path] === cacheIdentity) {
+          return null;
+        }
+        if (state.recordIndexes.loadingPaths[descriptor.path]) {
+          return state.recordIndexes.loadingPaths[descriptor.path];
+        }
+        const promise = (async function () {
+          try {
+            let envelope = null;
+            const cached = await readRecordIndexCache(manifest, descriptor);
+            if (cached && cached.contentHash === descriptor.contentHash) {
+              const validation = RECORDS_STORE.validateRecordIndexEnvelope(manifest, descriptor, cached.envelope);
+              if (validation.valid) {
+                envelope = cached.envelope;
+              }
+            }
+            if (!envelope) {
+              const result = await fetchRemoteJsonFile(descriptor.path, {
+                conditional: false,
+                ref: opts.ref
+              });
+              if (result.missing) {
+                throw new Error("recordIndex 分片不存在");
+              }
+              envelope = result.value;
+              const validation = RECORDS_STORE.validateRecordIndexEnvelope(manifest, descriptor, envelope);
+              if (!validation.valid) {
+                throw new Error(validation.errors.join(" "));
+              }
+              await writeRecordIndexCache(manifest, descriptor, envelope);
+            }
+            applyLoadedRecordIndexEnvelope(manifest, descriptor, envelope);
+            return envelope;
+          } catch (error) {
+            state.recordIndexes.failedPaths[descriptor.path] = true;
+            throw error;
+          } finally {
+            delete state.recordIndexes.loadingPaths[descriptor.path];
+          }
+        }());
+        state.recordIndexes.loadingPaths[descriptor.path] = promise;
+        return promise;
+      }
+
+      async function loadRecordIndexEntries(manifest, recordIds, options) {
+        if (manifest && manifest.recordIndex && typeof manifest.recordIndex === "object") {
+          return {};
+        }
+        const descriptorsByPath = new Map();
+        Array.from(new Set(recordIds || [])).forEach(function (recordId) {
+          const descriptor = RECORDS_STORE.findRecordIndexDescriptor(manifest, recordId);
+          if (!descriptor) {
+            throw new Error("recordIndex 布局未覆盖记录 " + recordId);
+          }
+          descriptorsByPath.set(descriptor.path, descriptor);
+        });
+        const files = {};
+        await Promise.all(Array.from(descriptorsByPath.values()).map(async function (descriptor) {
+          const loaded = await loadRecordIndexDescriptor(manifest, descriptor, options);
+          if (loaded) {
+            files[descriptor.path] = loaded;
+            return;
+          }
+          const ids = state.recordIndexes.recordIdsByPath[descriptor.path] || [];
+          const entries = {};
+          ids.forEach(function (recordId) {
+            entries[recordId] = state.recordIndexes.entriesById[recordId];
+          });
+          files[descriptor.path] = RECORDS_STORE.buildRecordIndexEnvelope(
+            manifest.generation,
+            descriptor.prefix,
+            entries
+          );
+        }));
+        return files;
       }
 
       function toggleRemoteSyncPanel(forceOpen) {
@@ -6160,6 +6388,7 @@
         }
 
         resetSnapshotRecords();
+        resetRecordIndexState();
         state.remote.enabled = true;
         state.remote.repo = repo;
         state.remote.branch = branch || DEFAULT_REMOTE_BRANCH;
@@ -6245,6 +6474,7 @@
         state.remote.hotEtag = "";
         state.sessionOnly = false;
         resetSnapshotRecords();
+        resetRecordIndexState();
         window.clearTimeout(remoteWriteTimer);
         window.clearTimeout(remotePollTimer);
         remoteWriteTimer = null;
@@ -6702,10 +6932,11 @@
           throw new Error("GitHub v4 manifest 与 hot.json 不一致");
         }
         validateOrRepairRemoteHotDescriptor(manifest, hot, hotResult.text);
-        applySnapshotManifest(manifest);
         state.remote.format = "v4";
         state.remote.manifest = manifest;
         state.remote.hot = hot;
+        applyRecordIndexManifest(manifest);
+        applySnapshotManifest(manifest);
         state.remote.manifestSha = manifestResult.sha || state.remote.manifestSha;
         state.remote.manifestEtag = manifestResult.etag || state.remote.manifestEtag;
         state.remote.hotSha = hotResult.sha || state.remote.hotSha;
@@ -6741,12 +6972,15 @@
           return [descriptor.path, descriptor];
         }));
         const snapshotPaths = new Set(nextByPath.keys());
+        const remoteHot = state.remote.hot || {};
+        const hotIds = new Set((remoteHot.records || []).map(function (record) { return record.id; }));
+        const tombstoneIds = new Set((remoteHot.tombstones || []).map(function (entry) { return entry.recordId; }));
         const trackedSnapshotIds = getSnapshotRecordIdSet();
         state.records = state.records.filter(function (record) {
           if (!record || trackedSnapshotIds.has(record.id)) {
             return true;
           }
-          const indexEntry = manifest && manifest.recordIndex && manifest.recordIndex[record.id];
+          const indexEntry = getRecordIndexEntry(record.id);
           if (!indexEntry || !snapshotPaths.has(indexEntry.location) || !indexEntry.headRevisionId) {
             return true;
           }
@@ -6763,8 +6997,11 @@
             return;
           }
           const retainedIds = (state.snapshots.recordIdsByPath[pathValue] || []).filter(function (id) {
-            const indexEntry = manifest && manifest.recordIndex && manifest.recordIndex[id];
-            return indexEntry && indexEntry.location === pathValue;
+            if (hotIds.has(id) || tombstoneIds.has(id)) {
+              return false;
+            }
+            const indexEntry = getRecordIndexEntry(id);
+            return !indexEntry || indexEntry.location === pathValue;
           });
           const removedIds = new Set((state.snapshots.recordIdsByPath[pathValue] || []).filter(function (id) {
             return !retainedIds.includes(id);
@@ -6793,6 +7030,7 @@
           });
           ids.forEach(function (id) {
             delete state.snapshots.baseRecordsById[id];
+            delete state.snapshots.basePathById[id];
           });
         }
         delete state.snapshots.recordIdsByPath[pathValue];
@@ -6831,19 +7069,53 @@
         return envelope;
       }
 
-      function applyLoadedSnapshot(descriptor, envelope) {
+      async function applyLoadedSnapshot(descriptor, envelope) {
         validateSnapshotEnvelope(descriptor, envelope);
         removeLoadedSnapshotPath(descriptor.path);
         const manifest = state.remote.manifest;
         const hotIds = new Set(getHotRecordsFromState().map(function (record) { return record.id; }));
-        const records = envelope.records.map(normalizeImportedRecord).filter(function (record) {
-          const indexEntry = manifest && manifest.recordIndex && manifest.recordIndex[record.id];
-          return record && !hotIds.has(record.id)
-            && indexEntry && indexEntry.location === descriptor.path;
+        const tombstoneIds = new Set((state.remote.hot && state.remote.hot.tombstones || []).map(function (entry) {
+          return entry.recordId;
+        }));
+        const candidates = envelope.records.map(normalizeImportedRecord).filter(function (record) {
+          return record && !hotIds.has(record.id) && !tombstoneIds.has(record.id);
+        });
+        const hasInlineIndex = Boolean(manifest && manifest.recordIndex
+          && typeof manifest.recordIndex === "object");
+        const conflictIds = candidates.filter(function (record) {
+          return Object.keys(state.snapshots.recordIdsByPath).some(function (pathValue) {
+            return pathValue !== descriptor.path
+              && (state.snapshots.recordIdsByPath[pathValue] || []).includes(record.id);
+          });
+        }).map(function (record) { return record.id; });
+        if (!hasInlineIndex && conflictIds.length) {
+          await loadRecordIndexEntries(manifest, conflictIds);
+        }
+        const conflictIdSet = new Set(conflictIds);
+        const records = candidates.filter(function (record) {
+          const indexEntry = getRecordIndexEntry(record.id);
+          if (hasInlineIndex || conflictIdSet.has(record.id)) {
+            return indexEntry && indexEntry.location === descriptor.path;
+          }
+          return true;
+        });
+        records.forEach(function (record) {
+          Object.keys(state.snapshots.recordIdsByPath).forEach(function (pathValue) {
+            if (pathValue === descriptor.path
+              || !(state.snapshots.recordIdsByPath[pathValue] || []).includes(record.id)) {
+              return;
+            }
+            state.snapshots.recordIdsByPath[pathValue] = state.snapshots.recordIdsByPath[pathValue]
+              .filter(function (id) { return id !== record.id; });
+            state.records = state.records.filter(function (existing) {
+              return existing.id !== record.id;
+            });
+          });
         });
         const existingIds = new Set(state.records.map(function (record) { return record.id; }));
         records.forEach(function (record) {
           state.snapshots.baseRecordsById[record.id] = cloneRecordForMerge(record);
+          state.snapshots.basePathById[record.id] = descriptor.path;
           if (!existingIds.has(record.id)) {
             state.records.push(record);
             existingIds.add(record.id);
@@ -6893,7 +7165,7 @@
               envelope = validateSnapshotEnvelope(descriptor, result.value);
               await writeSnapshotCache(descriptor, envelope);
             }
-            const records = applyLoadedSnapshot(descriptor, envelope);
+            const records = await applyLoadedSnapshot(descriptor, envelope);
             render();
             return records;
           } catch (error) {
@@ -8109,7 +8381,59 @@
         }
       }
 
+      function getRecordIndexIdsForV4Commit(manifest, hot, pendingPayload, now) {
+        if (manifest && manifest.recordIndex && typeof manifest.recordIndex === "object") {
+          return [];
+        }
+        const pending = pendingPayload || {};
+        const remoteById = new Map((hot.records || []).map(function (record) {
+          return [record.id, record];
+        }));
+        const predictedById = new Map(remoteById);
+        const ids = new Set();
+        (pending.records || []).forEach(function (record) {
+          const remoteRecord = remoteById.get(record.id);
+          const baseline = state.snapshots.baseRecordsById[record.id];
+          if ((!remoteRecord && (!baseline || !snapshotRecordContentEqual(record, baseline)))
+            || (remoteRecord && !snapshotRecordContentEqual(record, remoteRecord))) {
+            ids.add(record.id);
+          }
+          predictedById.set(record.id, record);
+        });
+        const remoteTombstones = new Map((hot.tombstones || []).map(function (entry) {
+          return [entry.recordId, entry];
+        }));
+        (pending.deletedRecords || []).forEach(function (entry) {
+          const existing = remoteTombstones.get(entry.recordId);
+          if (!existing
+            || String(existing.deletedAt || "") !== String(entry.deletedAt || "")
+            || Boolean(existing.purged) !== Boolean(entry.purged)) {
+            ids.add(entry.recordId);
+          }
+          predictedById.delete(entry.recordId);
+        });
+        const policy = manifest.snapshotPolicy
+          ? RECORDS_STORE.normalizeSnapshotPolicy(manifest.snapshotPolicy)
+          : null;
+        if (policy && policy.enabled) {
+          const predictedHot = Object.assign({}, hot, { records: Array.from(predictedById.values()) });
+          if (RECORDS_STORE.jsonBytes(predictedHot) > policy.triggerBytes) {
+            predictedHot.records.forEach(function (record) {
+              const eligibility = RECORDS_STORE.getSnapshotEligibility(record, {
+                now: now,
+                snapshotPolicy: policy
+              });
+              if (eligibility.eligible) {
+                ids.add(record.id);
+              }
+            });
+          }
+        }
+        return Array.from(ids).sort();
+      }
+
       async function fetchRemoteV4CommitLayout() {
+        const pendingPayload = arguments.length ? arguments[0] : getRecordsPayloadSnapshot();
         const expectedHeadOid = await fetchRemoteBranchHeadOid();
         const manifestResult = await fetchRemoteJsonFile(state.remote.path, {
           conditional: false,
@@ -8139,10 +8463,16 @@
           throw new Error("GitHub v4 manifest 与 hot.json 不一致");
         }
         validateOrRepairRemoteHotDescriptor(manifest, hot, hotResult.text);
-        applySnapshotManifest(manifest);
         state.remote.format = "v4";
         state.remote.manifest = manifest;
         state.remote.hot = hot;
+        applyRecordIndexManifest(manifest);
+        const indexFiles = await loadRecordIndexEntries(
+          manifest,
+          getRecordIndexIdsForV4Commit(manifest, hot, pendingPayload, new Date().toISOString()),
+          { ref: expectedHeadOid }
+        );
+        applySnapshotManifest(manifest);
         state.remote.manifestSha = manifestResult.sha || "";
         state.remote.manifestEtag = manifestResult.etag || "";
         state.remote.hotSha = hotResult.sha || "";
@@ -8155,6 +8485,9 @@
         files[manifest.hot.path] = hot;
         files[manifest.openRevisionShard] = revisionResult.value;
         files[manifest.openTrashShard] = trashResult.value;
+        Object.keys(indexFiles).forEach(function (pathValue) {
+          files[pathValue] = indexFiles[pathValue];
+        });
         return {
           layout: RECORDS_STORE.layoutFromFiles(state.remote.path, manifest, files),
           payload: Object.assign({}, payload, {
@@ -8188,13 +8521,21 @@
         if (!expectedHeadOid) {
           throw new Error("GitHub v4 原子提交缺少 expectedHeadOid");
         }
-        const additions = (Array.isArray(writes) ? writes : []).map(function (write) {
+        const plannedWrites = Array.isArray(writes) ? writes : [];
+        const additions = plannedWrites.filter(function (write) {
+          return !write.delete;
+        }).map(function (write) {
           return {
             path: write.path,
             contents: encodeBase64Utf8(RECORDS_STORE.jsonText(write.value))
           };
         });
-        if (!additions.length) {
+        const deletions = plannedWrites.filter(function (write) {
+          return write.delete;
+        }).map(function (write) {
+          return write.path;
+        });
+        if (!additions.length && !deletions.length) {
           return expectedHeadOid;
         }
         const body = {
@@ -8207,7 +8548,10 @@
               },
               expectedHeadOid: expectedHeadOid,
               message: { headline: "Update minimal notes v4" },
-              fileChanges: { additions: additions }
+              fileChanges: {
+                additions: additions,
+                deletions: deletions
+              }
             }
           }
         };
@@ -8258,7 +8602,7 @@
 
         try {
           for (let attempt = 0; attempt < REMOTE_WRITE_MAX_ATTEMPTS; attempt += 1) {
-            const remote = await fetchRemoteV4CommitLayout();
+            const remote = await fetchRemoteV4CommitLayout(recordsSnapshot);
             recordsSnapshot = mergeRecordsPayloads(remote.payload, recordsSnapshot);
             applyIdeaPaneDraftToRecords(recordsSnapshot.records, activeIdeaDraft);
             const syncedAt = new Date().toISOString();
@@ -8282,9 +8626,21 @@
               throw error;
             }
 
-            applySnapshotManifest(reconciled.layout.manifest);
             state.remote.manifest = reconciled.layout.manifest;
             state.remote.hot = reconciled.layout.hot;
+            applyRecordIndexManifest(reconciled.layout.manifest);
+            reconciled.writes.filter(function (write) {
+              return write.role === "index" && !write.delete;
+            }).forEach(function (write) {
+              const descriptor = (reconciled.layout.manifest.recordIndexLayout
+                && reconciled.layout.manifest.recordIndexLayout.shards || []).find(function (item) {
+                return item.path === write.path;
+              });
+              if (descriptor) {
+                applyLoadedRecordIndexEnvelope(reconciled.layout.manifest, descriptor, write.value);
+              }
+            });
+            applySnapshotManifest(reconciled.layout.manifest);
             state.remote.manifestSha = "";
             state.remote.manifestEtag = "";
             state.remote.hotSha = "";
@@ -9224,6 +9580,12 @@
         return result;
       }
 
+      function getLoadedSnapshotPathForRecord(recordId) {
+        return Object.keys(state.snapshots.recordIdsByPath).find(function (pathValue) {
+          return (state.snapshots.recordIdsByPath[pathValue] || []).includes(recordId);
+        }) || state.snapshots.basePathById[recordId] || "";
+      }
+
       function getHotRecordsFromState() {
         const snapshotIds = getSnapshotRecordIdSet();
         return (state.records || []).filter(function (record) {
@@ -9304,6 +9666,7 @@
         state.snapshots.loadedPaths = {};
         state.snapshots.recordIdsByPath = {};
         state.snapshots.baseRecordsById = {};
+        state.snapshots.basePathById = {};
         state.snapshots.loadingPaths = {};
         state.snapshots.failedPaths = {};
         state.snapshots.browsePromise = null;
@@ -9411,10 +9774,10 @@
             return descriptor.path;
           }));
           localById.forEach(function (record, id) {
-            const indexEntry = state.remote.manifest.recordIndex
-              && state.remote.manifest.recordIndex[id];
             const baseline = state.snapshots.baseRecordsById[id];
-            if (!remoteById.has(id) && baseline && indexEntry && snapshotPaths.has(indexEntry.location)) {
+            const indexEntry = getRecordIndexEntry(id);
+            const snapshotPath = indexEntry ? indexEntry.location : getLoadedSnapshotPathForRecord(id);
+            if (!remoteById.has(id) && baseline && snapshotPaths.has(snapshotPath)) {
               changes.push({ before: baseline, after: null });
             }
           });
@@ -9422,11 +9785,11 @@
             return entry.recordId;
           }));
           deletedIds.forEach(function (id) {
-            const indexEntry = state.remote.manifest.recordIndex
-              && state.remote.manifest.recordIndex[id];
             const baseline = state.snapshots.baseRecordsById[id];
+            const indexEntry = getRecordIndexEntry(id);
+            const snapshotPath = indexEntry ? indexEntry.location : getLoadedSnapshotPathForRecord(id);
             if (!remoteById.has(id) && !localById.has(id)
-              && baseline && indexEntry && snapshotPaths.has(indexEntry.location)) {
+              && baseline && snapshotPaths.has(snapshotPath)) {
               changes.push({ before: baseline, after: null });
             }
           });

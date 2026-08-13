@@ -22,6 +22,13 @@
     journalEditWindowHours: 72,
     completedAgeDays: 30
   };
+  const DEFAULT_RECORD_INDEX_LAYOUT = {
+    algorithm: "sha256-hex-prefix",
+    initialPrefixLength: 1,
+    targetBytes: 96 * 1024,
+    maxBytes: 128 * 1024
+  };
+  const RECORD_INDEX_KIND = "record-index";
   const G_TEACHER_ID_PATTERN = /^g-teacher-\d{4}-\d{2}-\d{2}-(?:morning|evening|pulse-[123])$/;
   const G_TEACHER_SIGNATURE = "——G老师";
 
@@ -288,6 +295,362 @@
     return hash.map(function (word) {
       return word.toString(16).padStart(8, "0");
     }).join("");
+  }
+
+  function normalizeRecordIndexLayout(value) {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+    const algorithm = value.algorithm === DEFAULT_RECORD_INDEX_LAYOUT.algorithm
+      ? value.algorithm
+      : "";
+    const shards = Array.isArray(value.shards) ? value.shards.filter(function (descriptor) {
+      return descriptor && typeof descriptor.path === "string" && descriptor.path
+        && typeof descriptor.prefix === "string" && /^[0-9a-f]+$/.test(descriptor.prefix);
+    }).map(clone) : [];
+    if (!algorithm || !shards.length) {
+      return null;
+    }
+    return {
+      algorithm: algorithm,
+      initialPrefixLength: Math.max(1, Number.parseInt(value.initialPrefixLength, 10) || 1),
+      targetBytes: Math.max(1, Number.parseInt(value.targetBytes, 10) || DEFAULT_RECORD_INDEX_LAYOUT.targetBytes),
+      maxBytes: Math.max(1, Number.parseInt(value.maxBytes, 10) || DEFAULT_RECORD_INDEX_LAYOUT.maxBytes),
+      shards: shards.sort(function (left, right) {
+        return left.prefix.localeCompare(right.prefix) || left.path.localeCompare(right.path);
+      })
+    };
+  }
+
+  function recordIndexPath(basePath, prefix) {
+    return String(basePath || "minimal-notes-sync").replace(/\/+$/g, "")
+      + "/indexes/records-" + prefix + ".json";
+  }
+
+  function sortRecordIndexEntries(entries) {
+    const sorted = {};
+    Object.keys(entries && typeof entries === "object" ? entries : {}).sort().forEach(function (recordId) {
+      sorted[recordId] = clone(entries[recordId]);
+    });
+    return sorted;
+  }
+
+  function buildRecordIndexEnvelope(generation, prefix, entries) {
+    return {
+      version: SCHEMA_VERSION,
+      generation: generation,
+      kind: RECORD_INDEX_KIND,
+      prefix: prefix,
+      mutable: true,
+      entries: sortRecordIndexEntries(entries)
+    };
+  }
+
+  function buildRecordIndexDescriptor(pathValue, envelope, maxBytes) {
+    if (!envelope || envelope.kind !== RECORD_INDEX_KIND || !envelope.prefix
+      || !envelope.entries || typeof envelope.entries !== "object") {
+      throw new Error("A record index descriptor requires an index envelope.");
+    }
+    const text = jsonText(envelope);
+    const bytes = utf8Bytes(text).length;
+    return {
+      path: pathValue,
+      prefix: envelope.prefix,
+      bytes: bytes,
+      contentHash: sha256(text),
+      itemCount: Object.keys(envelope.entries).length,
+      mutable: true,
+      oversize: bytes > (Number(maxBytes) || DEFAULT_RECORD_INDEX_LAYOUT.maxBytes)
+    };
+  }
+
+  function findRecordIndexDescriptor(manifest, recordId) {
+    const layout = normalizeRecordIndexLayout(manifest && manifest.recordIndexLayout);
+    if (!layout || typeof recordId !== "string" || !recordId) {
+      return null;
+    }
+    const hash = sha256(recordId);
+    const matches = layout.shards.filter(function (descriptor) {
+      return hash.startsWith(descriptor.prefix);
+    }).sort(function (left, right) {
+      return right.prefix.length - left.prefix.length || left.path.localeCompare(right.path);
+    });
+    if (matches.length > 1 && matches[0].prefix.length === matches[1].prefix.length) {
+      throw new Error("Record index layout has overlapping prefixes for " + recordId + ".");
+    }
+    return matches[0] || null;
+  }
+
+  function validateRecordIndexEnvelope(manifest, descriptor, envelope) {
+    const errors = [];
+    if (!manifest || !descriptor || !envelope
+      || envelope.version !== SCHEMA_VERSION
+      || envelope.generation !== manifest.generation
+      || envelope.kind !== RECORD_INDEX_KIND
+      || envelope.prefix !== descriptor.prefix
+      || envelope.mutable !== true
+      || !envelope.entries || typeof envelope.entries !== "object" || Array.isArray(envelope.entries)) {
+      errors.push("Record index envelope metadata is invalid for " + (descriptor && descriptor.path || "unknown") + ".");
+    }
+    if (!errors.length) {
+      const text = jsonText(envelope);
+      const bytes = utf8Bytes(text).length;
+      const entryIds = Object.keys(envelope.entries);
+      if (Number(descriptor.bytes) !== bytes || descriptor.contentHash !== sha256(text)) {
+        errors.push("Record index bytes or hash differ for " + descriptor.path + ".");
+      }
+      if (Number(descriptor.itemCount) !== entryIds.length) {
+        errors.push("Record index item count differs for " + descriptor.path + ".");
+      }
+      entryIds.forEach(function (recordId) {
+        if (!sha256(recordId).startsWith(descriptor.prefix)) {
+          errors.push("Record index entry is outside prefix " + descriptor.prefix + ": " + recordId + ".");
+        }
+      });
+    }
+    return { valid: errors.length === 0, errors: errors };
+  }
+
+  function collectRecordIndexFromFiles(manifest, files, options) {
+    const opts = options || {};
+    if (manifest && manifest.recordIndex && typeof manifest.recordIndex === "object") {
+      return clone(manifest.recordIndex);
+    }
+    const layout = normalizeRecordIndexLayout(manifest && manifest.recordIndexLayout);
+    if (!layout) {
+      return {};
+    }
+    const result = {};
+    const missingPaths = [];
+    layout.shards.forEach(function (descriptor) {
+      const envelope = files && files[descriptor.path];
+      if (!envelope) {
+        missingPaths.push(descriptor.path);
+        return;
+      }
+      const validation = validateRecordIndexEnvelope(manifest, descriptor, envelope);
+      if (!validation.valid) {
+        throw new Error(validation.errors.join(" "));
+      }
+      Object.keys(envelope.entries).forEach(function (recordId) {
+        if (result[recordId]
+          && stableStringify(result[recordId]) !== stableStringify(envelope.entries[recordId])) {
+          throw new Error("Record index entry collision for " + recordId + ".");
+        }
+        result[recordId] = clone(envelope.entries[recordId]);
+      });
+    });
+    if (opts.requireComplete && missingPaths.length) {
+      throw new Error("Record index shards are missing: " + missingPaths.join(", "));
+    }
+    return result;
+  }
+
+  function packRecordIndexEntries(recordIndex, options) {
+    const opts = options || {};
+    const basePath = String(opts.basePath || "minimal-notes-sync").replace(/^\/+|\/+$/g, "");
+    const generation = opts.generation || "";
+    const initialPrefixLength = Math.max(1, Number.parseInt(opts.initialPrefixLength, 10)
+      || DEFAULT_RECORD_INDEX_LAYOUT.initialPrefixLength);
+    const maxBytes = Math.max(1, Number.parseInt(opts.maxBytes, 10)
+      || DEFAULT_RECORD_INDEX_LAYOUT.maxBytes);
+    const hex = "0123456789abcdef";
+    const descriptors = [];
+    const files = {};
+
+    function emit(prefix, entries) {
+      const envelope = buildRecordIndexEnvelope(generation, prefix, entries);
+      if (jsonBytes(envelope) > maxBytes && Object.keys(entries).length > 1 && prefix.length < 64) {
+        for (let index = 0; index < hex.length; index += 1) {
+          const childPrefix = prefix + hex[index];
+          const childEntries = {};
+          Object.keys(entries).forEach(function (recordId) {
+            if (sha256(recordId).startsWith(childPrefix)) {
+              childEntries[recordId] = entries[recordId];
+            }
+          });
+          emit(childPrefix, childEntries);
+        }
+        return;
+      }
+      const pathValue = recordIndexPath(basePath, prefix);
+      files[pathValue] = envelope;
+      descriptors.push(buildRecordIndexDescriptor(pathValue, envelope, maxBytes));
+    }
+
+    function emitInitial(prefix, depth) {
+      if (depth < initialPrefixLength) {
+        for (let index = 0; index < hex.length; index += 1) {
+          emitInitial(prefix + hex[index], depth + 1);
+        }
+        return;
+      }
+      const entries = {};
+      Object.keys(recordIndex || {}).forEach(function (recordId) {
+        if (sha256(recordId).startsWith(prefix)) {
+          entries[recordId] = recordIndex[recordId];
+        }
+      });
+      emit(prefix, entries);
+    }
+
+    emitInitial("", 0);
+    descriptors.sort(function (left, right) {
+      return left.prefix.localeCompare(right.prefix) || left.path.localeCompare(right.path);
+    });
+    return {
+      layout: {
+        algorithm: DEFAULT_RECORD_INDEX_LAYOUT.algorithm,
+        initialPrefixLength: initialPrefixLength,
+        targetBytes: Math.max(1, Number.parseInt(opts.targetBytes, 10)
+          || DEFAULT_RECORD_INDEX_LAYOUT.targetBytes),
+        maxBytes: maxBytes,
+        shards: descriptors
+      },
+      files: files
+    };
+  }
+
+  function getLayoutRecordIndex(layout) {
+    if (layout && layout.recordIndex && typeof layout.recordIndex === "object") {
+      return layout.recordIndex;
+    }
+    return collectRecordIndexFromFiles(
+      layout && layout.manifest,
+      layout && layout.files,
+      { requireComplete: false }
+    );
+  }
+
+  function enableRecordIndexShards(layout, options) {
+    const opts = options || {};
+    const next = layoutFromFiles(layout.manifestPath, layout.manifest, layout.files);
+    if (normalizeRecordIndexLayout(next.manifest.recordIndexLayout)
+      && !next.manifest.recordIndex) {
+      return { layout: next, changed: false, indexPaths: [], deletedPaths: [] };
+    }
+    const recordIndex = clone(next.manifest.recordIndex || getLayoutRecordIndex(next));
+    const packed = packRecordIndexEntries(recordIndex, {
+      basePath: next.basePath,
+      generation: next.manifest.generation,
+      initialPrefixLength: opts.initialPrefixLength,
+      targetBytes: opts.targetBytes,
+      maxBytes: opts.maxBytes
+    });
+    Object.keys(packed.files).forEach(function (pathValue) {
+      next.files[pathValue] = packed.files[pathValue];
+    });
+    next.manifest.recordIndexLayout = packed.layout;
+    delete next.manifest.recordIndex;
+    next.recordIndex = recordIndex;
+    next.files[next.manifestPath] = next.manifest;
+    return {
+      layout: next,
+      changed: true,
+      indexPaths: Object.keys(packed.files).sort(),
+      deletedPaths: []
+    };
+  }
+
+  function syncRecordIndexShards(layout, recordIds) {
+    const manifest = layout && layout.manifest;
+    const normalizedLayout = normalizeRecordIndexLayout(manifest && manifest.recordIndexLayout);
+    if (!normalizedLayout) {
+      manifest.recordIndex = getLayoutRecordIndex(layout);
+      layout.recordIndex = manifest.recordIndex;
+      layout.files[layout.manifestPath] = manifest;
+      return { changed: false, paths: [], deletedPaths: [] };
+    }
+    const recordIndex = getLayoutRecordIndex(layout);
+    const ids = Array.from(new Set((Array.isArray(recordIds) ? recordIds : [])
+      .filter(function (recordId) { return typeof recordId === "string" && recordId; }))).sort();
+    if (!ids.length) {
+      return { changed: false, paths: [], deletedPaths: [] };
+    }
+    const idsByPath = {};
+    ids.forEach(function (recordId) {
+      const descriptor = findRecordIndexDescriptor(manifest, recordId);
+      if (!descriptor) {
+        throw new Error("Record index layout does not cover " + recordId + ".");
+      }
+      idsByPath[descriptor.path] = idsByPath[descriptor.path] || [];
+      idsByPath[descriptor.path].push(recordId);
+    });
+    const replacementDescriptors = [];
+    const replacementFiles = {};
+    const replacedPaths = Object.keys(idsByPath).sort();
+    const deletedPaths = [];
+    const hex = "0123456789abcdef";
+
+    function emit(prefix, entries) {
+      const envelope = buildRecordIndexEnvelope(manifest.generation, prefix, entries);
+      if (jsonBytes(envelope) > normalizedLayout.maxBytes
+        && Object.keys(entries).length > 1 && prefix.length < 64) {
+        for (let index = 0; index < hex.length; index += 1) {
+          const childPrefix = prefix + hex[index];
+          const childEntries = {};
+          Object.keys(entries).forEach(function (recordId) {
+            if (sha256(recordId).startsWith(childPrefix)) {
+              childEntries[recordId] = entries[recordId];
+            }
+          });
+          emit(childPrefix, childEntries);
+        }
+        return;
+      }
+      const pathValue = recordIndexPath(layout.basePath, prefix);
+      replacementFiles[pathValue] = envelope;
+      replacementDescriptors.push(buildRecordIndexDescriptor(pathValue, envelope, normalizedLayout.maxBytes));
+    }
+
+    replacedPaths.forEach(function (pathValue) {
+      const descriptor = normalizedLayout.shards.find(function (item) { return item.path === pathValue; });
+      const envelope = layout.files[pathValue];
+      if (!descriptor || !envelope) {
+        throw new Error("The affected record index shard must be loaded before committing: " + pathValue + ".");
+      }
+      const validation = validateRecordIndexEnvelope(manifest, descriptor, envelope);
+      if (!validation.valid) {
+        throw new Error(validation.errors.join(" "));
+      }
+      const entries = clone(envelope.entries);
+      idsByPath[pathValue].forEach(function (recordId) {
+        if (Object.prototype.hasOwnProperty.call(recordIndex, recordId)) {
+          entries[recordId] = clone(recordIndex[recordId]);
+        } else {
+          delete entries[recordId];
+        }
+      });
+      emit(descriptor.prefix, entries);
+      if (!Object.prototype.hasOwnProperty.call(replacementFiles, pathValue)) {
+        deletedPaths.push(pathValue);
+      }
+    });
+
+    replacedPaths.forEach(function (pathValue) {
+      delete layout.files[pathValue];
+    });
+    Object.keys(replacementFiles).forEach(function (pathValue) {
+      layout.files[pathValue] = replacementFiles[pathValue];
+    });
+    const replacedPathSet = new Set(replacedPaths);
+    manifest.recordIndexLayout = {
+      algorithm: normalizedLayout.algorithm,
+      initialPrefixLength: normalizedLayout.initialPrefixLength,
+      targetBytes: normalizedLayout.targetBytes,
+      maxBytes: normalizedLayout.maxBytes,
+      shards: normalizedLayout.shards.filter(function (descriptor) {
+        return !replacedPathSet.has(descriptor.path);
+      }).concat(replacementDescriptors).sort(function (left, right) {
+        return left.prefix.localeCompare(right.prefix) || left.path.localeCompare(right.path);
+      })
+    };
+    layout.files[layout.manifestPath] = manifest;
+    return {
+      changed: true,
+      paths: Object.keys(replacementFiles).sort(),
+      deletedPaths: deletedPaths.sort()
+    };
   }
 
   function hashState(state) {
@@ -901,12 +1264,12 @@
   function archiveEligibleHotRecords(layout, options) {
     const opts = options || {};
     const next = layoutFromFiles(layout.manifestPath, layout.manifest, layout.files);
+    next.recordIndex = clone(getLayoutRecordIndex(layout));
     const manifest = next.manifest;
     const hot = next.hot;
     manifest.snapshots = Array.isArray(manifest.snapshots) ? manifest.snapshots : [];
-    manifest.recordIndex = manifest.recordIndex && typeof manifest.recordIndex === "object"
-      ? manifest.recordIndex
-      : {};
+    const recordIndex = getLayoutRecordIndex(next);
+    next.recordIndex = recordIndex;
     const now = normalizeIso(opts.now, new Date().toISOString());
     const previousPolicy = normalizeSnapshotPolicy(manifest.snapshotPolicy);
     const policy = normalizeSnapshotPolicy(Object.assign(
@@ -990,14 +1353,14 @@
       manifest.snapshots.push(descriptor);
       snapshotPaths.push(pathValue);
       group.records.forEach(function (record) {
-        const indexEntry = manifest.recordIndex[record.id] || { revisionShards: [] };
+        const indexEntry = recordIndex[record.id] || { revisionShards: [] };
         indexEntry.location = pathValue;
         indexEntry.headRevisionId = typeof record.headRevisionId === "string" ? record.headRevisionId : "";
         indexEntry.headRevisionAt = normalizeIso(record.headRevisionAt, record.createdAt);
         indexEntry.revisionShards = Array.isArray(indexEntry.revisionShards)
           ? indexEntry.revisionShards
           : [];
-        manifest.recordIndex[record.id] = indexEntry;
+        recordIndex[record.id] = indexEntry;
       });
     });
     manifest.snapshots.sort(function (left, right) {
@@ -1033,6 +1396,9 @@
     next.files[manifest.hot.path] = hot;
     next.files[next.manifestPath] = manifest;
     next.hot = hot;
+    const indexSync = opts.deferRecordIndexFiles
+      ? { changed: false, paths: [], deletedPaths: [] }
+      : syncRecordIndexShards(next, Array.from(candidateIds));
     return {
       layout: next,
       changed: changed,
@@ -1048,6 +1414,8 @@
         };
       }),
       snapshotPaths: snapshotPaths,
+      indexPaths: indexSync.paths,
+      deletedPaths: indexSync.deletedPaths,
       snapshotDescriptors: snapshotPaths.map(function (pathValue) {
         return manifest.snapshots.find(function (descriptor) {
           return descriptor.path === pathValue;
@@ -1057,7 +1425,11 @@
       afterHotBytes: afterHotBytes,
       writes: snapshotPaths.map(function (pathValue) {
         return { role: "snapshot", path: pathValue, value: next.files[pathValue] };
-      }).concat(changed ? [
+      }).concat(indexSync.paths.map(function (pathValue) {
+        return { role: "index", path: pathValue, value: next.files[pathValue] };
+      }), indexSync.deletedPaths.map(function (pathValue) {
+        return { role: "index", path: pathValue, delete: true };
+      }), changed ? [
         { role: "manifest", path: next.manifestPath, value: manifest },
         { role: "hot", path: manifest.hot.path, value: hot }
       ] : [])
@@ -1067,8 +1439,11 @@
   function repackSnapshots(layout, options) {
     const opts = options || {};
     const next = layoutFromFiles(layout.manifestPath, layout.manifest, layout.files);
+    next.recordIndex = clone(getLayoutRecordIndex(layout));
     const manifest = next.manifest;
     const hot = next.hot;
+    const recordIndex = getLayoutRecordIndex(next);
+    next.recordIndex = recordIndex;
     const now = normalizeIso(opts.now, new Date().toISOString());
     const policy = normalizeSnapshotPolicy(Object.assign(
       {},
@@ -1136,14 +1511,14 @@
       manifest.snapshots.push(descriptor);
       snapshotPaths.push(pathValue);
       group.records.forEach(function (record) {
-        const indexEntry = manifest.recordIndex[record.id] || { revisionShards: [] };
+        const indexEntry = recordIndex[record.id] || { revisionShards: [] };
         indexEntry.location = pathValue;
         indexEntry.headRevisionId = typeof record.headRevisionId === "string" ? record.headRevisionId : "";
         indexEntry.headRevisionAt = normalizeIso(record.headRevisionAt, record.createdAt);
         indexEntry.revisionShards = Array.isArray(indexEntry.revisionShards)
           ? indexEntry.revisionShards
           : [];
-        manifest.recordIndex[record.id] = indexEntry;
+        recordIndex[record.id] = indexEntry;
       });
     });
     manifest.snapshots.sort(function (left, right) {
@@ -1156,6 +1531,7 @@
     manifest.updatedAt = now;
     next.files[next.manifestPath] = manifest;
     next.hot = hot;
+    const indexSync = syncRecordIndexShards(next, records.map(function (record) { return record.id; }));
     return {
       layout: next,
       changed: snapshotPaths.length > 0,
@@ -1172,12 +1548,18 @@
       }),
       replacedSnapshotPaths: replacedSnapshotPaths,
       snapshotPaths: snapshotPaths,
+      indexPaths: indexSync.paths,
+      deletedPaths: indexSync.deletedPaths,
       snapshotDescriptors: manifest.snapshots.slice(),
       beforeHotBytes: jsonBytes(hot),
       afterHotBytes: jsonBytes(hot),
       writes: snapshotPaths.map(function (pathValue) {
         return { role: "snapshot", path: pathValue, value: next.files[pathValue] };
-      }).concat([
+      }).concat(indexSync.paths.map(function (pathValue) {
+        return { role: "index", path: pathValue, value: next.files[pathValue] };
+      }), indexSync.deletedPaths.map(function (pathValue) {
+        return { role: "index", path: pathValue, delete: true };
+      }), [
         { role: "manifest", path: next.manifestPath, value: manifest }
       ])
     };
@@ -1381,6 +1763,7 @@
       manifestPath: manifestPath,
       manifest: manifest,
       hot: hot,
+      recordIndex: recordIndex,
       files: files
     };
   }
@@ -1409,7 +1792,7 @@
 
   function collectLayoutSnapshots(layout) {
     const records = [];
-    const recordIndex = layout && layout.manifest && layout.manifest.recordIndex || {};
+    const recordIndex = getLayoutRecordIndex(layout);
     Object.keys(layout && layout.files || {}).forEach(function (path) {
       const file = layout.files[path];
       if (file && file.kind === "snapshots" && Array.isArray(file.records)) {
@@ -1442,6 +1825,24 @@
     if (layout.manifest.generation !== layout.hot.generation) {
       errors.push("Manifest and hot generation differ.");
     }
+    const recordIndexLayout = normalizeRecordIndexLayout(layout.manifest.recordIndexLayout);
+    const hasInlineRecordIndex = Boolean(layout.manifest.recordIndex
+      && typeof layout.manifest.recordIndex === "object");
+    if (hasInlineRecordIndex && recordIndexLayout) {
+      errors.push("Manifest must not contain inline and sharded record indexes together.");
+    }
+    if (!hasInlineRecordIndex && !recordIndexLayout) {
+      errors.push("Manifest requires an inline or sharded record index.");
+    }
+    let recordIndex = {};
+    try {
+      recordIndex = hasInlineRecordIndex
+        ? clone(layout.manifest.recordIndex)
+        : collectRecordIndexFromFiles(layout.manifest, layout.files, { requireComplete: true });
+    } catch (error) {
+      errors.push(error.message);
+      recordIndex = getLayoutRecordIndex(layout);
+    }
     const revisions = collectLayoutRevisions(layout);
     const revisionsById = new Map(revisions.map(function (revision) { return [revision.id, revision]; }));
     const activeRecords = collectLayoutSnapshots(layout).concat(layout.hot.records || []);
@@ -1464,15 +1865,15 @@
       const activeLocations = new Set([layout.manifest.hot.path].concat(
         (layout.manifest.snapshots || []).map(function (descriptor) { return descriptor.path; })
       ));
-      Object.keys(layout.manifest.recordIndex || {}).forEach(function (recordId) {
-        const indexEntry = layout.manifest.recordIndex[recordId];
+      Object.keys(recordIndex).forEach(function (recordId) {
+        const indexEntry = recordIndex[recordId];
         if (indexEntry && activeLocations.has(indexEntry.location) && !activeIds.has(recordId)) {
           errors.push("Record index points to a missing active state for " + recordId + ".");
         }
       });
     }
     activeRecords.forEach(function (record) {
-      const indexEntry = layout.manifest.recordIndex && layout.manifest.recordIndex[record.id];
+      const indexEntry = recordIndex[record.id];
       const expectedLocation = (layout.hot.records || []).some(function (item) { return item.id === record.id; })
         ? layout.manifest.hot.path
         : indexEntry && indexEntry.location;
@@ -1496,7 +1897,11 @@
       }
       const expected = path === layout.manifest.hot.path
         ? layout.manifest.hot
-        : (layout.manifest.snapshots || []).concat(layout.manifest.revisions || [], layout.manifest.trash || []).find(function (item) { return item.path === path; });
+        : (layout.manifest.snapshots || []).concat(
+          layout.manifest.revisions || [],
+          layout.manifest.trash || [],
+          recordIndexLayout ? recordIndexLayout.shards : []
+        ).find(function (item) { return item.path === path; });
       if (!expected) {
         errors.push("Manifest does not describe " + path + ".");
         return;
@@ -1505,9 +1910,11 @@
       if (expected.bytes !== utf8Bytes(text).length || expected.contentHash !== sha256(text)) {
         errors.push("Manifest bytes or hash differ for " + path + ".");
       }
+      const isRecordIndexFile = Boolean(recordIndexLayout
+        && recordIndexLayout.shards.some(function (descriptor) { return descriptor.path === path; }));
       const limit = path === layout.manifest.hot.path
         ? layout.manifest.limits.hotBytes
-        : layout.manifest.limits.shardBytes;
+        : (isRecordIndexFile ? recordIndexLayout.maxBytes : layout.manifest.limits.shardBytes);
       if (utf8Bytes(text).length > limit && !expected.oversize) {
         errors.push("Unmarked oversize file: " + path + ".");
       }
@@ -1532,6 +1939,12 @@
             || (expected.lastSortAt || "") !== (sortDates[sortDates.length - 1] || "")) {
             errors.push("Snapshot sort range differs from its browse records: " + path + ".");
           }
+        }
+      }
+      if (isRecordIndexFile) {
+        const validation = validateRecordIndexEnvelope(layout.manifest, expected, file);
+        if (!validation.valid) {
+          errors.push.apply(errors, validation.errors);
         }
       }
     });
@@ -1687,12 +2100,16 @@
     if (!hot) {
       throw new Error("The v4 hot file is required.");
     }
+    const recordIndex = collectRecordIndexFromFiles(copiedFiles[manifestPath], copiedFiles, {
+      requireComplete: false
+    });
     return {
       version: SCHEMA_VERSION,
       basePath: manifestPath.replace(/\/manifest\.json$/, ""),
       manifestPath: manifestPath,
       manifest: copiedFiles[manifestPath],
       hot: hot,
+      recordIndex: recordIndex,
       files: copiedFiles
     };
   }
@@ -1858,6 +2275,8 @@
     let next = layoutFromFiles(layout.manifestPath, layout.manifest, layout.files);
     let manifest = next.manifest;
     let hot = next.hot;
+    let recordIndex = getLayoutRecordIndex(next);
+    next.recordIndex = recordIndex;
     const now = normalizeIso(opts.now, new Date().toISOString());
     const partialRevisions = [];
     Object.keys(next.files).forEach(function (pathValue) {
@@ -2012,7 +2431,8 @@
     });
     uniqueNewRevisions.forEach(function (revision) {
       const shardPath = revisionAppend.itemPathById[revision.id] || manifest.openRevisionShard;
-      const indexEntry = manifest.recordIndex[revision.recordId] || { location: "", revisionShards: [] };
+      const indexEntry = recordIndex[revision.recordId] || { location: "", revisionShards: [] };
+      indexEntry.revisionShards = Array.isArray(indexEntry.revisionShards) ? indexEntry.revisionShards : [];
       if (!indexEntry.revisionShards.includes(shardPath)) {
         indexEntry.revisionShards.push(shardPath);
         manifestChanged = true;
@@ -2022,10 +2442,10 @@
       }
       indexEntry.headRevisionId = revision.id;
       indexEntry.headRevisionAt = revision.at;
-      manifest.recordIndex[revision.recordId] = indexEntry;
+      recordIndex[revision.recordId] = indexEntry;
     });
     trashEntries.forEach(function (entry) {
-      const indexEntry = manifest.recordIndex[entry.recordId] || { location: "", revisionShards: [] };
+      const indexEntry = recordIndex[entry.recordId] || { location: "", revisionShards: [] };
       const trashPath = trashAppend.itemPathById[entry.recordId] || manifest.openTrashShard;
       if (indexEntry.location !== trashPath) {
         indexEntry.location = trashPath;
@@ -2033,15 +2453,18 @@
       }
       indexEntry.headRevisionId = entry.headRevisionId || indexEntry.headRevisionId || "";
       indexEntry.headRevisionAt = normalizeIso(entry.deletedAt, indexEntry.headRevisionAt);
-      manifest.recordIndex[entry.recordId] = indexEntry;
+      recordIndex[entry.recordId] = indexEntry;
     });
     currentTombstones.forEach(function (tombstone) {
-      if (!manifest.recordIndex[tombstone.recordId]) {
-        manifest.recordIndex[tombstone.recordId] = { location: "", revisionShards: [] };
+      if (!manifest.recordIndex && !touchedRecordIds.has(tombstone.recordId)) {
+        return;
+      }
+      if (!recordIndex[tombstone.recordId]) {
+        recordIndex[tombstone.recordId] = { location: "", revisionShards: [] };
         manifestChanged = true;
       }
       if (tombstone.purged) {
-        manifest.recordIndex[tombstone.recordId].location = "";
+        recordIndex[tombstone.recordId].location = "";
       }
     });
 
@@ -2067,7 +2490,7 @@
           adjustCurrentStats(currentStats, previous, -1);
         }
         const current = currentRecords.get(recordId);
-        const indexEntry = manifest.recordIndex[recordId];
+        const indexEntry = recordIndex[recordId];
         if (current && indexEntry && indexEntry.location === manifest.hot.path) {
           adjustCurrentStats(currentStats, current, 1);
         }
@@ -2103,13 +2526,21 @@
       snapshotPaths: []
     };
     if (manifest.snapshotPolicy && normalizeSnapshotPolicy(manifest.snapshotPolicy).enabled) {
-      archival = archiveEligibleHotRecords(next, { now: now });
+      archival = archiveEligibleHotRecords(next, { now: now, deferRecordIndexFiles: true });
       if (archival.changed) {
         next = archival.layout;
         manifest = next.manifest;
         hot = next.hot;
+        recordIndex = getLayoutRecordIndex(next);
+        (archival.candidates || []).forEach(function (candidate) {
+          touchedRecordIds.add(candidate.id);
+        });
         manifestChanged = true;
       }
+    }
+    const indexSync = syncRecordIndexShards(next, Array.from(touchedRecordIds));
+    if (indexSync.changed) {
+      manifestChanged = true;
     }
     if (manifestChanged) {
       manifest.updatedAt = now;
@@ -2124,6 +2555,12 @@
     });
     archival.snapshotPaths.forEach(function (pathValue) {
       writes.push({ role: "snapshot", path: pathValue, value: next.files[pathValue] });
+    });
+    indexSync.paths.forEach(function (pathValue) {
+      writes.push({ role: "index", path: pathValue, value: next.files[pathValue] });
+    });
+    indexSync.deletedPaths.forEach(function (pathValue) {
+      writes.push({ role: "index", path: pathValue, delete: true });
     });
     if (manifestChanged) {
       writes.push({ role: "manifest", path: next.manifestPath, value: manifest });
@@ -2172,7 +2609,10 @@
     const filePaths = [manifest.hot.path]
       .concat((manifest.snapshots || []).map(function (item) { return item.path; }))
       .concat((manifest.revisions || []).map(function (item) { return item.path; }))
-      .concat((manifest.trash || []).map(function (item) { return item.path; }));
+      .concat((manifest.trash || []).map(function (item) { return item.path; }))
+      .concat((normalizeRecordIndexLayout(manifest.recordIndexLayout) || { shards: [] }).shards.map(function (item) {
+        return item.path;
+      }));
     const files = {};
     files[manifestPath] = manifest;
     filePaths.forEach(function (relativePath) {
@@ -2180,18 +2620,17 @@
         files[relativePath] = readJsonUtf8(modules.path.join(repoRoot, relativePath));
       }
     });
-    return {
-      version: SCHEMA_VERSION,
-      basePath: basePath,
-      manifestPath: manifestPath,
-      manifest: manifest,
-      hot: files[manifest.hot.path],
-      files: files
-    };
+    return layoutFromFiles(manifestPath, manifest, files);
   }
 
   function writeV4Layout(repoRoot, layout) {
     const modules = nodeModules();
+    (Array.isArray(layout.deletedPaths) ? layout.deletedPaths : []).forEach(function (relativePath) {
+      const fullPath = modules.path.join(repoRoot, relativePath);
+      if (modules.fs.existsSync(fullPath)) {
+        modules.fs.unlinkSync(fullPath);
+      }
+    });
     const paths = Object.keys(layout.files || {}).filter(function (relativePath) {
       return relativePath !== layout.manifestPath;
     });
@@ -2236,7 +2675,14 @@
       baseHeadByRecord: opts.baseHeadByRecord || {}
     });
     reconciled.writes.forEach(function (write) {
-      writeJsonUtf8(modules.path.join(repoRoot, write.path), write.value);
+      const fullPath = modules.path.join(repoRoot, write.path);
+      if (write.delete) {
+        if (modules.fs.existsSync(fullPath)) {
+          modules.fs.unlinkSync(fullPath);
+        }
+        return;
+      }
+      writeJsonUtf8(fullPath, write.value);
     });
     return {
       format: "v4",
@@ -2248,6 +2694,7 @@
   }
 
   return {
+    DEFAULT_RECORD_INDEX_LAYOUT: clone(DEFAULT_RECORD_INDEX_LAYOUT),
     DEFAULT_SNAPSHOT_POLICY: clone(DEFAULT_SNAPSHOT_POLICY),
     RECORD_TYPES: RECORD_TYPES.slice(),
     REVISION_ENCODING: REVISION_ENCODING,
@@ -2260,12 +2707,18 @@
     buildV4Layout: buildV4Layout,
     buildSnapshotDescriptor: buildSnapshotDescriptor,
     buildSnapshotEnvelope: buildSnapshotEnvelope,
+    buildRecordIndexDescriptor: buildRecordIndexDescriptor,
+    buildRecordIndexEnvelope: buildRecordIndexEnvelope,
+    collectRecordIndexFromFiles: collectRecordIndexFromFiles,
     collectLayoutRevisions: collectLayoutRevisions,
     collectLayoutSnapshots: collectLayoutSnapshots,
     collectLayoutTrash: collectLayoutTrash,
     commitRepositoryPayload: commitRepositoryPayload,
     computeCurrentStats: computeCurrentStats,
     exportV3Snapshot: exportV3Snapshot,
+    enableRecordIndexShards: enableRecordIndexShards,
+    findRecordIndexDescriptor: findRecordIndexDescriptor,
+    getLayoutRecordIndex: getLayoutRecordIndex,
     hashState: hashState,
     getSnapshotEligibility: getSnapshotEligibility,
     jsonBytes: jsonBytes,
@@ -2277,18 +2730,22 @@
     normalizeIso: normalizeIso,
     normalizeRecurrence: normalizeRecurrence,
     normalizeRecurrenceCompletions: normalizeRecurrenceCompletions,
+    normalizeRecordIndexLayout: normalizeRecordIndexLayout,
     normalizeSnapshotPolicy: normalizeSnapshotPolicy,
     payloadFromV4Hot: payloadFromV4Hot,
+    packRecordIndexEntries: packRecordIndexEntries,
     repackSnapshots: repackSnapshots,
     reconcileV3Payload: reconcileV3Payload,
     sha256: sha256,
     stableStringify: stableStringify,
+    syncRecordIndexShards: syncRecordIndexShards,
     utf8Bytes: utf8Bytes,
     updateCurrentStats: updateCurrentStats,
     readJsonUtf8: readJsonUtf8,
     readRepositoryPayload: readRepositoryPayload,
     readV4Layout: readV4Layout,
     validateRevision: validateRevision,
+    validateRecordIndexEnvelope: validateRecordIndexEnvelope,
     validateV4Layout: validateV4Layout,
     writeJsonUtf8: writeJsonUtf8,
     writeV4Layout: writeV4Layout

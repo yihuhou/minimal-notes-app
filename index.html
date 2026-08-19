@@ -8545,7 +8545,7 @@
           getRecordIndexIdsForV4Commit(manifest, hot, pendingPayload, new Date().toISOString()),
           { ref: expectedHeadOid }
         );
-        applySnapshotManifest(manifest);
+        await applySnapshotManifest(manifest);
         state.remote.manifestSha = manifestResult.sha || "";
         state.remote.manifestEtag = manifestResult.etag || "";
         state.remote.hotSha = hotResult.sha || "";
@@ -8713,7 +8713,7 @@
                 applyLoadedRecordIndexEnvelope(reconciled.layout.manifest, descriptor, write.value);
               }
             });
-            applySnapshotManifest(reconciled.layout.manifest);
+            await applySnapshotManifest(reconciled.layout.manifest);
             state.remote.manifestSha = "";
             state.remote.manifestEtag = "";
             state.remote.hotSha = "";

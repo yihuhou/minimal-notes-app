@@ -2277,6 +2277,9 @@
     let hot = next.hot;
     let recordIndex = getLayoutRecordIndex(next);
     next.recordIndex = recordIndex;
+    const snapshotPaths = new Set((manifest.snapshots || []).map(function (descriptor) {
+      return descriptor && descriptor.path;
+    }).filter(Boolean));
     const now = normalizeIso(opts.now, new Date().toISOString());
     const partialRevisions = [];
     Object.keys(next.files).forEach(function (pathValue) {
@@ -2312,6 +2315,10 @@
         return;
       }
       const existing = currentRecords.get(canonical.id) || baseRecords.get(canonical.id);
+      const indexEntry = recordIndex[canonical.id];
+      if (!existing && indexEntry && snapshotPaths.has(indexEntry.location)) {
+        throw new Error("Snapshot base record is required before reconciling " + canonical.id + ".");
+      }
       const metadata = recordChangeMetadata(record, now, !existing);
       const tombstone = currentTombstones.get(canonical.id);
       if (tombstone && new Date(tombstone.deletedAt).getTime() >= new Date(metadata.at).getTime()) {
@@ -2358,6 +2365,10 @@
         return;
       }
       const existingRecord = currentRecords.get(tombstone.recordId) || baseRecords.get(tombstone.recordId);
+      const indexEntry = recordIndex[tombstone.recordId];
+      if (!existingRecord && indexEntry && snapshotPaths.has(indexEntry.location)) {
+        throw new Error("Snapshot base record is required before deleting " + tombstone.recordId + ".");
+      }
       if (existingTombstone
         && !existingRecord
         && new Date(existingTombstone.deletedAt).getTime() === new Date(tombstone.deletedAt).getTime()

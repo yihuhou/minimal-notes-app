@@ -6656,7 +6656,8 @@
             return;
           }
           if (revisionBeforeFetch !== state.recordsRevision
-            || recordsBeforeFetch !== getRecordsSnapshot(getHotRecordsFromState())
+            || (!result.snapshotProjectionChanged
+              && recordsBeforeFetch !== getRecordsSnapshot(getHotRecordsFromState()))
             || state.remote.pushLocalNext
             || state.remote.writeInFlight
             || state.remote.writeQueued) {
@@ -6672,6 +6673,10 @@
             state.remote.checkedThisSession = true;
             state.remote.error = "";
             saveRemoteSyncSettingsToLocal();
+            if (result.snapshotProjectionChanged && state.remote.format === "v4") {
+              saveLocalRecords({ preservePayloadTime: true });
+              render();
+            }
             updateStorageStatus();
             if (!opts.silent) {
               setStatus("GitHub 已是最新。");
@@ -6936,7 +6941,7 @@
         state.remote.manifest = manifest;
         state.remote.hot = hot;
         applyRecordIndexManifest(manifest);
-        applySnapshotManifest(manifest);
+        const snapshotProjectionChanged = await applySnapshotManifest(manifest);
         state.remote.manifestSha = manifestResult.sha || state.remote.manifestSha;
         state.remote.manifestEtag = manifestResult.etag || state.remote.manifestEtag;
         state.remote.hotSha = hotResult.sha || state.remote.hotSha;
@@ -6944,7 +6949,13 @@
         state.remote.sha = state.remote.hotSha;
         state.remote.etag = state.remote.hotEtag;
         if (manifestResult.notModified && hotResult.notModified) {
-          return { notModified: true, missing: false, sha: state.remote.hotSha, format: "v4" };
+          return {
+            notModified: true,
+            missing: false,
+            sha: state.remote.hotSha,
+            format: "v4",
+            snapshotProjectionChanged: snapshotProjectionChanged
+          };
         }
         const payload = RECORDS_STORE.payloadFromV4Hot(hot);
         return Object.assign({}, payload, {
@@ -6957,12 +6968,14 @@
           hotEtag: state.remote.hotEtag,
           format: "v4",
           currentStats: manifest.currentStats || null,
+          snapshotProjectionChanged: snapshotProjectionChanged,
           needsSanitizedWrite: false,
           payloadAt: getPayloadTimestamp(payload)
         });
       }
 
-      function applySnapshotManifest(manifest) {
+      async function applySnapshotManifest(manifest) {
+        const hotProjectionBefore = getRecordsSnapshot(getHotRecordsFromState());
         const descriptors = Array.isArray(manifest && manifest.snapshots)
           ? manifest.snapshots.filter(function (descriptor) {
             return descriptor && typeof descriptor.path === "string" && descriptor.path;
@@ -6975,21 +6988,6 @@
         const remoteHot = state.remote.hot || {};
         const hotIds = new Set((remoteHot.records || []).map(function (record) { return record.id; }));
         const tombstoneIds = new Set((remoteHot.tombstones || []).map(function (entry) { return entry.recordId; }));
-        const trackedSnapshotIds = getSnapshotRecordIdSet();
-        state.records = state.records.filter(function (record) {
-          if (!record || trackedSnapshotIds.has(record.id)) {
-            return true;
-          }
-          const indexEntry = getRecordIndexEntry(record.id);
-          if (!indexEntry || !snapshotPaths.has(indexEntry.location) || !indexEntry.headRevisionId) {
-            return true;
-          }
-          const baseline = state.snapshots.baseRecordsById[record.id];
-          if (baseline && !snapshotRecordContentEqual(record, baseline)) {
-            return true;
-          }
-          return String(record.headRevisionId || "") !== String(indexEntry.headRevisionId);
-        });
         Object.keys(state.snapshots.loadedPaths).forEach(function (pathValue) {
           const descriptor = nextByPath.get(pathValue);
           if (!descriptor || state.snapshots.loadedPaths[pathValue] !== String(descriptor.contentHash || "")) {
@@ -7018,7 +7016,77 @@
           const rightAt = right.lastSortAt || right.lastAt || "";
           return String(rightAt).localeCompare(String(leftAt)) || right.path.localeCompare(left.path);
         });
+        await reconcileNewlyColdStateRecords(manifest, descriptors, hotIds, tombstoneIds);
+        const trackedSnapshotIds = getSnapshotRecordIdSet();
+        state.records = state.records.filter(function (record) {
+          if (!record || trackedSnapshotIds.has(record.id)) {
+            return true;
+          }
+          const indexEntry = getRecordIndexEntry(record.id);
+          if (!indexEntry || !snapshotPaths.has(indexEntry.location) || !indexEntry.headRevisionId) {
+            return true;
+          }
+          const baseline = state.snapshots.baseRecordsById[record.id];
+          if (baseline && !snapshotRecordContentEqual(record, baseline)) {
+            return true;
+          }
+          return String(record.headRevisionId || "") !== String(indexEntry.headRevisionId);
+        });
         state.snapshots.error = "";
+        return hotProjectionBefore !== getRecordsSnapshot(getHotRecordsFromState());
+      }
+
+      async function reconcileNewlyColdStateRecords(manifest, descriptors, hotIds, tombstoneIds) {
+        const trackedSnapshotIds = getSnapshotRecordIdSet();
+        const candidates = (state.records || []).filter(function (record) {
+          return record && record.id && record.headRevisionId
+            && !hotIds.has(record.id)
+            && !tombstoneIds.has(record.id)
+            && !trackedSnapshotIds.has(record.id);
+        });
+        if (!candidates.length) {
+          return false;
+        }
+
+        await loadRecordIndexEntries(manifest, candidates.map(function (record) { return record.id; }));
+        const descriptorsByPath = new Map((descriptors || []).map(function (descriptor) {
+          return [descriptor.path, descriptor];
+        }));
+        const candidatesByPath = new Map();
+        candidates.forEach(function (record) {
+          const indexEntry = getRecordIndexEntry(record.id);
+          if (!indexEntry || !descriptorsByPath.has(indexEntry.location)) {
+            return;
+          }
+          const records = candidatesByPath.get(indexEntry.location) || [];
+          records.push(record);
+          candidatesByPath.set(indexEntry.location, records);
+        });
+
+        let changed = false;
+        for (const [pathValue, records] of candidatesByPath.entries()) {
+          const descriptor = descriptorsByPath.get(pathValue);
+          const envelope = await readSnapshotEnvelope(descriptor);
+          const snapshotById = new Map(envelope.records.map(normalizeImportedRecord)
+            .filter(Boolean)
+            .map(function (record) { return [record.id, record]; }));
+          const pathRecordIds = new Set(state.snapshots.recordIdsByPath[pathValue] || []);
+          records.forEach(function (record) {
+            const indexEntry = getRecordIndexEntry(record.id);
+            const baseline = snapshotById.get(record.id);
+            if (!indexEntry || indexEntry.location !== pathValue || !baseline) {
+              throw new Error("snapshot 与 recordIndex 不一致：" + record.id);
+            }
+            state.snapshots.baseRecordsById[record.id] = cloneRecordForMerge(baseline);
+            state.snapshots.basePathById[record.id] = pathValue;
+            if (snapshotRecordContentEqual(record, baseline) && !pathRecordIds.has(record.id)) {
+              pathRecordIds.add(record.id);
+              changed = true;
+            }
+          });
+          state.snapshots.recordIdsByPath[pathValue] = Array.from(pathRecordIds);
+        }
+        return changed;
       }
 
       function removeLoadedSnapshotPath(pathValue) {
@@ -7127,6 +7195,36 @@
         return records;
       }
 
+      async function readSnapshotEnvelope(descriptor) {
+        let envelope = null;
+        const cached = await readSnapshotCache(descriptor);
+        if (cached && cached.contentHash === descriptor.contentHash) {
+          try {
+            envelope = validateSnapshotEnvelope(descriptor, cached.envelope);
+            await writeSnapshotCache(descriptor, envelope);
+          } catch (error) {
+            console.warn("Snapshot cache invalid, refetching", error);
+            envelope = null;
+          }
+        }
+        if (!envelope) {
+          const result = await fetchRemoteJsonFile(descriptor.path, { conditional: false });
+          if (result.missing) {
+            throw new Error("snapshot 文件不存在");
+          }
+          const text = typeof result.text === "string" ? result.text : RECORDS_STORE.jsonText(result.value);
+          if (descriptor.contentHash && RECORDS_STORE.sha256(text) !== descriptor.contentHash) {
+            throw new Error("snapshot content hash 不一致");
+          }
+          if (Number(descriptor.bytes) && new TextEncoder().encode(text).length !== Number(descriptor.bytes)) {
+            throw new Error("snapshot bytes 不一致");
+          }
+          envelope = validateSnapshotEnvelope(descriptor, result.value);
+          await writeSnapshotCache(descriptor, envelope);
+        }
+        return envelope;
+      }
+
       async function loadSnapshotDescriptor(descriptor) {
         if (!descriptor || state.remote.temporary) {
           return [];
@@ -7139,32 +7237,7 @@
         }
         const promise = (async function () {
           try {
-            let envelope = null;
-            const cached = await readSnapshotCache(descriptor);
-            if (cached && cached.contentHash === descriptor.contentHash) {
-              try {
-                envelope = validateSnapshotEnvelope(descriptor, cached.envelope);
-                await writeSnapshotCache(descriptor, envelope);
-              } catch (error) {
-                console.warn("Snapshot cache invalid, refetching", error);
-                envelope = null;
-              }
-            }
-            if (!envelope) {
-              const result = await fetchRemoteJsonFile(descriptor.path, { conditional: false });
-              if (result.missing) {
-                throw new Error("snapshot 文件不存在");
-              }
-              const text = typeof result.text === "string" ? result.text : RECORDS_STORE.jsonText(result.value);
-              if (descriptor.contentHash && RECORDS_STORE.sha256(text) !== descriptor.contentHash) {
-                throw new Error("snapshot content hash 不一致");
-              }
-              if (Number(descriptor.bytes) && new TextEncoder().encode(text).length !== Number(descriptor.bytes)) {
-                throw new Error("snapshot bytes 不一致");
-              }
-              envelope = validateSnapshotEnvelope(descriptor, result.value);
-              await writeSnapshotCache(descriptor, envelope);
-            }
+            const envelope = await readSnapshotEnvelope(descriptor);
             const records = await applyLoadedSnapshot(descriptor, envelope);
             render();
             return records;

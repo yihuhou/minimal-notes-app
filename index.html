@@ -11088,12 +11088,14 @@
 
         const numberToken = "[0-9一二两三四五六七八九十]+";
         const monthDayToken = "[0-9一二两三四五六七八九十]{1,3}";
+        const monthDayListToken = "(?:" + monthDayToken + "\\s*(?:日|号)?\\s*(?:、|,|，|和|及|与|以及)\\s*)*"
+          + monthDayToken + "\\s*(?:日|号)";
         const patterns = [
           /每(?:个)?工作日/g,
           /每周\s*(?:一|1)\s*(?:到|至|-|~|～)\s*(?:周)?(?:五|5)/g,
           new RegExp("每(?:年|年度)\\s*" + monthDayToken + "\\s*月\\s*" + monthDayToken + "\\s*(?:日|号)?", "g"),
-          new RegExp("每(?:个)?月\\s*(?:" + monthDayToken + "\\s*(?:日|号)|底|末)", "g"),
-          new RegExp("每月\\s*(?:" + monthDayToken + "\\s*(?:日|号)|底|末)", "g"),
+          new RegExp("每(?:个)?月\\s*(?:" + monthDayListToken + "|底|末)", "g"),
+          new RegExp("每月\\s*(?:" + monthDayListToken + "|底|末)", "g"),
           /每(?:周|星期|礼拜)\s*(?:(?:周|星期|礼拜)?[一二三四五六日天末]\s*[、,，和及]?\s*)+/g,
           /(?:每天|每日|天天|\bdaily\b|\bevery day\b)/gi,
           new RegExp("每(?:隔)?\\s*" + numberToken + "\\s*(?:天|日|周|星期|礼拜|个月|月|年)", "g"),
@@ -13392,16 +13394,23 @@
           }
         }
 
-        const monthlyFixed = source.match(/每(?:个)?月\s*([0-9一二两三四五六七八九十]{1,3})\s*(?:日|号)/)
-          || source.match(/每月\s*([0-9一二两三四五六七八九十]{1,3})\s*(?:日|号)/);
+        const monthDayToken = "[0-9一二两三四五六七八九十]{1,3}";
+        const monthDayList = "((?:" + monthDayToken + "\\s*(?:日|号)?\\s*(?:、|,|，|和|及|与|以及)\\s*)*"
+          + monthDayToken + "\\s*(?:日|号))";
+        const monthlyFixed = source.match(new RegExp("每(?:个)?月\\s*" + monthDayList));
         if (monthlyFixed) {
-          const monthDay = parsePositiveIntegerToken(monthlyFixed[1]);
-          if (isValidMonthDay(monthDay)) {
+          const monthDays = uniqueSortedNumbers(
+            (monthlyFixed[1].match(new RegExp(monthDayToken, "g")) || []).map(parsePositiveIntegerToken),
+            1,
+            31
+          );
+          if (monthDays.length) {
             return normalizeRecurrenceInfo({
               frequency: "monthly",
               interval: 1,
               mode: "fixed",
-              monthDay: monthDay
+              monthDay: monthDays[0],
+              monthDays: monthDays
             });
           }
         }
@@ -13508,14 +13517,21 @@
           ? uniqueSortedNumbers(value.weekdays, 0, 6)
           : [];
         const month = isValidMonth(parseInt(value.month, 10)) ? parseInt(value.month, 10) : 0;
+        const normalizedMonthDays = uniqueSortedNumbers(value.monthDays || [], 1, 31);
         let monthDay = "";
         if (value.monthDay === "last") {
           monthDay = "last";
         } else if (isValidMonthDay(parseInt(value.monthDay, 10))) {
           monthDay = parseInt(value.monthDay, 10);
         }
+        if (!monthDay && normalizedMonthDays.length) {
+          monthDay = normalizedMonthDays[0];
+        }
+        const monthDays = monthDay === "last"
+          ? []
+          : uniqueSortedNumbers([monthDay].concat(normalizedMonthDays), 1, 31);
 
-        return {
+        const result = {
           frequency: frequency,
           interval: interval,
           mode: mode,
@@ -13524,6 +13540,41 @@
           month: month,
           label: typeof value.label === "string" ? value.label.slice(0, 24) : ""
         };
+        if (monthDays.length > 1) {
+          result.monthDays = monthDays;
+        }
+        return result;
+      }
+
+      function getFixedMonthlyRecurrenceDays(value) {
+        const recurrence = value && typeof value === "object" ? value : {};
+        if (recurrence.monthDay === "last") {
+          return ["last"];
+        }
+        return uniqueSortedNumbers(
+          [recurrence.monthDay].concat(Array.isArray(recurrence.monthDays) ? recurrence.monthDays : []),
+          1,
+          31
+        );
+      }
+
+      function shouldUseRicherInferredRecurrence(importedValue, inferredValue) {
+        const imported = normalizeRecurrenceInfo(importedValue);
+        const inferred = normalizeRecurrenceInfo(inferredValue);
+        if (!imported || !inferred
+          || imported.frequency !== "monthly"
+          || inferred.frequency !== "monthly"
+          || imported.mode !== "fixed"
+          || inferred.mode !== "fixed") {
+          return false;
+        }
+
+        const importedDays = getFixedMonthlyRecurrenceDays(imported);
+        const inferredDays = getFixedMonthlyRecurrenceDays(inferred);
+        return inferredDays.length > importedDays.length
+          && importedDays.every(function (monthDay) {
+            return inferredDays.indexOf(monthDay) !== -1;
+          });
       }
 
       function isRecurringRecord(record) {
@@ -13707,6 +13758,23 @@
         };
       }
 
+      function repairRecurringEventAtFromCompletions(eventAtValue, completionEntries) {
+        let eventAt = normalizeDateTime(eventAtValue);
+        if (!eventAt) {
+          return "";
+        }
+
+        normalizeRecurrenceCompletionEntries(completionEntries).forEach(function (entry) {
+          if (!entry.occurrenceAt || !entry.nextEventAt || entry.occurrenceAt !== eventAt) {
+            return;
+          }
+          if (new Date(entry.nextEventAt).getTime() > new Date(entry.occurrenceAt).getTime()) {
+            eventAt = entry.nextEventAt;
+          }
+        });
+        return eventAt;
+      }
+
       function normalizeRecurrenceCompletionArchiveEntries(value) {
         if (!Array.isArray(value)) {
           return [];
@@ -13843,17 +13911,34 @@
         }
 
         if (recurrence.frequency === "monthly") {
-          if (recurrence.monthDay) {
-            let candidate = makeMonthlyOccurrence(
-              threshold.getFullYear(),
-              threshold.getMonth(),
-              recurrence.monthDay,
-              timeSource
-            );
-            while (candidate.getTime() <= threshold.getTime()) {
-              candidate = addMonthsClamped(candidate, recurrence.interval, recurrence.monthDay);
+          const monthDays = getFixedMonthlyRecurrenceDays(recurrence);
+          if (monthDays.length) {
+            for (let offset = 0; offset <= recurrence.interval; offset += 1) {
+              const monthStart = new Date(threshold.getFullYear(), threshold.getMonth() + offset, 1);
+              const monthDelta = (monthStart.getFullYear() - timeSource.getFullYear()) * 12
+                + monthStart.getMonth() - timeSource.getMonth();
+              if (monthDelta < 0 || monthDelta % recurrence.interval !== 0) {
+                continue;
+              }
+
+              let nextInMonth = null;
+              monthDays.forEach(function (monthDay) {
+                const candidate = makeMonthlyOccurrence(
+                  monthStart.getFullYear(),
+                  monthStart.getMonth(),
+                  monthDay,
+                  timeSource
+                );
+                if (candidate.getTime() > threshold.getTime()
+                  && (!nextInMonth || candidate.getTime() < nextInMonth.getTime())) {
+                  nextInMonth = candidate;
+                }
+              });
+              if (nextInMonth) {
+                return nextInMonth;
+              }
             }
-            return candidate;
+            return null;
           }
 
           let candidate = new Date(timeSource.getTime());
@@ -13919,16 +14004,12 @@
           return getNextWeekdayDate(today, recurrence.weekdays);
         }
 
-        if (recurrence.frequency === "monthly" && recurrence.monthDay) {
-          const candidate = makeMonthlyOccurrence(
-            today.getFullYear(),
-            today.getMonth(),
-            recurrence.monthDay,
+        if (recurrence.frequency === "monthly" && getFixedMonthlyRecurrenceDays(recurrence).length) {
+          return getFirstFixedOccurrenceAfter(
+            recurrence,
+            new Date(today.getTime() - 1),
             today
           );
-          return candidate.getTime() < today.getTime()
-            ? addMonthsClamped(candidate, recurrence.interval, recurrence.monthDay)
-            : candidate;
         }
 
         if (recurrence.frequency === "yearly" && recurrence.month && recurrence.monthDay) {
@@ -14367,8 +14448,11 @@
         }
 
         if (recurrence.frequency === "monthly") {
-          if (recurrence.mode === "fixed" && recurrence.monthDay) {
-            return recurrence.monthDay === "last" ? "每月底" : "每月" + recurrence.monthDay + "号";
+          const monthDays = getFixedMonthlyRecurrenceDays(recurrence);
+          if (recurrence.mode === "fixed" && monthDays.length) {
+            return monthDays[0] === "last"
+              ? "每月底"
+              : "每月" + monthDays.map(function (monthDay) { return monthDay + "号"; }).join("、");
           }
           return recurrence.interval === 1 ? "每月一次" : "每" + intervalText + "个月一次";
         }
@@ -15274,7 +15358,9 @@
           : (headRevisionAt || createdAt);
         const importedRecurrence = isPassiveRecord({ type: type }) ? null : normalizeRecurrenceInfo(record.recurrence);
         const inferredRecurrence = isPassiveRecord({ type: type }) ? null : extractRecurrenceInfo(text);
-        const recurrence = importedRecurrence || inferredRecurrence;
+        const recurrence = shouldUseRicherInferredRecurrence(importedRecurrence, inferredRecurrence)
+          ? inferredRecurrence
+          : (importedRecurrence || inferredRecurrence);
         let eventAt = isPassiveRecord({ type: type }) ? "" : normalizeDateTime(record.eventAt);
         if (!typeLock && type === "todo" && !recurrence && !eventAt) {
           const naturalInfo = extractNaturalDateInfo(text, createdAt);
@@ -15287,13 +15373,18 @@
           const naturalInfo = extractNaturalDateInfo(text, createdAt);
           eventAt = resolveRecurringEventAt(type, "", naturalInfo, recurrence, text, createdAt);
         }
-        if (isTimedType(type)) {
+        if (isTimedType(type) && !recurrence) {
           const repairReferenceAt = getTextResolutionReferenceAt(record, text, type);
           const naturalInfo = extractNaturalDateInfo(text, repairReferenceAt);
           const inferredEventAt = resolveTimedEventAt(type, "", naturalInfo);
           if (shouldRepairStoredEventAt(text, eventAt, inferredEventAt, repairReferenceAt)) {
             eventAt = inferredEventAt;
           }
+        }
+
+        const recurrenceCompletions = normalizeRecurrenceCompletionEntries(record.recurrenceCompletions);
+        if (recurrence && eventAt) {
+          eventAt = repairRecurringEventAtFromCompletions(eventAt, recurrenceCompletions);
         }
 
         const normalizedRecord = {
@@ -15315,7 +15406,7 @@
             completedAt: completedAt,
             updatedAt: updatedAt
           }),
-          recurrenceCompletions: normalizeRecurrenceCompletionEntries(record.recurrenceCompletions),
+          recurrenceCompletions: recurrenceCompletions,
           prepared: type === "meeting" ? Boolean(record.prepared) && !Boolean(record.completed) : false,
           completed: type === "journal" ? false : Boolean(record.completed),
           updatedAt: updatedAt

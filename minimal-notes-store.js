@@ -83,13 +83,20 @@
     }
     const intervalValue = Number.parseInt(value.interval, 10);
     const interval = Math.max(1, Math.min(365, Number.isFinite(intervalValue) ? intervalValue : 1));
+    const normalizedMonthDays = normalizeNumberList(value.monthDays, 1, 31);
     const monthDayValue = value.monthDay === "last" ? "last" : Number.parseInt(value.monthDay, 10);
-    const monthDay = monthDayValue === "last"
+    let monthDay = monthDayValue === "last"
       ? "last"
       : (Number.isInteger(monthDayValue) && monthDayValue >= 1 && monthDayValue <= 31 ? monthDayValue : "");
+    if (!monthDay && normalizedMonthDays.length) {
+      monthDay = normalizedMonthDays[0];
+    }
+    const monthDays = monthDay === "last"
+      ? []
+      : normalizeNumberList([monthDay].concat(normalizedMonthDays), 1, 31);
     const monthValue = Number.parseInt(value.month, 10);
     const month = Number.isInteger(monthValue) && monthValue >= 1 && monthValue <= 12 ? monthValue : 0;
-    return {
+    const result = {
       frequency: frequency,
       interval: interval,
       mode: value.mode === "sliding" ? "sliding" : "fixed",
@@ -98,6 +105,10 @@
       month: month,
       label: typeof value.label === "string" ? value.label.slice(0, 24) : ""
     };
+    if (monthDays.length > 1) {
+      result.monthDays = monthDays;
+    }
+    return result;
   }
 
   function normalizeRecurrenceCompletion(value) {

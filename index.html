@@ -1756,7 +1756,7 @@
       padding: 12px;
       border: 0;
       background: transparent;
-      color: var(--accent);
+      color: var(--text-faint);
       cursor: pointer;
     }
 
@@ -10400,6 +10400,7 @@
         }
         recordListLimit += RECORD_LIST_PAGE_SIZE;
         renderList(recordListVisible);
+        renderSnapshotLoadStatus();
         scheduleGTeacherTagAlignmentUpdate();
       }
 
@@ -10450,13 +10451,18 @@
           snapshotLoadStatus.textContent = "正在加载更早记录…";
           return;
         }
+        if (!recordListMore.hidden) {
+          snapshotLoadStatus.hidden = true;
+          snapshotLoadStatus.textContent = "";
+          return;
+        }
         if (relevant.length) {
           snapshotLoadStatus.textContent = state.search
             ? "还有更早记录尚未搜索。"
             : "向下滚动以加载更早记录。";
           return;
         }
-        snapshotLoadStatus.textContent = "已加载全部相关记录。";
+        snapshotLoadStatus.textContent = "已显示全部相关记录。";
       }
 
       function renderItem(record, conflicts) {

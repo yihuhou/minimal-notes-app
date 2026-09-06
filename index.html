@@ -10329,7 +10329,6 @@
         const shown = visible.slice(0, recordListLimit);
         const conflictMap = shown.some(isConflictCandidate) ? buildConflictMap(state.records) : {};
         recordListMore.hidden = visible.length <= shown.length;
-        recordListMore.textContent = "显示更多记录（还有 " + (visible.length - shown.length) + " 条）";
 
         if (!visible.length) {
           const pendingSearch = Boolean(state.search

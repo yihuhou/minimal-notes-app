@@ -1751,6 +1751,15 @@
       cursor: pointer;
     }
 
+    #recordListMore {
+      width: 100%;
+      padding: 12px;
+      border: 0;
+      background: transparent;
+      color: var(--accent);
+      cursor: pointer;
+    }
+
     .footer {
       padding: 0 24px 18px;
       border-top: 0;
@@ -2652,6 +2661,7 @@
 
       <section class="list-wrap">
         <div id="recordList" class="list" aria-live="polite"></div>
+        <button id="recordListMore" class="snapshot-load-status" type="button" hidden>显示更多记录</button>
         <div id="snapshotLoadStatus" class="snapshot-load-status" aria-live="polite" hidden></div>
       </section>
 
@@ -3080,6 +3090,18 @@
       let remotePollTimer = null;
       let remoteWriteTimer = null;
       let snapshotSearchTimer = null;
+      let searchRenderTimer = null;
+      let searchComposing = false;
+      let backgroundRenderTimer = null;
+      const journalTextHtmlCache = new WeakMap();
+      const recordDateSearchCache = new WeakMap();
+      const RECORD_LIST_PAGE_SIZE = 40;
+      const recordListMore = document.getElementById("recordListMore");
+      let recordListLimit = RECORD_LIST_PAGE_SIZE;
+      let recordListQuery = "";
+      let recordListVisible = [];
+      let recordListNodes = new Map();
+      let recordListGrowFrame = 0;
       let healthSummaryLoadId = 0;
       let deleteDialogResolve = null;
       let deleteDialogPreviousFocus = null;
@@ -3181,12 +3203,17 @@
           setGTeacherEnabled(Boolean(event.target.checked));
         });
 
-        searchInput.addEventListener("input", function (event) {
-          state.search = event.target.value.trim();
-          resumeSnapshotAutoLoad();
-          render();
-          queueSnapshotSearch();
+        searchInput.addEventListener("compositionstart", function () {
+          searchComposing = true;
+          queueSearchRender();
         });
+        searchInput.addEventListener("compositionend", function () {
+          searchComposing = false;
+          queueSearchRender();
+        });
+        searchInput.addEventListener("input", queueSearchRender);
+        recordListMore.addEventListener("click", showMoreRecords);
+        window.addEventListener("scroll", scheduleRecordListGrow, { passive: true });
 
         recordList.addEventListener("click", handleListClick);
         recordList.addEventListener("keydown", handleListKeydown);
@@ -4473,7 +4500,14 @@
           selectionDirection: "none",
           restoreFocus: true
         };
-        render();
+        const item = recordList.querySelector('.item[data-id="' + cssEscape(id) + '"]');
+        const main = item && item.querySelector(".item-main");
+        if (main) {
+          main.innerHTML = renderInlineEdit(record);
+          recordListNodes.delete(id);
+        } else {
+          render();
+        }
         focusEditField(id);
       }
 
@@ -6503,6 +6537,9 @@
         state.localPayloadAt = "";
         state.filter = "all";
         state.search = "";
+        window.clearTimeout(searchRenderTimer);
+        searchRenderTimer = null;
+        searchComposing = false;
         state.editingId = null;
         state.composing = false;
         state.composerExpanded = false;
@@ -7239,7 +7276,7 @@
           try {
             const envelope = await readSnapshotEnvelope(descriptor);
             const records = await applyLoadedSnapshot(descriptor, envelope);
-            render();
+            queueBackgroundRender();
             return records;
           } catch (error) {
             console.error(error);
@@ -7344,6 +7381,34 @@
         }, 180);
       }
 
+      function queueSearchRender() {
+        window.clearTimeout(searchRenderTimer);
+        window.clearTimeout(snapshotSearchTimer);
+        state.snapshots.searchToken += 1;
+        state.snapshots.searchInFlight = false;
+        searchRenderTimer = null;
+        if (searchComposing) {
+          return;
+        }
+        searchRenderTimer = window.setTimeout(function () {
+          searchRenderTimer = null;
+          state.search = searchInput.value.trim();
+          resumeSnapshotAutoLoad();
+          render();
+          queueSnapshotSearch();
+        }, 180);
+      }
+
+      function queueBackgroundRender() {
+        if (backgroundRenderTimer !== null) {
+          return;
+        }
+        backgroundRenderTimer = window.setTimeout(function () {
+          backgroundRenderTimer = null;
+          render();
+        }, 120);
+      }
+
       async function loadSnapshotsForSearch(token) {
         if (token !== state.snapshots.searchToken || !state.search || state.remote.temporary) {
           return;
@@ -7354,11 +7419,11 @@
         });
         if (!descriptors.length) {
           state.snapshots.searchInFlight = false;
-          render();
+          renderSnapshotLoadStatus();
           return;
         }
         state.snapshots.searchInFlight = true;
-        render();
+        renderSnapshotLoadStatus();
         let cursor = 0;
         async function worker() {
           while (cursor < descriptors.length && token === state.snapshots.searchToken) {
@@ -7377,7 +7442,7 @@
         ));
         if (token === state.snapshots.searchToken) {
           state.snapshots.searchInFlight = false;
-          render();
+          queueBackgroundRender();
         }
       }
 
@@ -7400,6 +7465,9 @@
           return;
         }
         const documentBottom = getDocumentScrollHeight() - (getWindowScrollY() + window.innerHeight);
+        if (searchComposing || searchRenderTimer !== null || !recordListMore.hidden) {
+          return;
+        }
         if (documentBottom > SNAPSHOT_LOAD_DISTANCE_PX) {
           return;
         }
@@ -9805,6 +9873,13 @@
       }
 
       function render() {
+        // Background loads can finish between keystrokes or during IME composition.
+        // The settled search renders their latest data in one pass.
+        if (searchComposing || searchRenderTimer !== null) {
+          return;
+        }
+        window.clearTimeout(backgroundRenderTimer);
+        backgroundRenderTimer = null;
         scheduleAutoCompletionRefresh();
         const visible = getVisibleRecords();
         renderFilters();
@@ -9965,6 +10040,9 @@
         state.snapshots.footerJumpActive = true;
         if (state.snapshots.browsePromise) {
           await state.snapshots.browsePromise;
+        }
+        if (backgroundRenderTimer !== null) {
+          render();
         }
         const reduceMotion = window.matchMedia
           && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -10234,7 +10312,24 @@
 
       function renderList(visible) {
         const activeInlineEditDraft = getActiveInlineEditDraft();
-        const conflictMap = buildConflictMap(state.records);
+        const query = JSON.stringify([state.filter, state.search, state.journalViewMode]);
+        if (recordListQuery !== query) {
+          recordListLimit = RECORD_LIST_PAGE_SIZE;
+          recordListQuery = query;
+        }
+        if (activeInlineEditDraft) {
+          const editingIndex = visible.findIndex(function (record) {
+            return record.id === activeInlineEditDraft.id;
+          });
+          if (editingIndex >= recordListLimit) {
+            recordListLimit = Math.ceil((editingIndex + 1) / RECORD_LIST_PAGE_SIZE) * RECORD_LIST_PAGE_SIZE;
+          }
+        }
+        recordListVisible = visible;
+        const shown = visible.slice(0, recordListLimit);
+        const conflictMap = shown.some(isConflictCandidate) ? buildConflictMap(state.records) : {};
+        recordListMore.hidden = visible.length <= shown.length;
+        recordListMore.textContent = "显示更多记录（还有 " + (visible.length - shown.length) + " 条）";
 
         if (!visible.length) {
           const pendingSearch = Boolean(state.search
@@ -10251,18 +10346,74 @@
           } finally {
             recordListRenderInProgress = false;
           }
+          recordListNodes.clear();
           return;
         }
 
         recordListRenderInProgress = true;
         try {
-          recordList.innerHTML = visible.map(function (record) {
-            return renderItem(record, conflictMap[record.id] || []);
-          }).join("");
+          const nextNodes = new Map();
+          let cursor = recordList.firstElementChild;
+          shown.forEach(function (record) {
+            const existing = recordListNodes.get(record.id);
+            // Keep the actual textarea alive while sync or archive results arrive.
+            const editor = record.id === state.editingId && !isRecordEditLocked(record)
+              ? recordList.querySelector('.item[data-id="' + cssEscape(record.id) + '"] [data-role="edit-inline-text"]')
+              : null;
+            let entry;
+            if (editor) {
+              entry = { node: editor.closest(".item"), html: null };
+            } else {
+              const html = renderItem(record, conflictMap[record.id] || []);
+              if (existing && existing.html === html) {
+                entry = existing;
+              } else {
+                const template = document.createElement("template");
+                template.innerHTML = html;
+                entry = { node: template.content.firstElementChild, html: html };
+              }
+            }
+            if (entry.node !== cursor) {
+              recordList.insertBefore(entry.node, cursor);
+            }
+            cursor = entry.node.nextElementSibling;
+            nextNodes.set(record.id, entry);
+          });
+          while (cursor) {
+            const next = cursor.nextElementSibling;
+            cursor.remove();
+            cursor = next;
+          }
+          recordListNodes = nextNodes;
         } finally {
           recordListRenderInProgress = false;
         }
-        restoreInlineEditDraft(activeInlineEditDraft);
+        const activeEditor = document.activeElement;
+        if (!activeEditor || !activeEditor.matches('[data-role="edit-inline-text"]')) {
+          restoreInlineEditDraft(activeInlineEditDraft);
+        }
+      }
+
+      function showMoreRecords() {
+        if (searchComposing || searchRenderTimer !== null || recordListMore.hidden) {
+          return;
+        }
+        recordListLimit += RECORD_LIST_PAGE_SIZE;
+        renderList(recordListVisible);
+        scheduleGTeacherTagAlignmentUpdate();
+      }
+
+      function scheduleRecordListGrow() {
+        if (recordListGrowFrame || state.snapshots.autoLoadPaused || recordListMore.hidden) {
+          return;
+        }
+        recordListGrowFrame = window.requestAnimationFrame(function () {
+          recordListGrowFrame = 0;
+          if (!state.snapshots.autoLoadPaused
+            && recordListMore.getBoundingClientRect().top < window.innerHeight + SNAPSHOT_LOAD_DISTANCE_PX) {
+            showMoreRecords();
+          }
+        });
       }
 
       function renderSnapshotLoadStatus() {
@@ -10888,10 +11039,16 @@
 
       function renderDisplayTextHtml(record) {
         if (record && record.type === "journal") {
-          if (isGTeacherRecord(record)) {
-            return renderGTeacherJournalTextHtml(getDisplayText(record));
+          const text = getDisplayText(record);
+          const signature = state.journalPrivateHighlights.signature;
+          const gTeacher = isGTeacherRecord(record);
+          const cached = journalTextHtmlCache.get(record);
+          if (cached && cached.text === text && cached.signature === signature && cached.gTeacher === gTeacher) {
+            return cached.html;
           }
-          return highlightJournalRecordText(getDisplayText(record));
+          const html = gTeacher ? renderGTeacherJournalTextHtml(text) : highlightJournalRecordText(text);
+          journalTextHtmlCache.set(record, { text: text, signature: signature, gTeacher: gTeacher, html: html });
+          return html;
         }
 
         const mismatchInfo = getWeekdayMismatchInfo(record);
@@ -12281,8 +12438,6 @@
         const keyword = state.search.toLowerCase();
         const hasGTeacherRecords = hasGTeacherJournalRecords();
         return state.records
-          .slice()
-          .sort(sortVisibleRecords)
           .filter(function (record) {
             if (isRecordHiddenByTemporaryPrivacy(record)) {
               return false;
@@ -12320,7 +12475,7 @@
             }
 
             return recordMatchesSearch(record, keyword);
-          });
+          }).sort(sortVisibleRecords);
       }
 
       function recordMatchesSearch(record, keyword) {
@@ -12333,9 +12488,14 @@
 
       function recordDateMatchesSearch(record, keyword) {
         const normalizedKeyword = normalizeSearchToken(keyword);
-        return getRecordDateSearchTokens(record).some(function (token) {
-          return normalizeSearchToken(token) === normalizedKeyword;
-        });
+        const key = JSON.stringify([record.type, record.createdAt, record.updatedAt, record.eventAt,
+          formatLocalDayKey(new Date())]);
+        let cached = recordDateSearchCache.get(record);
+        if (!cached || cached.key !== key) {
+          cached = { key: key, tokens: new Set(getRecordDateSearchTokens(record).map(normalizeSearchToken)) };
+          recordDateSearchCache.set(record, cached);
+        }
+        return cached.tokens.has(normalizedKeyword);
       }
 
       function normalizeSearchToken(value) {

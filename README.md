@@ -154,6 +154,8 @@ DDL 6月10日前交材料
 
 如果你什么都不设置，记录会保存在当前浏览器里。
 
+如果浏览器保存失败，页面会显示提示和 `重试保存` 按钮。记录会暂留当前页面；请点击重试或用 `导出 JSON` 备份，确认保存后再关闭页面。已连接的 GitHub 同步和文件同步仍会尝试保存。
+
 这适合临时使用，但有几个限制：
 
 - 换手机或换电脑后，看不到原来的记录。
@@ -339,7 +341,7 @@ Token 没有写入权限。检查 `Contents` 是否设置成 `Read and write`，
 ### 给开发者
 
 这个项目是静态网页应用，主要文件是 `index.html` 和共享存储实现
-`minimal-notes-store.js`。GitHub Pages 发布时不需要后端服务。默认 GitHub 同步入口是
+`minimal-notes-store.js`，以及独立缓存模块 `minimal-notes-cache.js`。部署时请包含这三个文件。GitHub Pages 发布时不需要后端服务。默认 GitHub 同步入口是
 `minimal-notes-sync/manifest.json`；浏览器正常轮询只读取 manifest 和 hot，提交时才
 读取开放的 revision/trash 分片。`minimal-notes-records.json` 是继续支持的 v3、导入
 导出和云盘兼容格式。实际个人数据应放在单独的私有仓库，不属于这个公开 app 仓库。
@@ -489,6 +491,8 @@ Dates can be written as `2026-07-15`, `2026年7月15日`, `7月15日`, `15号`, 
 ### Where Data Is Saved By Default
 
 If you do not set up sync, records are saved in the current browser only.
+
+If browser storage fails, the app shows a warning and a `重试保存` (`Retry Save`) button. Your records remain in the current page; retry or use `导出 JSON` (`Export JSON`) to make a backup before closing it. Connected GitHub and file sync still attempt to save.
 
 That means:
 
@@ -675,7 +679,7 @@ If your data repository is public, they may be able to see them. Use a private r
 ### For Developers
 
 This is a static web app. Its main files are `index.html` and the shared store implementation,
-`minimal-notes-store.js`; GitHub Pages does not require a backend service. The default GitHub sync
+`minimal-notes-store.js`, plus the separate cache module `minimal-notes-cache.js`. Include all three files when deploying. GitHub Pages does not require a backend service. The default GitHub sync
 entry point is `minimal-notes-sync/manifest.json`. Normal browser polling reads only the manifest
 and hot state; writes also load the open revision/trash shards. `minimal-notes-records.json` remains
 the supported v3, import/export, and cloud-drive compatibility format. Personal data belongs in a

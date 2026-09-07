@@ -2027,6 +2027,15 @@
 
   function exportV3Snapshot(layout) {
     const revisions = collectLayoutRevisions(layout);
+    const revisionsByRecordId = new Map();
+    revisions.forEach(function (revision) {
+      let entries = revisionsByRecordId.get(revision.recordId);
+      if (!entries) {
+        entries = [];
+        revisionsByRecordId.set(revision.recordId, entries);
+      }
+      entries.push(revision);
+    });
     const activeById = new Map();
     collectLayoutSnapshots(layout).forEach(function (record) {
       activeById.set(record.id, record);
@@ -2038,13 +2047,13 @@
       activeById.delete(tombstone.recordId);
     });
     const active = Array.from(activeById.values()).map(function (record) {
-      return legacyRecordFromCanonical(record, revisions);
+      return legacyRecordFromCanonical(record, revisionsByRecordId.get(record.id) || []);
     });
     const deletedRecords = collectLayoutTrash(layout).map(function (entry) {
       return {
         recordId: entry.recordId,
         deletedAt: entry.deletedAt,
-        record: legacyRecordFromCanonical(entry.record, revisions)
+        record: legacyRecordFromCanonical(entry.record, revisionsByRecordId.get(entry.recordId) || [])
       };
     });
     (layout.hot.tombstones || []).filter(function (tombstone) {
@@ -2463,8 +2472,11 @@
       if (currentRecords.has(revision.recordId)) {
         indexEntry.location = manifest.hot.path;
       }
-      indexEntry.headRevisionId = revision.id;
-      indexEntry.headRevisionAt = revision.at;
+      // A stale incoming revision is still history, but may not become the head.
+      const active = revision.state.deleted ? null
+        : currentRecords.get(revision.recordId) || baseRecords.get(revision.recordId);
+      indexEntry.headRevisionId = active ? active.headRevisionId : revision.id;
+      indexEntry.headRevisionAt = active ? active.headRevisionAt : revision.at;
       recordIndex[revision.recordId] = indexEntry;
     });
     trashEntries.forEach(function (entry) {
@@ -2561,6 +2573,21 @@
         manifestChanged = true;
       }
     }
+    const repairedRecordIds = [];
+    collectLayoutSnapshots(next).concat(hot.records || []).forEach(function (record) {
+      const entry = recordIndex[record.id];
+      // Older indexes may omit head metadata. Repair disagreements where a head
+      // is already declared, using the authoritative active state as the source.
+      if (entry && entry.headRevisionId && record.headRevisionId
+        && (entry.headRevisionId !== record.headRevisionId
+          || entry.headRevisionAt !== record.headRevisionAt)) {
+        entry.headRevisionId = record.headRevisionId;
+        entry.headRevisionAt = record.headRevisionAt;
+        touchedRecordIds.add(record.id);
+        repairedRecordIds.push(record.id);
+        manifestChanged = true;
+      }
+    });
     const indexSync = syncRecordIndexShards(next, Array.from(touchedRecordIds));
     if (indexSync.changed) {
       manifestChanged = true;
@@ -2593,6 +2620,7 @@
       layout: next,
       writes: writes,
       newRevisions: uniqueNewRevisions,
+      repairedRecordIds: repairedRecordIds,
       archivedRecords: archival.candidates || [],
       manifestChanged: manifestChanged,
       payload: payloadFromV4Hot(hot)

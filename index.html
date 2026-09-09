@@ -12322,7 +12322,7 @@
       function parseRecordTypeCommandText(text) {
         const source = String(text || "").trim();
         const commands = [
-          { type: "idea", pattern: /^\s*(?:想法|idea)\s*(?:[:：]\s*)?(.*)$/i },
+          { type: "idea", pattern: /^\s*(?:想法|idea)\s*[:：]\s*(.*)$/i },
           { type: "journal", pattern: /^\s*(?:记录|日记|journal)\s*[:：]\s*(.*)$/i },
           { type: "todo", pattern: /^\s*(?:待办|todo)\s*[:：]\s*(.*)$/i },
           { type: "meeting", pattern: /^\s*(?:日程|meeting|schedule)\s*[:：]\s*(.*)$/i },

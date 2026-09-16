@@ -11913,7 +11913,7 @@
         const timeFragmentPattern = getTimeFragmentPatternSource();
         const periodTimePattern = timePeriodPattern + "(?:\\s*" + timeFragmentPattern + ")?";
         const relativeDatePattern = getRelativeDayPatternSource() + "|" + getCompactRelativePeriodDatePatternSource() + "|下周[一二三四五六日天]|本周[一二三四五六日天]|这周[一二三四五六日天]|周[一二三四五六日天]|星期[一二三四五六日天]";
-        const relativeDurationPattern = getRelativeDurationPatternSource() + "\\s*(?:以内|内)";
+        const relativeDurationPattern = getRelativeDurationPatternSource() + "\\s*(?:以内|内)|" + getWeekDeadlinePatternSource();
         const deadlinePattern = "截止|截至|过期|到期|失效|期满|有效期|DDL|ddl|deadline|之前|前";
         const knownLocationPattern = getKnownLocationPatternSource();
         const roomLocationPattern = "[在去到]\\s*" + getBareRoomLocationPatternSource();
@@ -13541,7 +13541,12 @@
         const datePattern = "(?:" + getDisplayDatePatternSource() + "|" + getStandaloneDayPatternSource() + ")";
         const dateOrTimePattern = "(?:" + datePattern + "(?:\\s*" + timePeriodPattern + ")?|" + timePeriodPattern + "|" + getTimeFragmentPatternSource() + ")";
         return new RegExp(dateOrTimePattern + "\\s*(?:前|之前)").test(source)
+          || new RegExp(getWeekDeadlinePatternSource()).test(source)
           || new RegExp(getRelativeDurationPatternSource() + "\\s*(?:以内|内)").test(source);
+      }
+
+      function getWeekDeadlinePatternSource() {
+        return "(?:本|这|下)(?:周|星期|礼拜)\\s*(?:之内|以内|内)";
       }
 
       function getRelativeDurationPatternSource(captureParts) {
@@ -14939,6 +14944,15 @@
         const explicitDateInfo = parseExplicitCalendarDate(text, now);
         if (explicitDateInfo.matched) {
           return explicitDateInfo;
+        }
+
+        const weekDeadlineMatch = String(text || "").match(new RegExp(getWeekDeadlinePatternSource()));
+        if (weekDeadlineMatch) {
+          const date = new Date(today);
+          const currentWeekday = (today.getDay() + 6) % 7;
+          const weekOffset = weekDeadlineMatch[0].startsWith("下") ? 7 : 0;
+          date.setDate(date.getDate() + 6 - currentWeekday + weekOffset);
+          return { matched: true, date: date };
         }
 
         const relativeDurationInfo = parseRelativeDurationDateInfo(text, now);

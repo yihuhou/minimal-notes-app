@@ -1776,6 +1776,50 @@
       text-align: right;
     }
 
+    .journal-milestone {
+      flex: 1 0 100%;
+      min-width: 0;
+      margin: 6px 0 12px;
+      padding: 18px 0 16px;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      text-align: center;
+      color: var(--text-soft);
+      line-height: 1.8;
+    }
+
+    .journal-milestone-label {
+      font-size: 12px;
+      letter-spacing: 0.12em;
+    }
+
+    .journal-milestone-total {
+      margin: 2px 0 6px;
+      color: #876252;
+      font-size: 13px;
+    }
+
+    .journal-milestone-total strong {
+      font-size: clamp(28px, 6vw, 36px);
+      font-weight: 550;
+      line-height: 1.3;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .journal-milestone-breakdown {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      column-gap: 14px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .journal-milestone-next {
+      margin-top: 6px;
+      color: #876252;
+    }
+
     .journal-ritual-count {
       display: inline-flex;
       align-items: baseline;
@@ -2677,6 +2721,12 @@
       </div>
 
       <footer class="footer">
+        <section id="journalMilestone" class="journal-milestone" aria-label="日记写作里程碑" hidden>
+          <div class="journal-milestone-label">累计写下</div>
+          <div class="journal-milestone-total"><strong id="journalMilestoneTotal"></strong> 字</div>
+          <div id="journalMilestoneBreakdown" class="journal-milestone-breakdown"></div>
+          <div id="journalMilestoneNext" class="journal-milestone-next"></div>
+        </section>
         <span>GitHub 用作主同步；云盘 JSON 仅作为电脑端备份。</span>
         <span id="summaryText">0 条记录</span>
       </footer>
@@ -2684,7 +2734,7 @@
     <aside id="ideaPane" class="idea-pane" aria-live="polite"></aside>
     </div>
   </main>
-  <button id="journalBottomJump" class="journal-bottom-jump" type="button" aria-label="跳到日记底部查看小红花统计" title="跳到小红花统计" hidden>
+  <button id="journalBottomJump" class="journal-bottom-jump" type="button" aria-label="跳到日记底部查看写作里程碑与小红花统计" title="跳到写作统计" hidden>
     <svg class="journal-bottom-jump-arrow" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
       <path d="M16 7v17M9.25 18 16 24.75 22.75 18" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"></path>
     </svg>
@@ -3054,6 +3104,10 @@
       const healthCalendarNote = document.getElementById("healthCalendarNote");
       const openCount = document.getElementById("openCount");
       const summaryText = document.getElementById("summaryText");
+      const journalMilestone = document.getElementById("journalMilestone");
+      const journalMilestoneTotal = document.getElementById("journalMilestoneTotal");
+      const journalMilestoneBreakdown = document.getElementById("journalMilestoneBreakdown");
+      const journalMilestoneNext = document.getElementById("journalMilestoneNext");
       const journalBottomJump = document.getElementById("journalBottomJump");
       const statusText = document.getElementById("statusText");
       const healthSummary = document.getElementById("healthSummary");
@@ -9436,6 +9490,7 @@
         if (!merged.ritual) {
           merged.ritual = normalizedLeft.ritual || normalizedRight.ritual;
         }
+        merged.historical = mergeHistoricalJournalStats(normalizedLeft.historical, normalizedRight.historical);
         const gTeacher = mergeGTeacherStats(normalizedLeft.gTeacher, normalizedRight.gTeacher, preferred.gTeacher);
         if (gTeacher) {
           merged.gTeacher = gTeacher;
@@ -9536,13 +9591,14 @@
       }
 
       function hasJournalStats(value) {
-        return Boolean(value && typeof value === "object" && !Array.isArray(value) && (value.ritual || value.gTeacher));
+        return Boolean(value && typeof value === "object" && !Array.isArray(value) && (value.ritual || value.gTeacher || value.historical));
       }
 
       function normalizeJournalStats(value) {
         const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
         const ritual = normalizeJournalRitualStats(source.ritual);
         const gTeacher = normalizeGTeacherStats(source.gTeacher);
+        const historical = normalizeHistoricalJournalStats(source.historical);
         const result = {};
         if (ritual) {
           result.ritual = ritual;
@@ -9550,10 +9606,30 @@
         if (gTeacher) {
           result.gTeacher = gTeacher;
         }
-        if ((ritual || gTeacher) && isValidDate(source.updatedAt)) {
+        if (historical) {
+          result.historical = historical;
+        }
+        if ((ritual || gTeacher || historical) && isValidDate(source.updatedAt)) {
           result.updatedAt = new Date(source.updatedAt).toISOString();
         }
         return Object.keys(result).length ? result : {};
+      }
+
+      function normalizeHistoricalJournalStats(value) {
+        if (!value || typeof value !== "object" || Array.isArray(value)
+            || !Number.isSafeInteger(value.characters) || value.characters < 0
+            || !normalizeLocalDayKey(value.fromDay) || !normalizeLocalDayKey(value.throughDay)
+            || value.fromDay > value.throughDay || !isValidDate(value.generatedAt)) {
+          return null;
+        }
+        return Object.assign({}, value);
+      }
+
+      function mergeHistoricalJournalStats(left, right) {
+        if (!left || !right) {
+          return left || right;
+        }
+        return new Date(right.generatedAt).getTime() > new Date(left.generatedAt).getTime() ? right : left;
       }
 
       function normalizeJournalRitualStats(value) {
@@ -10174,6 +10250,7 @@
           - Number(currentStats.completedRecords || 0));
         const totalVisibleCount = Number(currentStats.activeRecords || 0);
         openCount.textContent = String(unfinishedCount);
+        renderJournalMilestone(currentStats);
 
         if (state.filter === "journal") {
           const visibleUserJournalRecords = visible.filter(function (record) {
@@ -10200,6 +10277,37 @@
         }
 
         summaryText.textContent = "共 " + totalVisibleCount + " 条，当前显示 " + visible.length + " 条";
+      }
+
+      function renderJournalMilestone(currentStats) {
+        if (!journalMilestone) {
+          return;
+        }
+        const historical = normalizeHistoricalJournalStats(state.journalStats && state.journalStats.historical);
+        journalMilestone.hidden = state.filter !== "journal" || !historical;
+        if (journalMilestone.hidden) {
+          journalMilestoneTotal.textContent = "";
+          journalMilestoneBreakdown.textContent = "";
+          journalMilestoneNext.textContent = "";
+          journalMilestone.title = "";
+          return;
+        }
+
+        const currentCharacters = Number(currentStats.userJournalCharacters || 0);
+        const total = historical.characters + currentCharacters;
+        journalMilestoneTotal.textContent = formatSummaryNumber(total);
+        journalMilestoneBreakdown.textContent = "";
+        ["历史日记 " + formatSummaryNumber(historical.characters) + " 字",
+          "Minimal Notes " + formatSummaryNumber(currentCharacters) + " 字"].forEach(function (text) {
+          const part = document.createElement("span");
+          part.textContent = text;
+          journalMilestoneBreakdown.appendChild(part);
+        });
+        const nextMilestone = (Math.floor(total / 100000) + 1) * 100000;
+        journalMilestoneNext.textContent = "距 " + formatSummaryNumber(nextMilestone / 10000)
+          + " 万字，还有 " + formatSummaryNumber(nextMilestone - total) + " 字";
+        journalMilestone.title = "历史日记：" + historical.fromDay + " 至 " + historical.throughDay
+          + "；与 Minimal Notes 重复的日记已去重。按正文非空白字符计数，包含标点，不含 G老师。";
       }
 
       function renderJournalSummaryText(countText, journalDayCount, journalWordCount, ritualStats, ritualCount, suffixText) {

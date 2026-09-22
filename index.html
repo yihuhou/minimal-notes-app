@@ -1847,7 +1847,20 @@
       letter-spacing: 0.04em;
     }
 
-    .achievement-count { color: #876252; white-space: nowrap; }
+    .achievement-count {
+      margin: -6px -2px;
+      padding: 6px 2px;
+      border-radius: 4px;
+      color: #876252;
+      font-variant-numeric: tabular-nums;
+      text-decoration: underline;
+      text-decoration-color: rgba(135, 98, 82, 0.42);
+      text-decoration-style: dotted;
+      text-underline-offset: 3px;
+      white-space: nowrap;
+    }
+    .achievement-count:hover { text-decoration-color: currentColor; }
+    .achievement-count:focus-visible { outline: 2px solid #876252; outline-offset: 3px; }
     .achievement-intro { margin: 4px 0 16px; }
     .achievement-section-title { margin: 20px 0 10px; font-size: 13px; font-weight: 600; color: #51483e; }
     .achievement-records.achievement-runs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1894,7 +1907,14 @@
     .achievement-personal-records dt, .achievement-milestones dt { font-weight: 400; }
     .achievement-personal-records .achievement-records, .achievement-records.achievement-milestones { gap: 12px; }
     .achievement-records dd { margin: 2px 0 0; color: #51483e; font-variant-numeric: tabular-nums; }
-    .achievement-records strong { font-size: clamp(20px, 4vw, 28px); font-weight: 550; }
+    .achievement-records strong {
+      display: inline-block;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Aptos", sans-serif;
+      font-size: clamp(20px, 4vw, 28px);
+      font-weight: 600;
+      font-kerning: none;
+      line-height: 1.15;
+    }
     .achievement-records small { display: block; font-size: 10px; color: var(--text-soft); }
     .achievement-next {
       padding: 10px 12px;
@@ -1911,6 +1931,7 @@
       font-size: 12px;
     }
     .journal-achievements > .achievement-collection > summary { font-size: 13px; font-weight: 600; }
+    #journalAchievementCollection:not([open]) > summary { padding-block: 2px; }
     .achievement-collection > summary:focus-visible { outline: 2px solid #876252; outline-offset: 4px; }
     .achievement-group { margin-top: 20px; }
     .achievement-group > summary { cursor: pointer; padding: 4px 0 10px; font-size: 12px; }
@@ -2915,7 +2936,8 @@
         <section id="journalAchievements" class="journal-achievements" aria-labelledby="journalAchievementsTitle" hidden>
           <div class="achievement-heading">
             <h2 id="journalAchievementsTitle">日记纪录与勋章</h2>
-            <span id="journalAchievementsCount" class="achievement-count" aria-label="勋章解锁数量"></span>
+            <button id="journalAchievementsCount" class="achievement-count" type="button"
+              aria-label="查看已解锁勋章" aria-controls="journalAchievementCollection" aria-expanded="false"></button>
           </div>
           <p class="achievement-intro">看见正在延续的日常，也留下时间积累的分量。</p>
           <h3 class="achievement-section-title">本轮连续</h3>
@@ -3344,6 +3366,8 @@
       const journalMilestoneBreakdown = document.getElementById("journalMilestoneBreakdown");
       const journalMilestoneNext = document.getElementById("journalMilestoneNext");
       const journalAchievements = document.getElementById("journalAchievements");
+      const journalAchievementsCount = document.getElementById("journalAchievementsCount");
+      const journalAchievementCollection = document.getElementById("journalAchievementCollection");
       let journalAchievementsRenderKey = "";
       let journalAchievementsRefreshTimer = 0;
       let journalAchievementNewIds = [];
@@ -3451,6 +3475,10 @@
           document.getElementById("journalAchievementToast").hidden = true;
         });
         document.getElementById("journalAchievementToastView").addEventListener("click", showNewJournalAchievements);
+        journalAchievementsCount.addEventListener("click", showJournalAchievementCollection);
+        journalAchievementCollection.addEventListener("toggle", function () {
+          journalAchievementsCount.setAttribute("aria-expanded", String(journalAchievementCollection.open));
+        });
         window.addEventListener("focus", function () {
           if (state.localSaveError) { retryLocalSave(); }
           if (state.filter === "journal") renderJournalAchievements(getCurrentStatsForDisplay());
@@ -10667,6 +10695,25 @@
           firstCard.focus({ preventScroll: true });
           firstCard.scrollIntoView({ block: "center", behavior: "auto" });
         }
+      }
+
+      function showJournalAchievementCollection() {
+        journalAchievementCollection.open = true;
+        journalAchievementsCount.setAttribute("aria-expanded", "true");
+        const summary = journalAchievementCollection.querySelector("summary");
+        const reduceMotion = window.matchMedia
+          && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        window.requestAnimationFrame(function () {
+          summary.focus({ preventScroll: true });
+          try {
+            summary.scrollIntoView({
+              behavior: reduceMotion ? "auto" : "smooth",
+              block: "start"
+            });
+          } catch (error) {
+            summary.scrollIntoView(true);
+          }
+        });
       }
 
       function journalAchievementRange(range, key) {

@@ -60,49 +60,100 @@
       () => "365 个日期，每个都在至少 " + years + " 个年份留下记录", "个日期");
   });
 
-  // Shared motifs make day/week/month and writing/accumulation relationships visible.
-  // Tier belongs to a series, including calendar badges created in separate add() calls.
+  // Each series has an illustration, held in a porcelain setting with a silver rim.
+  // IDs are unique because the earned shelf and series shelf can show the same medal.
+  let medalSequence = 0;
   function medalSvg(groupId, tier) {
     const group = GROUPS.find(item => item.id === groupId) || GROUPS[0];
     const level = Math.max(1, Math.min(4, Math.trunc(Number(tier)) || 1));
-    const calendar = '<rect x="3" y="5" width="28" height="27" rx="4"/>'
-      + '<path d="M10 2v6m14-6v6M3 12h28"/>';
-    const dots = (xs, ys) => ys.map(y => xs.map(x =>
-      '<circle cx="' + x + '" cy="' + y + '" r="1.25" fill="currentColor" stroke="none"/>'
-    ).join("")).join("");
+    const id = "journal-medal-" + (++medalSequence);
+    const metal = 'url(#' + id + '-metal)';
+    const enamel = 'url(#' + id + '-enamel)';
+    const paper = 'var(--medal-paper, #546c80)';
+    const gold = 'var(--medal-gold, #9bb4cc)';
+    const ink = 'var(--medal-deep, #e9eef3)';
+    const star = (x, y, r) => '<path d="M' + x + ' ' + (y - r) + 'q0 ' + r + ' ' + r + ' ' + r
+      + 'q-' + r + ' 0-' + r + ' ' + r + 'q0-' + r + '-' + r + '-' + r
+      + 'q' + r + ' 0 ' + r + '-' + r + 'Z" fill="' + gold + '" stroke="none"/>';
+    // Coordinates leave a clear border around each illustration at phone sizes.
     const motifs = {
-      day: calendar + '<circle cx="17" cy="22" r="3.5" fill="currentColor" stroke="none"/>',
-      week: calendar + '<rect x="5" y="18" width="24" height="8" rx="1.5"/>'
-        + '<path d="M8.5 18v8M12 18v8M15.5 18v8M19 18v8M22.5 18v8M26 18v8" stroke-width="1"/>',
-      month: calendar + dots([9, 17, 25], [18, 23, 28]),
-      stack: '<path d="M9 2h19a3 3 0 0 1 3 3v20M5 6h19a3 3 0 0 1 3 3v20"/>'
-        + '<rect x="1" y="10" width="22" height="22" rx="3"/>'
-        + '<path d="M1 16h22"/><circle cx="12" cy="24" r="3" fill="currentColor" stroke="none"/>',
-      scroll: '<path d="M7 4h21a4 4 0 0 1 4 4v3h-7V8a4 4 0 0 1 3-4M7 4a4 4 0 0 0-4 4v18'
-        + 'M25 10v17a5 5 0 0 1-5 5H7a4 4 0 0 1-4-4v-2h13v2a4 4 0 0 0 4 4"/>'
-        + '<path d="M9 12h10M9 17h10M9 22h6"/>',
-      year: '<circle cx="17" cy="17" r="15" stroke-dasharray=".1 7.75" stroke-width="2.4"/>'
-        + '<path d="M17 2a15 15 0 0 1 15 15M28 14l4 3 2-4"/>'
-        + '<rect x="9" y="10" width="16" height="15" rx="2"/>'
-        + '<path d="M13 8v4m8-4v4M9 15h16m-11 5 2 2 4-4"/>'
+      streak: '<path d="M40 57a16 16 0 0 1 32 0Z" fill="' + gold + '" stroke="none"/>'
+        + '<path d="M56 29v6m-19 2 4 4m34-4-4 4M30 53h5m42 0h5" stroke="' + gold + '"/>'
+        + '<path d="M32 59h48M39 65h34M48 71h16"/>',
+      weekly: '<path d="m33 57 9-15 14 10 14-16 10 21-16 12-16-3Z" stroke="' + gold + '" opacity=".65"/>'
+        + [[33, 57], [42, 42], [56, 52], [70, 36], [80, 57], [64, 69], [48, 66]].map(([x, y]) =>
+          '<circle cx="' + x + '" cy="' + y + '" r="3.2" fill="' + paper + '" stroke="' + ink + '" stroke-width="1.3"/>'
+        ).join('') + star(70, 36, 5),
+      monthly: '<path d="M64 31a22 22 0 1 0 15 32A23 23 0 0 1 64 31Z" fill="' + paper + '" stroke="none"/>'
+        + '<path d="M42 37a19 19 0 0 0 4 34" stroke="' + gold + '" stroke-width="1.2"/>'
+        + star(73, 39, 5) + star(80, 51, 2.6),
+      rhythm: '<path d="m56 29-14 24 6 15h16l6-15Z" fill="' + paper + '" stroke="none"/>'
+        + '<path d="m56 29 14 24-6 15h-8Z" fill="' + gold + '" stroke="none"/>'
+        + '<path d="M56 32v21" stroke="' + ink + '"/><circle cx="56" cy="55" r="3.3" fill="' + ink + '" stroke="none"/>'
+        + '<path d="M48 73h16" stroke="' + gold + '" stroke-width="3"/>' + star(77, 38, 3),
+      "weekly-words": '<path d="M40 67C32 43 55 28 77 31c0 23-12 39-32 35Z" fill="' + paper + '" stroke="none"/>'
+        + '<path d="M43 66c18-2 30-18 34-35L55 52Z" fill="' + gold + '" stroke="none"/>'
+        + '<path d="m37 74 33-36m-17 19-10-1m18-10-9-1m3 10 10-1" stroke="' + ink + '" stroke-width="1.6"/>'
+        + '<path d="m37 74 8-9" stroke="' + gold + '" stroke-width="2.2"/>',
+      serial: '<path d="M32 36q12-5 24 3 12-8 24-3v34q-12-5-24 3-12-8-24-3Z" fill="' + paper + '" stroke="none"/>'
+        + '<path d="M56 39q12-8 24-3v34q-12-5-24 3Z" fill="' + gold + '" stroke="none"/>'
+        + '<path d="M56 40v31m-17-26q6-1 11 2m-11 5q6-1 11 2m-11 5q6-1 11 2m12-16q6-3 11-2m-11 9q6-3 11-2" stroke="' + ink + '" stroke-width="1.5"/>'
+        + '<path d="M67 34v20l4-3 4 1V33" fill="' + ink + '" stroke="none"/>',
+      thousand: '<rect x="33" y="40" width="12" height="32" rx="2" fill="' + paper + '" stroke="none"/>'
+        + '<rect x="48" y="32" width="13" height="40" rx="2" fill="' + gold + '" stroke="none"/>'
+        + '<path d="m63 41 10-3 9 31-10 3Z" fill="' + paper + '" stroke="none"/>'
+        + '<path d="M36 47h6m-6 18h6m9-25h7m-7 24h7m-3-17v10m13-12 5-1" stroke="' + ink + '" stroke-width="1.5"/>'
+        + '<path d="M31 76h51" stroke="' + gold + '"/>',
+      days: '<path d="M56 73V42m0 14L44 44m12 19 14-14" stroke="' + gold + '" stroke-width="2.5"/>'
+        + '<path d="M56 44C44 39 47 30 56 27c9 7 8 13 0 17Zm-9 12C34 55 32 46 34 39c12 0 18 8 13 17Zm18 5c-4-11 3-20 15-20 1 11-4 18-15 20Z" fill="' + paper + '" stroke="none"/>'
+        + '<path d="M56 67C45 66 41 61 39 56c10-2 17 1 17 11Z" fill="' + gold + '" stroke="none"/>'
+        + '<path d="M44 76h24"/>',
+      words: '<path d="M38 33h32v38H43a6 6 0 0 1-6-6V39Z" fill="' + paper + '" stroke="none"/>'
+        + '<path d="M38 33h32a6 6 0 0 1 6 6v4H65v-4a6 6 0 0 1 5-6M38 33a6 6 0 0 1 5 6v4H32v-4a6 6 0 0 1 6-6M37 65h26v3a5 5 0 0 0 10 0v-3h6v3a9 9 0 0 1-9 9H45a8 8 0 0 1-8-8Z" fill="' + gold + '" stroke="none"/>'
+        + '<path d="M49 44h10m-10 7h15m-15 7h12" stroke="' + ink + '" stroke-width="1.5"/>',
+      calendar: '<path d="M36 66q-13-18 2-32M76 66q13-18-2-32" stroke="' + gold + '" stroke-width="1.4"/>'
+        + '<path d="M34 54q-13-1-9-12 10 1 9 12m1-9q-7-9 2-15 7 7-2 15m43 9q13-1 9-12-10 1-9 12m-1-9q7-9-2-15-7 7 2 15" fill="' + gold + '" stroke="none"/>'
+        + '<rect x="40" y="39" width="32" height="32" rx="4" fill="' + paper + '" stroke="none"/>'
+        + '<path d="M40 48h32m-24-13v8m16-8v8" stroke="' + ink + '"/>'
+        + '<path d="m49 58 5 5 10-10" stroke="' + ink + '" stroke-width="2.5"/>'
     };
-    const nib = '<path d="m32 17-10 4-3 12 12-3 4-10Z" fill="var(--medal-paper)" stroke="var(--medal-paper)" stroke-width="5"/>'
-      + '<path d="m32 17-10 4-3 12 12-3 4-10Z" fill="var(--medal-paper)"/>'
-      + '<path d="m19 33 8-8m-5-4 9 9"/><circle cx="27" cy="25" r="1.6" fill="var(--medal-paper)"/>';
-    const grades = [0, 1, 2, 3].map(function (index) {
-      const x = 29.5 + index * 7;
-      return '<path d="m' + x + ' 56 2.4 3-2.4 3-2.4-3Z" fill="'
-        + (index < level ? 'currentColor' : 'var(--medal-paper)')
-        + '" stroke="currentColor" stroke-width=".8"/>';
-    }).join("");
-    return '<svg class="achievement-medal" viewBox="0 0 80 92" aria-hidden="true" focusable="false">'
-      + '<g stroke="currentColor" stroke-linejoin="round">'
-      + '<path d="m23 56-8 29 14-5 8 7 6-28m14-3 8 29-14-5-8 7-6-28" fill="var(--medal-fill)" stroke-width="1.3"/>'
-      + '<path d="m25 65-4 13m34-13 4 13" fill="none" stroke-width="1" opacity=".45"/>'
-      + '<circle cx="40" cy="37" r="33" fill="var(--medal-fill)" stroke-width="1.4"/>'
-      + '<circle cx="40" cy="37" r="28" fill="var(--medal-paper)" stroke-width=".7"/>'
-      + '</g><g transform="translate(23 17)" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
-      + motifs[group.icon] + (group.writing ? nib : '') + '</g>' + grades + '</svg>';
+    const silhouettes = {
+      presence: '<circle cx="56" cy="53" r="46"',
+      practice: '<path d="M43 8q13-7 26 0l9 5 10 5q13 7 13 22v26q0 14-13 22l-19 11q-13 7-26 0L24 88Q11 80 11 66V40q0-15 13-22Z"',
+      accumulation: '<path d="m56 5 35 17q8 4 8 13v34q0 9-8 14l-27 17q-8 5-16 0L21 83q-8-5-8-14V35q0-9 8-13Z"',
+      calendar: '<path d="M56 5c11 0 14 8 21 11s15 0 21 10 0 16 1 24 7 15 2 25-14 10-21 15-12 13-24 13-17-8-24-13S16 85 11 75s1-17 2-25-5-14 1-24 14-7 21-10S45 5 56 5Z"'
+    };
+    const shape = silhouettes[group.family];
+    const grades = Array.from({ length: level }, (_, index) => star(56 + (index - (level - 1) / 2) * 9, 22, 2.4)).join('');
+    const engraving = level > 1 ? '<g fill="none" stroke="' + gold + '" stroke-linecap="round" opacity=".75">'
+      + '<path d="M26 72q4 8 12 12m36 0q8-4 12-12" stroke-width="1.4"/>'
+      + (level > 2 ? '<path d="m29 77-5-1m9 6-5 1m55-6 5-1m-9 6 5 1" stroke-width="1.5"/>' : '')
+      + '</g>' : '';
+    const numerals = [
+      'M56 96v9m-3-9h6m-6 9h6',
+      'M53 96v9m6-9v9m-9-9h12m-12 9h12',
+      'M50 96v9m6-9v9m6-9v9m-15-9h18m-18 9h18',
+      'M49 96v9m-3-9h6m-6 9h6m3-9 4 9 4-9'
+    ];
+    return '<svg xmlns="http://www.w3.org/2000/svg" class="achievement-medal" viewBox="0 0 112 120" aria-hidden="true" focusable="false">'
+      + '<defs><linearGradient id="' + id + '-metal" x1="0" y1="0" x2=".8" y2="1">'
+      + '<stop stop-color="var(--medal-metal-light, #ffffff)"/><stop offset=".45" stop-color="var(--medal-metal, #dce0e3)"/>'
+      + '<stop offset=".7" stop-color="var(--medal-metal-light, #ffffff)"/><stop offset="1" stop-color="var(--medal-metal-dark, #a8b0b7)"/></linearGradient>'
+      + '<linearGradient id="' + id + '-enamel" x1="0" y1="0" x2=".65" y2="1">'
+      + '<stop stop-color="var(--medal-light, #ffffff)"/><stop offset="1" stop-color="' + ink + '"/></linearGradient></defs>'
+      + '<ellipse cx="56" cy="113" rx="27" ry="3" fill="var(--medal-shadow, #64758a)" opacity=".09"/>'
+      + shape + ' fill="' + metal + '" stroke="var(--medal-metal-dark, #a8b0b7)" stroke-width=".8"/>'
+      + '<g transform="translate(56 53) scale(.93) translate(-56 -53)">'
+      + shape + ' fill="' + enamel + '" stroke="' + paper + '" stroke-opacity=".5" stroke-width=".7"/></g>'
+      + '<circle cx="56" cy="53" r="37.5" fill="none" stroke="' + gold + '" stroke-width=".7" opacity=".5"/>'
+      + '<path d="M22 46a35 35 0 0 1 30-28" fill="none" stroke="' + paper + '" stroke-width="1.1" opacity=".25"/>'
+      + grades + '<g fill="none" stroke="' + paper + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+      + motifs[group.id] + '</g>' + engraving
+      + (level === 4 ? star(56, 84, 4) : '<circle cx="56" cy="83" r="1.5" fill="' + gold + '"/>')
+      + '<path d="M40 92h32v13l-16 7-16-7Z" fill="' + metal + '" stroke="var(--medal-metal-dark, #a8b0b7)" stroke-width=".7"/>'
+      + '<path d="M43 94h26v9l-13 6-13-6Z" fill="' + ink + '"/>'
+      + '<path d="' + numerals[level - 1] + '" fill="none" stroke="' + paper + '" stroke-width="1.35" stroke-linecap="round"/>'
+      + '</svg>';
   }
 
   function validDay(day) {

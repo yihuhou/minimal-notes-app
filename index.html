@@ -1883,11 +1883,11 @@
     .achievement-records {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
+      gap: 20px 16px;
       margin: 0 0 14px;
     }
     .achievement-records div { min-width: 0; }
-    .achievement-records dt { font-size: 11px; }
+    .achievement-records dt { color: #51483e; font-size: 12px; font-weight: 600; }
     .achievement-records dd { margin: 2px 0 0; color: #51483e; font-variant-numeric: tabular-nums; }
     .achievement-records strong { font-size: clamp(20px, 4vw, 28px); font-weight: 550; }
     .achievement-records small { display: block; font-size: 10px; color: var(--text-soft); }
@@ -1982,8 +1982,9 @@
     @media (max-width: 620px) {
       .journal-achievements { padding: 16px 12px; }
       .achievement-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-      .achievement-records { gap: 6px; }
+      .achievement-records { gap: 20px 12px; }
       .achievement-records.achievement-runs, .achievement-records.achievement-milestones { grid-template-columns: minmax(0, 1fr); }
+      .achievement-records.achievement-milestones { row-gap: 24px; }
       .achievement-personal-records .achievement-records { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .achievement-calendar-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
       .achievement-calendar { padding: 10px; }

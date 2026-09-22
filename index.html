@@ -10945,15 +10945,14 @@
         document.getElementById("journalAchievementEarnedTitle").textContent = "已获得 · " + earnedBadges.length + " 枚";
         document.getElementById("journalAchievementEarnedEmpty").hidden = Boolean(earnedBadges.length);
         const gallery = document.getElementById("journalAchievementGallery");
-        const firstGalleryRender = !gallery.hasChildNodes();
         const openGroups = new Set(Array.from(gallery.querySelectorAll("details[open]"))
           .map(group => group.dataset.group));
         gallery.replaceChildren();
-        model.groups.forEach(function (group, index) {
+        model.groups.forEach(function (group) {
           const section = document.createElement("details");
           section.className = "achievement-group";
           section.dataset.group = group.id;
-          section.open = openGroups.has(group.id) || (firstGalleryRender && index === 0);
+          section.open = openGroups.has(group.id);
           const heading = document.createElement("summary");
           const groupBadges = model.badges.filter(badge => badge.group === group.id);
           heading.textContent = group.title + " · " + groupBadges.filter(badge => badge.unlocked).length

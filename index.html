@@ -1964,6 +1964,7 @@
       line-height: 1.6;
     }
     .achievement-toast p { margin: 4px 0 10px; }
+    .achievement-toast-section + .achievement-toast-section { margin-top: 14px; }
     .achievement-toast-actions { display: flex; justify-content: flex-end; gap: 8px; }
     .achievement-toast button { padding: 6px 10px; border-radius: 7px; background: #e4eee5; }
     .achievement-toast button:focus-visible { outline: 2px solid #537c70; outline-offset: 2px; }
@@ -2965,8 +2966,7 @@
     </svg>
   </button>
   <div id="journalAchievementToast" class="achievement-toast" role="region" aria-label="日记勋章与纪录通知" hidden>
-    <strong id="journalAchievementToastTitle">新勋章，收下了</strong>
-    <p id="journalAchievementToastText" role="status" aria-live="polite" aria-atomic="true"></p>
+    <div id="journalAchievementToastText" role="status" aria-live="polite" aria-atomic="true"></div>
     <div class="achievement-toast-actions">
       <button id="journalAchievementToastDismiss" type="button">收起</button>
       <button id="journalAchievementToastView" type="button">查看勋章</button>
@@ -10592,20 +10592,45 @@
         journalPersonalRecordBreaks = (toast.hidden ? [] : journalPersonalRecordBreaks).concat(broken);
         broken.forEach(record => journalPersonalRecordNotified.add(record.id + ":" + record.period));
         journalAchievementNewIds = Array.from(new Set(previousIds.concat(unlocked.map(badge => badge.id))));
-        const names = model.badges.filter(badge => journalAchievementNewIds.includes(badge.id)).map(badge => badge.name);
+        const badges = model.badges.filter(badge => journalAchievementNewIds.includes(badge.id));
         const hasRecords = journalPersonalRecordBreaks.length > 0;
-        document.getElementById("journalAchievementToastTitle").textContent = hasRecords
-          ? names.length ? "新勋章，也有新纪录" : "突破了个人纪录" : "新勋章，收下了";
         document.getElementById("journalAchievementToastView").textContent = hasRecords
-          ? names.length ? "查看勋章与纪录" : "查看纪录" : "查看勋章";
-        const messages = names.length ? [names.slice(0, 3).join(" · ")
-          + (names.length > 3 ? " 等 " + names.length + " 枚" : "") + "，已加入收藏册。"] : [];
-        journalPersonalRecordBreaks.forEach(function (record) {
-          messages.push(record.name + "：" + formatSummaryNumber(record.value) + " " + record.unit
-            + "，超过此前的 " + formatSummaryNumber(record.previousBest) + " " + record.unit + "。");
+          ? badges.length ? "查看勋章与纪录" : "查看纪录" : "查看勋章";
+        const content = document.createDocumentFragment();
+        function addSection(title) {
+          const section = document.createElement("div");
+          section.className = "achievement-toast-section";
+          const heading = document.createElement("strong");
+          heading.textContent = title;
+          section.appendChild(heading);
+          content.appendChild(section);
+          return section;
+        }
+        badges.forEach(function (badge) {
+          const section = addSection("已解锁新勋章：" + badge.name);
+          const rule = document.createElement("p");
+          rule.textContent = badge.streakKey === "thousand"
+            ? "连续 " + formatSummaryNumber(badge.target) + " 天，每天写下至少 1,000 字。"
+            : badge.rule + "。";
+          section.appendChild(rule);
         });
+        if (hasRecords) {
+          const section = addSection("已刷新个人纪录");
+          const streakLabels = { daily: "连续写日记 ", thousand: "每日千字：连续 ",
+            weekly: "每周有记录：连续 ", monthly: "每月有记录：连续 ", monthlyWords: "每月两万字：连续 " };
+          journalPersonalRecordBreaks.forEach(function (record) {
+            const line = document.createElement("p");
+            const value = document.createElement("strong");
+            value.textContent = formatSummaryNumber(record.value) + " " + record.unit;
+            const previous = document.createElement("strong");
+            previous.textContent = formatSummaryNumber(record.previousBest) + " " + record.unit;
+            line.append(streakLabels[record.streakKey] || record.name.replace(/纪录$/, "") + "：",
+              value, "，超过原纪录 ", previous, "。");
+            section.appendChild(line);
+          });
+        }
         toast.hidden = false;
-        document.getElementById("journalAchievementToastText").textContent = messages.join(" ");
+        document.getElementById("journalAchievementToastText").replaceChildren(content);
         renderJournalAchievements(getCurrentStatsForDisplay());
       }
 

@@ -6,22 +6,23 @@
 
   const DAY = 86400000;
   const GROUPS = [
-    { id: "streak", title: "日日有记", icon: "flame" },
-    { id: "weekly", title: "周周有记", icon: "book" },
-    { id: "monthly", title: "月月有记", icon: "book" },
-    { id: "rhythm", title: "每日千字", icon: "pen" },
-    { id: "weekly-words", title: "每周五千字", icon: "pen" },
-    { id: "serial", title: "每月两万字", icon: "pen" },
-    { id: "thousand", title: "千字积累", icon: "pen" },
-    { id: "days", title: "日常积累", icon: "book" },
-    { id: "words", title: "写作长卷", icon: "pen" },
-    { id: "calendar", title: "日历收藏", icon: "spark" }
+    { id: "streak", title: "日日有记", family: "presence", icon: "day" },
+    { id: "weekly", title: "周周有记", family: "presence", icon: "week" },
+    { id: "monthly", title: "月月有记", family: "presence", icon: "month" },
+    { id: "rhythm", title: "每日千字", family: "practice", icon: "day", writing: true },
+    { id: "weekly-words", title: "每周五千字", family: "practice", icon: "week", writing: true },
+    { id: "serial", title: "每月两万字", family: "practice", icon: "month", writing: true },
+    { id: "thousand", title: "千字积累", family: "accumulation", icon: "stack", writing: true },
+    { id: "days", title: "日常积累", family: "accumulation", icon: "stack" },
+    { id: "words", title: "写作长卷", family: "accumulation", icon: "scroll" },
+    { id: "calendar", title: "日历收藏", family: "calendar", icon: "year" }
   ];
   const BADGES = [];
   function add(group, metric, targets, names, rule, unit, requiresDailyCharacters, streakKey) {
     targets.forEach(function (target, index) {
       BADGES.push({ id: metric + "-" + target, group: group, metric: metric, target: target,
         name: names[index], rule: rule(target), unit: unit,
+        tier: BADGES.filter(badge => badge.group === group).length + 1,
         requiresDailyCharacters: Boolean(requiresDailyCharacters), streakKey: streakKey || "" });
     });
   }
@@ -58,6 +59,51 @@
         : years === 3 ? "岁时三叠" : "岁时四叠"],
       () => "365 个日期，每个都在至少 " + years + " 个年份留下记录", "个日期");
   });
+
+  // Shared motifs make day/week/month and writing/accumulation relationships visible.
+  // Tier belongs to a series, including calendar badges created in separate add() calls.
+  function medalSvg(groupId, tier) {
+    const group = GROUPS.find(item => item.id === groupId) || GROUPS[0];
+    const level = Math.max(1, Math.min(4, Math.trunc(Number(tier)) || 1));
+    const calendar = '<rect x="3" y="5" width="28" height="27" rx="4"/>'
+      + '<path d="M10 2v6m14-6v6M3 12h28"/>';
+    const dots = (xs, ys) => ys.map(y => xs.map(x =>
+      '<circle cx="' + x + '" cy="' + y + '" r="1.25" fill="currentColor" stroke="none"/>'
+    ).join("")).join("");
+    const motifs = {
+      day: calendar + '<circle cx="17" cy="22" r="3.5" fill="currentColor" stroke="none"/>',
+      week: calendar + '<rect x="5" y="18" width="24" height="8" rx="1.5"/>'
+        + '<path d="M8.5 18v8M12 18v8M15.5 18v8M19 18v8M22.5 18v8M26 18v8" stroke-width="1"/>',
+      month: calendar + dots([9, 17, 25], [18, 23, 28]),
+      stack: '<path d="M9 2h19a3 3 0 0 1 3 3v20M5 6h19a3 3 0 0 1 3 3v20"/>'
+        + '<rect x="1" y="10" width="22" height="22" rx="3"/>'
+        + '<path d="M1 16h22"/><circle cx="12" cy="24" r="3" fill="currentColor" stroke="none"/>',
+      scroll: '<path d="M7 4h21a4 4 0 0 1 4 4v3h-7V8a4 4 0 0 1 3-4M7 4a4 4 0 0 0-4 4v18'
+        + 'M25 10v17a5 5 0 0 1-5 5H7a4 4 0 0 1-4-4v-2h13v2a4 4 0 0 0 4 4"/>'
+        + '<path d="M9 12h10M9 17h10M9 22h6"/>',
+      year: '<circle cx="17" cy="17" r="15" stroke-dasharray=".1 7.75" stroke-width="2.4"/>'
+        + '<path d="M17 2a15 15 0 0 1 15 15M28 14l4 3 2-4"/>'
+        + '<rect x="9" y="10" width="16" height="15" rx="2"/>'
+        + '<path d="M13 8v4m8-4v4M9 15h16m-11 5 2 2 4-4"/>'
+    };
+    const nib = '<path d="m32 17-10 4-3 12 12-3 4-10Z" fill="var(--medal-paper)" stroke="var(--medal-paper)" stroke-width="5"/>'
+      + '<path d="m32 17-10 4-3 12 12-3 4-10Z" fill="var(--medal-paper)"/>'
+      + '<path d="m19 33 8-8m-5-4 9 9"/><circle cx="27" cy="25" r="1.6" fill="var(--medal-paper)"/>';
+    const grades = [0, 1, 2, 3].map(function (index) {
+      const x = 29.5 + index * 7;
+      return '<path d="m' + x + ' 56 2.4 3-2.4 3-2.4-3Z" fill="'
+        + (index < level ? 'currentColor' : 'var(--medal-paper)')
+        + '" stroke="currentColor" stroke-width=".8"/>';
+    }).join("");
+    return '<svg class="achievement-medal" viewBox="0 0 80 92" aria-hidden="true" focusable="false">'
+      + '<g stroke="currentColor" stroke-linejoin="round">'
+      + '<path d="m23 56-8 29 14-5 8 7 6-28m14-3 8 29-14-5-8 7-6-28" fill="var(--medal-fill)" stroke-width="1.3"/>'
+      + '<path d="m25 65-4 13m34-13 4 13" fill="none" stroke-width="1" opacity=".45"/>'
+      + '<circle cx="40" cy="37" r="33" fill="var(--medal-fill)" stroke-width="1.4"/>'
+      + '<circle cx="40" cy="37" r="28" fill="var(--medal-paper)" stroke-width=".7"/>'
+      + '</g><g transform="translate(23 17)" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
+      + motifs[group.icon] + (group.writing ? nib : '') + '</g>' + grades + '</svg>';
+  }
 
   function validDay(day) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
@@ -329,5 +375,5 @@
   }
 
   return { compute: compute, journalDay: journalDay, validDay: validDay, newlyUnlocked: newlyUnlocked,
-    newlyBrokenRecords: newlyBrokenRecords };
+    newlyBrokenRecords: newlyBrokenRecords, medalSvg: medalSvg };
 }));

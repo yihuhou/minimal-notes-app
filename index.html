@@ -1944,9 +1944,13 @@
     .achievement-group > summary { cursor: pointer; padding: 3px 0; font-size: 12px; }
     .achievement-group[open] > .achievement-grid { margin-top: 7px; }
     .achievement-group > summary:focus-visible { outline: 2px solid #876252; outline-offset: 2px; }
+    .achievement-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 12px 0 5px; padding: 0; list-style: none; }
+    .achievement-legend li { display: flex; align-items: center; gap: 5px; color: #69645b; font-size: 11px; }
+    .achievement-legend li::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--medal-ink); }
+    .achievement-legend-note { margin: 0 0 14px; color: var(--text-soft); font-size: 10px; line-height: 1.7; }
     .achievement-grid {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
       list-style: none;
       padding: 0;
@@ -1955,6 +1959,7 @@
     .achievement-card {
       --medal-ink: #7e6f56;
       --medal-fill: #ede7db;
+      --medal-paper: #fffdf8;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -1965,16 +1970,13 @@
       text-align: center;
       min-width: 0;
     }
-    .achievement-card[data-group="streak"] { --medal-ink: #a35e43; --medal-fill: #f4e1cf; }
-    .achievement-card[data-group="rhythm"] { --medal-ink: #a2677b; --medal-fill: #f0e0e6; }
-    .achievement-card[data-group="weekly-words"] { --medal-ink: #89719b; --medal-fill: #eae2f0; }
-    .achievement-card[data-group="calendar"] { --medal-ink: #537c70; --medal-fill: #dcebe0; }
-    .achievement-card[data-group="days"] { --medal-ink: #617797; --medal-fill: #e0e8f1; }
-    .achievement-card[data-group="serial"] { --medal-ink: #617797; --medal-fill: #e0e8f1; }
-    .achievement-card[data-group="words"] { --medal-ink: #93722e; --medal-fill: #f3e8c6; }
-    .achievement-card[data-group="daily"] { --medal-ink: #89719b; --medal-fill: #eae2f0; }
-    .achievement-card[data-group="moments"] { --medal-ink: #a2677b; --medal-fill: #f0e0e6; }
-    .achievement-card.is-locked { --medal-ink: #9b968b; --medal-fill: #eeede7; background: transparent; }
+    [data-medal-family="presence"] { --medal-ink: #526f91; --medal-fill: #e1e9f2; }
+    [data-medal-family="practice"] { --medal-ink: #896079; --medal-fill: #efe0e9; }
+    [data-medal-family="accumulation"] { --medal-ink: #91702f; --medal-fill: #f2e7cc; }
+    [data-medal-family="calendar"] { --medal-ink: #487b68; --medal-fill: #dcebe1; }
+    .achievement-card.is-locked { background: transparent; border-style: dashed; }
+    .achievement-card.is-locked .achievement-medal { opacity: .55; }
+    .achievement-card.is-locked .achievement-state { color: #79746c; }
     .achievement-card.is-new { border-color: #537c70; box-shadow: 0 0 0 2px rgba(83, 124, 112, 0.12); }
     .achievement-toast {
       position: fixed;
@@ -1998,7 +2000,8 @@
     .achievement-toast-actions { display: flex; justify-content: flex-end; gap: 8px; }
     .achievement-toast button { padding: 6px 10px; border-radius: 7px; background: #e4eee5; }
     .achievement-toast button:focus-visible { outline: 2px solid #537c70; outline-offset: 2px; }
-    .achievement-medal { width: 58px; height: 66px; color: var(--medal-ink); flex: 0 0 auto; }
+    .achievement-medal { width: 76px; height: 87.4px; color: var(--medal-ink); flex: 0 0 auto; }
+    .achievement-series { margin-top: 7px; color: var(--text-soft); font-size: 10px; line-height: 1.6; }
     .achievement-name { margin: 5px 0; color: #51483e; font-size: 13px; font-weight: 550; }
     .achievement-rule { margin: 0 0 10px; font-size: 11px; flex: 1; }
     .achievement-state { color: var(--medal-ink); font-size: 11px; font-variant-numeric: tabular-nums; }
@@ -2012,11 +2015,11 @@
       border-radius: 4px;
       overflow: hidden;
       background: #e9e6df;
-      accent-color: #a58b67;
+      accent-color: var(--medal-ink);
     }
     .achievement-card progress::-webkit-progress-bar { background: #e9e6df; }
-    .achievement-card progress::-webkit-progress-value { background: #a58b67; border-radius: 4px; }
-    .achievement-card progress::-moz-progress-bar { background: #a58b67; }
+    .achievement-card progress::-webkit-progress-value { background: var(--medal-ink); border-radius: 4px; }
+    .achievement-card progress::-moz-progress-bar { background: var(--medal-ink); }
     .achievement-rules-disclosure { margin-top: 12px; }
     .achievement-rules-disclosure > summary { color: #876252; font-size: 11px; }
     .achievement-rules { margin: 8px 0 0; font-size: 10px; color: var(--text-soft); }
@@ -2983,6 +2986,13 @@
           </section>
           <details id="journalAchievementCollection" class="achievement-collection">
             <summary>查看勋章收藏册 · 10 个系列</summary>
+            <ul class="achievement-legend" aria-label="勋章类别">
+              <li data-medal-family="presence">连续有记</li>
+              <li data-medal-family="practice">连续达量</li>
+              <li data-medal-family="accumulation">长期积累</li>
+              <li data-medal-family="calendar">日历收藏</li>
+            </ul>
+            <p class="achievement-legend-note">日、周、月对应单点、七格、月历；笔尖表示字数要求，叠页与长卷表示积累。实心菱格表示系列内等级，浅色勋章待解锁。</p>
             <section class="achievement-earned" aria-labelledby="journalAchievementEarnedTitle">
               <h3 id="journalAchievementEarnedTitle" class="achievement-gallery-title">已获得</h3>
               <ul id="journalAchievementEarned" class="achievement-grid"></ul>
@@ -10939,7 +10949,7 @@
         earned.replaceChildren();
         earnedBadges.forEach(function (badge) {
           const group = model.groups.find(item => item.id === badge.group);
-          earned.appendChild(createJournalAchievementCard(badge, group ? group.icon : "spark"));
+          earned.appendChild(createJournalAchievementCard(badge, group));
         });
         earned.hidden = !earnedBadges.length;
         document.getElementById("journalAchievementEarnedTitle").textContent = "已获得 · " + earnedBadges.length + " 枚";
@@ -10962,7 +10972,7 @@
           const list = document.createElement("ul");
           list.className = "achievement-grid";
           groupBadges.forEach(function (badge) {
-            list.appendChild(createJournalAchievementCard(badge, group.icon));
+            list.appendChild(createJournalAchievementCard(badge, group));
           });
           section.append(heading, list);
           gallery.appendChild(section);
@@ -10979,14 +10989,18 @@
         return model;
       }
 
-      function createJournalAchievementCard(badge, icon) {
+      function createJournalAchievementCard(badge, group) {
         const card = document.createElement("li");
         card.className = "achievement-card" + (badge.unlocked ? " is-unlocked" : " is-locked");
         const isNew = badge.unlocked && journalAchievementNewIds.includes(badge.id);
         card.classList.toggle("is-new", isNew);
         card.dataset.group = badge.group;
         card.dataset.badgeId = badge.id;
-        card.innerHTML = journalAchievementMedal(icon);
+        card.dataset.medalFamily = group.family;
+        card.innerHTML = MinimalNotesAchievements.medalSvg(badge.group, badge.tier);
+        const series = document.createElement("div");
+        series.className = "achievement-series";
+        series.textContent = group.title + " · " + badge.tier + " 级";
         const name = document.createElement("div");
         name.className = "achievement-name";
         name.textContent = badge.name;
@@ -10997,7 +11011,7 @@
         status.className = "achievement-state";
         status.textContent = isNew ? "✓ 新解锁" : badge.unlocked ? "✓ 已解锁" : badge.pending ? "等待逐日统计"
           : (badge.streak ? "本轮 " : "累计 ") + formatSummaryNumber(badge.progressValue) + " / " + formatSummaryNumber(badge.target) + " " + badge.unit;
-        card.append(name, rule, status);
+        card.append(series, name, rule, status);
         if (badge.streak) {
           const history = document.createElement("small");
           history.textContent = "历史最高 " + formatSummaryNumber(badge.value) + " " + badge.unit + " · "
@@ -11012,23 +11026,6 @@
           card.appendChild(progress);
         }
         return card;
-      }
-
-      function journalAchievementMedal(icon) {
-        const paths = {
-          flame: '<path d="M29 17c2 6-7 9-7 15a8 8 0 0 0 16 0c0-4-2-6-4-9 0 5-3 6-3 6s2-6-2-12Z"/>',
-          calendar: '<rect x="20" y="21" width="20" height="18" rx="3"/><path d="M25 18v6m10-6v6M20 27h20m-15 6 3 3 7-6"/>',
-          book: '<path d="M30 23c-4-3-8-3-12-2v18c4-1 8-1 12 2 4-3 8-3 12-2V21c-4-1-8-1-12 2Zm0 0v18"/>',
-          pen: '<path d="m21 35-1 6 6-2 15-15-5-5-15 16Zm12-13 5 5M21 35l5 4M20 44h20"/>',
-          feather: '<path d="M21 41c-1-14 5-22 19-22 0 14-8 21-19 22Zm0 0 15-17M21 41l-3 4m9-10 7 1m-4-4 1-7"/>',
-          spark: '<path d="m30 18 3 9 9 3-9 3-3 9-3-9-9-3 9-3 3-9Zm12-2v6m-3-3h6M18 40v6m-3-3h6"/>'
-        };
-        return '<svg class="achievement-medal" viewBox="0 0 60 68" aria-hidden="true" focusable="false">'
-          + '<path d="m16 44-3 20 10-4 7 6 4-22m-4 1 7 21 5-7 7 1-6-20" fill="var(--medal-fill)" stroke="currentColor" stroke-width="1.1"/>'
-          + '<circle cx="30" cy="30" r="27" fill="var(--medal-fill)" stroke="currentColor" stroke-width="1.2"/>'
-          + '<circle cx="30" cy="30" r="23" fill="none" stroke="currentColor" stroke-width=".6" stroke-dasharray="1 3"/>'
-          + '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
-          + paths[icon] + '</g></svg>';
       }
 
       function renderJournalMilestone(currentStats) {

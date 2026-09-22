@@ -82,6 +82,10 @@ DDL 6月10日前交材料
 
 日记只能修改最近 3 天内的内容。超过 3 天的日记会变成只读，不能编辑或删除。
 
+日记底部的「日记勋章」包含固定 36 枚勋章，分为 6 个可折叠分组，覆盖连续写作、每日字数门槛、自然周/月字数、累计积累和日期彩蛋。勋章按北京时间凌晨 5 点换日，同日多篇字数相加，仅统计本人日记。新增或保存日记修改后，新解锁的勋章会合并成一条页内通知；点击「查看勋章」可定位，历史加载和刷新不会重复提醒。
+
+勋章按现存日记重算，编辑和删除可能更新结果。历史日记的汇总可以计入，原有自定义累计计数的换日设置独立保留。
+
 日记底部可以显示一个自定义累计计数，例如“小红花”“小星星”“打卡章”等。这个功能适合已经在别的日记软件里记了很久的人：可以把旧软件里已经累计的数量填进来，应用会把旧计数和这里新增的日记天数加在一起显示。
 
 自动生成的记录数据默认没有 `journalStats`。要使用这个计数功能，最稳妥的方式是先用
@@ -341,7 +345,7 @@ Token 没有写入权限。检查 `Contents` 是否设置成 `Read and write`，
 ### 给开发者
 
 这个项目是静态网页应用，主要文件是 `index.html` 和共享存储实现
-`minimal-notes-store.js`，以及独立缓存模块 `minimal-notes-cache.js`。部署时请包含这三个文件。GitHub Pages 发布时不需要后端服务。默认 GitHub 同步入口是
+`minimal-notes-store.js`，以及独立缓存模块 `minimal-notes-cache.js` 和勋章模块 `minimal-notes-achievements.js`。部署时请包含这四个文件。GitHub Pages 发布时不需要后端服务。默认 GitHub 同步入口是
 `minimal-notes-sync/manifest.json`；浏览器正常轮询只读取 manifest 和 hot，提交时才
 读取开放的 revision/trash 分片。`minimal-notes-records.json` 是继续支持的 v3、导入
 导出和云盘兼容格式。实际个人数据应放在单独的私有仓库，不属于这个公开 app 仓库。
@@ -419,6 +423,10 @@ When deleting a record, there are two choices:
 Journal dates roll over at 5:00 AM. A journal entry written before 5:00 AM is shown as the previous day; entries written at or after 5:00 AM are shown as the current day.
 
 Journal entries can only be edited within 3 days. Older journal entries become read-only and cannot be edited or deleted.
+
+The journal footer includes a fixed collection of 36 achievements in six collapsible groups: writing streaks, daily character thresholds, calendar-week/month totals, cumulative milestones, and special dates. Achievements use a 5:00 AM rollover in Asia/Shanghai, combine entries within the same journal day, and count only your own journals. After adding or saving an edited journal, newly unlocked achievements appear in one in-app notification. Choose `查看勋章` (View achievements) to jump to them. Historical loading and page refreshes do not repeat notifications.
+
+Achievements are recalculated from existing journals, so edits and deletions can change the results. Historical journal aggregates can contribute; the custom cumulative counter retains its own rollover setting.
 
 The journal footer can show a custom cumulative counter, such as flowers, stars, or check-in badges. This is useful if you have kept journals in another app for a long time: enter the count you already had there, and the app adds new journal days here to that old count.
 
@@ -679,7 +687,7 @@ If your data repository is public, they may be able to see them. Use a private r
 ### For Developers
 
 This is a static web app. Its main files are `index.html` and the shared store implementation,
-`minimal-notes-store.js`, plus the separate cache module `minimal-notes-cache.js`. Include all three files when deploying. GitHub Pages does not require a backend service. The default GitHub sync
+`minimal-notes-store.js`, plus the separate cache module `minimal-notes-cache.js` and achievement module `minimal-notes-achievements.js`. Include all four files when deploying. GitHub Pages does not require a backend service. The default GitHub sync
 entry point is `minimal-notes-sync/manifest.json`. Normal browser polling reads only the manifest
 and hot state; writes also load the open revision/trash shards. `minimal-notes-records.json` remains
 the supported v3, import/export, and cloud-drive compatibility format. Personal data belongs in a

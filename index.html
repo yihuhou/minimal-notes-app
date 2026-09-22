@@ -2004,7 +2004,9 @@
     .achievement-card progress::-webkit-progress-bar { background: #e9e6df; }
     .achievement-card progress::-webkit-progress-value { background: #a58b67; border-radius: 4px; }
     .achievement-card progress::-moz-progress-bar { background: #a58b67; }
-    .achievement-rules { margin: 18px 0 0; font-size: 10px; color: var(--text-soft); }
+    .achievement-rules-disclosure { margin-top: 12px; }
+    .achievement-rules-disclosure > summary { color: #876252; font-size: 11px; }
+    .achievement-rules { margin: 8px 0 0; font-size: 10px; color: var(--text-soft); }
     @media (max-width: 620px) {
       .journal-achievements { padding: 16px 12px; }
       .achievement-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -2968,7 +2970,10 @@
           <details id="journalAchievementCollection" class="achievement-collection">
             <summary>查看勋章收藏册 · 10 个系列</summary>
             <div id="journalAchievementGallery"></div>
-            <p id="journalAchievementRules" class="achievement-rules"></p>
+            <details class="achievement-collection achievement-rules-disclosure">
+              <summary>统计口径与规则</summary>
+              <p id="journalAchievementRules" class="achievement-rules"></p>
+            </details>
           </details>
         </section>
         <span>GitHub 用作主同步；云盘 JSON 仅作为电脑端备份。</span>

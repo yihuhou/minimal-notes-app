@@ -1867,6 +1867,7 @@
     .achievement-records > div { padding: 12px; border: 1px solid #e7e0d4; border-radius: 10px; background: #fffdf8; }
     .achievement-runs dt { color: #51483e; font-size: 12px; }
     .achievement-runs small { margin-top: 4px; }
+    .achievement-run-pending { color: #a3653c; font-weight: 600; }
     .achievement-run-goal { color: #765b47; font-size: 11px; margin: 8px 0 0; }
     .achievement-run-history { margin-top: 6px; font-size: 10px; }
     .achievement-run-history summary { cursor: pointer; }
@@ -10844,6 +10845,12 @@
             run.currentRange ? journalAchievementRange(run.currentRange, key) : "达标后开启新一轮",
             "历史最高 " + run.longest + " " + entry[2] + " · " + journalAchievementRange(run.longestRanges[0], key)];
           const value = appendJournalAchievementStat(records, entry[1], run.current, entry[2], notes, !complete, "连续");
+          if (complete && !run.currentQualified) {
+            const pending = document.createElement("span");
+            pending.className = "achievement-run-pending";
+            pending.textContent = entry[3] + "待达标";
+            value.querySelector("small").replaceChildren(pending, status.slice(pending.textContent.length));
+          }
           value.parentElement.dataset.streak = key;
           const goal = document.createElement("p");
           goal.className = "achievement-run-goal";

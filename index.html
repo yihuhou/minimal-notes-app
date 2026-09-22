@@ -1952,6 +1952,8 @@
       top: calc(16px + env(safe-area-inset-top));
       right: 16px;
       width: min(360px, calc(100% - 32px));
+      max-height: calc(100dvh - 32px - env(safe-area-inset-top));
+      overflow-y: auto;
       padding: 14px 16px;
       border: 1px solid #b9cec2;
       border-radius: 14px;
@@ -2962,8 +2964,8 @@
       <path d="M16 7v17M9.25 18 16 24.75 22.75 18" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"></path>
     </svg>
   </button>
-  <div id="journalAchievementToast" class="achievement-toast" role="region" aria-label="新解锁日记勋章" hidden>
-    <strong>新勋章，收下了</strong>
+  <div id="journalAchievementToast" class="achievement-toast" role="region" aria-label="日记勋章与纪录通知" hidden>
+    <strong id="journalAchievementToastTitle">新勋章，收下了</strong>
     <p id="journalAchievementToastText" role="status" aria-live="polite" aria-atomic="true"></p>
     <div class="achievement-toast-actions">
       <button id="journalAchievementToastDismiss" type="button">收起</button>
@@ -3344,6 +3346,8 @@
       let journalAchievementsRenderKey = "";
       let journalAchievementsRefreshTimer = 0;
       let journalAchievementNewIds = [];
+      let journalPersonalRecordBreaks = [];
+      const journalPersonalRecordNotified = new Set();
       let journalAchievementPendingBefore = null;
       const journalBottomJump = document.getElementById("journalBottomJump");
       const statusText = document.getElementById("statusText");
@@ -6787,6 +6791,8 @@
       function resetRemoteSyncState() {
         journalAchievementPendingBefore = null;
         journalAchievementNewIds = [];
+        journalPersonalRecordBreaks = [];
+        journalPersonalRecordNotified.clear();
         document.getElementById("journalAchievementToast").hidden = true;
         invalidateRemoteSession();
         state.remote.enabled = false;
@@ -10577,14 +10583,29 @@
         journalAchievementPendingBefore = null;
         const model = getJournalAchievementModel();
         const unlocked = window.MinimalNotesAchievements.newlyUnlocked(baseline, model);
-        if (!unlocked.length) return;
+        const broken = window.MinimalNotesAchievements.newlyBrokenRecords(baseline, model).filter(function (record) {
+          return !journalPersonalRecordNotified.has(record.id + ":" + record.period);
+        });
+        if (!unlocked.length && !broken.length) return;
         const toast = document.getElementById("journalAchievementToast");
         const previousIds = toast.hidden ? [] : journalAchievementNewIds;
+        journalPersonalRecordBreaks = (toast.hidden ? [] : journalPersonalRecordBreaks).concat(broken);
+        broken.forEach(record => journalPersonalRecordNotified.add(record.id + ":" + record.period));
         journalAchievementNewIds = Array.from(new Set(previousIds.concat(unlocked.map(badge => badge.id))));
         const names = model.badges.filter(badge => journalAchievementNewIds.includes(badge.id)).map(badge => badge.name);
+        const hasRecords = journalPersonalRecordBreaks.length > 0;
+        document.getElementById("journalAchievementToastTitle").textContent = hasRecords
+          ? names.length ? "新勋章，也有新纪录" : "突破了个人纪录" : "新勋章，收下了";
+        document.getElementById("journalAchievementToastView").textContent = hasRecords
+          ? names.length ? "查看勋章与纪录" : "查看纪录" : "查看勋章";
+        const messages = names.length ? [names.slice(0, 3).join(" · ")
+          + (names.length > 3 ? " 等 " + names.length + " 枚" : "") + "，已加入收藏册。"] : [];
+        journalPersonalRecordBreaks.forEach(function (record) {
+          messages.push(record.name + "：" + formatSummaryNumber(record.value) + " " + record.unit
+            + "，超过此前的 " + formatSummaryNumber(record.previousBest) + " " + record.unit + "。");
+        });
         toast.hidden = false;
-        document.getElementById("journalAchievementToastText").textContent = names.slice(0, 3).join(" · ")
-          + (names.length > 3 ? " 等 " + names.length + " 枚" : "") + "，已加入收藏册。";
+        document.getElementById("journalAchievementToastText").textContent = messages.join(" ");
         renderJournalAchievements(getCurrentStatsForDisplay());
       }
 
@@ -10596,7 +10617,10 @@
         searchRenderTimer = null;
         searchComposing = false;
         render();
-        document.getElementById("journalAchievementCollection").open = true;
+        if (journalAchievementNewIds.length) document.getElementById("journalAchievementCollection").open = true;
+        if (journalPersonalRecordBreaks.some(record => !record.streakKey)) {
+          document.getElementById("journalAchievementPersonalRecords").open = true;
+        }
         let firstCard = null;
         journalAchievementNewIds.forEach(function (id) {
           const card = document.querySelector('.achievement-card[data-badge-id="' + cssEscape(id) + '"]');
@@ -10604,6 +10628,12 @@
           card.closest("details").open = true;
           firstCard = firstCard || card;
         });
+        const firstRecord = journalPersonalRecordBreaks[0];
+        if (!firstCard && firstRecord) {
+          firstCard = firstRecord.streakKey
+            ? document.querySelector('[data-streak="' + cssEscape(firstRecord.streakKey) + '"]')
+            : document.getElementById("journalAchievementPersonalRecords");
+        }
         document.getElementById("journalAchievementToast").hidden = true;
         if (firstCard) {
           firstCard.tabIndex = -1;
@@ -10825,6 +10855,7 @@
           + "本期尚未结束时，上一期的连续仍可续上；本期待达标时显示已完成的连续数。"
           + "历史达标用于解锁，未达成目标按本轮显示进度。日历跨年份合并月日，2 月 29 日单列。"
           + "勋章随现存日记重算，编辑、删除或补录会更新结果。"
+          + "保存日记时，首次超过此前的连续或字数纪录会提醒；同一轮连续、同一日／周／月／年内继续刷新不重复提醒。累计数仅在达成勋章时提醒。"
           + (model.hasHistorical ? model.historicalDaysAvailable
             ? "历史日记已去重并计入。" : "历史字数已计入；历史逐日统计待更新。" : "当前统计 Minimal Notes 中的日记。");
         return model;

@@ -79,6 +79,7 @@
     const last = runs[runs.length - 1];
     const current = last && last.end >= currentPeriod - step ? last : null;
     return { longest: longest, current: current ? current.length : 0,
+      previousBest: runs.filter(run => run !== current).reduce((best, run) => Math.max(best, run.length), 0),
       currentRange: format(current), currentQualified: Boolean(current && current.end === currentPeriod),
       longestRanges: runs.filter(run => run.length === longest).reverse().map(format) };
   }
@@ -255,8 +256,38 @@
     const fullYears = Object.keys(yearDays).filter(function (year) {
       return yearDays[year] === (Date.UTC(Number(year) + 1, 0, 1) - Date.UTC(Number(year), 0, 1)) / DAY;
     });
+    // Only records with a separate past run/period are comparable personal bests.
+    // Lifetime totals keep their existing fixed badge milestones instead.
+    const personalRecords = [
+      ["daily", "连续记录", "天", datesComplete],
+      ["thousand", "连续每日千字", "天", dailyComplete],
+      ["weekly", "连续每周有记", "周", datesComplete],
+      ["monthly", "连续每月有记", "个月", datesComplete],
+      ["monthlyWords", "连续每月两万字", "个月", dailyComplete]
+    ].map(function (entry) {
+      const run = runs[entry[0]];
+      return { id: "streak-" + entry[0], name: entry[1], unit: entry[2], complete: entry[3],
+        streakKey: entry[0], period: run.currentRange ? run.currentRange.start : "",
+        value: run.current, best: run.longest, previousBest: run.previousBest };
+    });
+    [
+      ["day", "单日字数纪录", new Map(Object.entries(characters)), today],
+      ["week", "单周字数纪录", weekCharacters, currentMonday],
+      ["month", "单月字数纪录", monthCharacters, currentMonthNumber],
+      ["year", "单年字数纪录", yearCharacters, Number(today.slice(0, 4))]
+    ].forEach(function (entry) {
+      const value = entry[2].get(entry[3]) || 0;
+      let previousBest = 0;
+      entry[2].forEach(function (amount, period) {
+        if (period !== entry[3]) previousBest = Math.max(previousBest, amount);
+      });
+      personalRecords.push({ id: "characters-" + entry[0], name: entry[1], unit: "字",
+        complete: dailyComplete, period: String(entry[3]), value: value,
+        best: Math.max(value, previousBest), previousBest: previousBest });
+    });
     return { today: today, currentDays: currentDays.length,
       metrics: metrics, badges: badges, groups: GROUPS, streaks: runs, calendar: calendar,
+      personalRecords: personalRecords,
       monthly: monthly, todayCharacters: characters[today] || 0,
       weeklyCharacters: weekCharacters.get(currentMonday) || 0,
       yearlyCharacters: yearCharacters.get(Number(today.slice(0, 4))) || 0,
@@ -272,5 +303,21 @@
     return after.badges.filter(badge => badge.unlocked && !existing.has(badge.id));
   }
 
-  return { compute: compute, journalDay: journalDay, validDay: validDay, newlyUnlocked: newlyUnlocked };
+  function newlyBrokenRecords(before, after) {
+    if (!before || !after) return [];
+    return (after.personalRecords || []).filter(function (record) {
+      const previous = (before.personalRecords || []).find(item => item.id === record.id);
+      return previous && previous.complete && record.complete && record.previousBest > 0
+        // Continuing to extend an already leading run/period is not another breakthrough.
+        && previous.value <= previous.previousBest
+        && record.value > previous.value
+        && record.value > Math.max(previous.best, record.previousBest);
+    }).map(function (record) {
+      const previous = before.personalRecords.find(item => item.id === record.id);
+      return Object.assign({}, record, { previousBest: Math.max(previous.best, record.previousBest) });
+    });
+  }
+
+  return { compute: compute, journalDay: journalDay, validDay: validDay, newlyUnlocked: newlyUnlocked,
+    newlyBrokenRecords: newlyBrokenRecords };
 }));

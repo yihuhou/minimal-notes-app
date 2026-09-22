@@ -1926,6 +1926,20 @@
     }
     .journal-achievements > .achievement-collection > summary { font-size: 13px; font-weight: 600; }
     .achievement-collection > summary:focus-visible { outline: 2px solid #876252; outline-offset: 4px; }
+    .achievement-earned {
+      margin: 10px 0 18px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid #e7e0d4;
+    }
+    .achievement-gallery-title {
+      margin: 12px 0 9px;
+      color: #51483e;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .achievement-earned .achievement-gallery-title { color: #365f4b; }
+    .achievement-earned .achievement-card { background: #fffdf8; }
+    .achievement-earned-empty { margin: 0; color: var(--text-soft); font-size: 11px; }
     .achievement-group { margin-top: 6px; }
     .achievement-group > summary { cursor: pointer; padding: 3px 0; font-size: 12px; }
     .achievement-group[open] > .achievement-grid { margin-top: 7px; }
@@ -2969,6 +2983,12 @@
           </section>
           <details id="journalAchievementCollection" class="achievement-collection">
             <summary>查看勋章收藏册 · 10 个系列</summary>
+            <section class="achievement-earned" aria-labelledby="journalAchievementEarnedTitle">
+              <h3 id="journalAchievementEarnedTitle" class="achievement-gallery-title">已获得</h3>
+              <ul id="journalAchievementEarned" class="achievement-grid"></ul>
+              <p id="journalAchievementEarnedEmpty" class="achievement-earned-empty" hidden>第一枚勋章还在路上。</p>
+            </section>
+            <h3 class="achievement-gallery-title">全部勋章 · 按系列</h3>
             <div id="journalAchievementGallery"></div>
             <details class="achievement-collection achievement-rules-disclosure">
               <summary>统计口径与规则</summary>
@@ -10680,10 +10700,12 @@
         }
         let firstCard = null;
         journalAchievementNewIds.forEach(function (id) {
-          const card = document.querySelector('.achievement-card[data-badge-id="' + cssEscape(id) + '"]');
-          if (!card) return;
-          card.closest("details").open = true;
-          firstCard = firstCard || card;
+          const cards = Array.from(document.querySelectorAll('.achievement-card[data-badge-id="' + cssEscape(id) + '"]'));
+          cards.forEach(function (card) {
+            const details = card.closest("details");
+            if (details) details.open = true;
+          });
+          firstCard = firstCard || cards[0] || null;
         });
         const firstRecord = journalPersonalRecordBreaks[0];
         if (!firstCard && firstRecord) {
@@ -10912,6 +10934,16 @@
           appendJournalAchievementStat(totals, entry[1], metrics[entry[0]], entry[2], [note], !entry[3]);
         });
         renderJournalAchievementCalendar(model);
+        const earned = document.getElementById("journalAchievementEarned");
+        const earnedBadges = model.badges.filter(badge => badge.unlocked);
+        earned.replaceChildren();
+        earnedBadges.forEach(function (badge) {
+          const group = model.groups.find(item => item.id === badge.group);
+          earned.appendChild(createJournalAchievementCard(badge, group ? group.icon : "spark"));
+        });
+        earned.hidden = !earnedBadges.length;
+        document.getElementById("journalAchievementEarnedTitle").textContent = "已获得 · " + earnedBadges.length + " 枚";
+        document.getElementById("journalAchievementEarnedEmpty").hidden = Boolean(earnedBadges.length);
         const gallery = document.getElementById("journalAchievementGallery");
         const firstGalleryRender = !gallery.hasChildNodes();
         const openGroups = new Set(Array.from(gallery.querySelectorAll("details[open]"))

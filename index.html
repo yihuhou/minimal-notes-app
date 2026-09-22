@@ -1938,6 +1938,7 @@
     }
     .achievement-card[data-group="streak"] { --medal-ink: #a35e43; --medal-fill: #f4e1cf; }
     .achievement-card[data-group="rhythm"] { --medal-ink: #a2677b; --medal-fill: #f0e0e6; }
+    .achievement-card[data-group="weekly-words"] { --medal-ink: #89719b; --medal-fill: #eae2f0; }
     .achievement-card[data-group="calendar"] { --medal-ink: #537c70; --medal-fill: #dcebe0; }
     .achievement-card[data-group="days"] { --medal-ink: #617797; --medal-fill: #e0e8f1; }
     .achievement-card[data-group="serial"] { --medal-ink: #617797; --medal-fill: #e0e8f1; }
@@ -2948,7 +2949,7 @@
             <p id="journalCalendarLeap"></p>
           </section>
           <details id="journalAchievementCollection" class="achievement-collection">
-            <summary>查看勋章收藏册 · 9 个系列</summary>
+            <summary>查看勋章收藏册 · 10 个系列</summary>
             <div id="journalAchievementGallery"></div>
             <p id="journalAchievementRules" class="achievement-rules"></p>
           </details>
@@ -10616,8 +10617,9 @@
         });
         if (hasRecords) {
           const section = addSection("已刷新个人纪录");
-          const streakLabels = { daily: "连续写日记 ", thousand: "每日千字：连续 ",
-            weekly: "每周有记录：连续 ", monthly: "每月有记录：连续 ", monthlyWords: "每月两万字：连续 " };
+          const streakLabels = { daily: "连续写日记 ", weekly: "每周有记录：连续 ",
+            monthly: "每月有记录：连续 ", thousand: "每日千字：连续 ",
+            weeklyWords: "每周五千字：连续 ", monthlyWords: "每月两万字：连续 " };
           journalPersonalRecordBreaks.forEach(function (record) {
             const line = document.createElement("p");
             const value = document.createElement("strong");
@@ -10669,20 +10671,21 @@
 
       function journalAchievementRange(range, key) {
         if (!range) return "尚无纪录";
-        if (key === "weekly") {
+        if (key === "weekly" || key === "weeklyWords") {
           return range.start + " 起，至 " + range.end + " 这一周";
         }
         return range.start === range.end ? range.start : range.start + " — " + range.end;
       }
 
-      function appendJournalAchievementStat(container, title, number, unit, notes, incomplete) {
+      function appendJournalAchievementStat(container, title, number, unit, notes, incomplete, prefix) {
         const item = document.createElement("div");
         const label = document.createElement("dt");
         label.textContent = title;
         const value = document.createElement("dd");
         const strong = document.createElement("strong");
         strong.textContent = (incomplete ? "≥" : "") + formatSummaryNumber(number);
-        value.append(strong, " " + unit);
+        if (prefix) value.append(prefix);
+        value.append(strong, (prefix ? "" : " ") + unit);
         notes.forEach(function (text) {
           const note = document.createElement("small");
           note.textContent = text;
@@ -10782,20 +10785,24 @@
         records.replaceChildren();
         const metrics = model.metrics;
         const monthly = model.monthly;
-        [["daily", "每日有记录", "天", "今日"], ["thousand", "每日不少于 1000 字", "天", "今日"],
+        [["daily", "每日有记录", "天", "今日"],
           ["weekly", "每周至少写一次", "周", "本周"], ["monthly", "每月至少写一次", "个月", "本月"],
+          ["thousand", "每日不少于 1000 字", "天", "今日"],
+          ["weeklyWords", "每周不少于 5000 字", "周", "本周"],
           ["monthlyWords", "每月不少于 2 万字", "个月", "本月"]].forEach(function (entry) {
           const key = entry[0];
           const run = model.streaks[key];
-          const complete = key === "thousand" || key === "monthlyWords" ? model.dailyComplete : model.datesComplete;
+          const complete = ["thousand", "weeklyWords", "monthlyWords"].includes(key)
+            ? model.dailyComplete : model.datesComplete;
           const next = model.badges.find(badge => badge.streakKey === key && !badge.unlocked);
           let status = entry[3] + (run.currentQualified ? "已达标" : "待达标");
           if (key === "thousand") status += " · 今日 " + formatSummaryNumber(model.todayCharacters) + " / 1,000 字";
+          if (key === "weeklyWords") status += " · 本周 " + formatSummaryNumber(model.weeklyCharacters) + " / 5,000 字";
           if (key === "monthlyWords") status += " · 本月 " + formatSummaryNumber(monthly.characters) + " / 20,000 字";
           const notes = [complete ? status : "等待完整统计 · 以下为已知纪录",
             run.currentRange ? journalAchievementRange(run.currentRange, key) : "达标后开启新一轮",
             "历史最高 " + run.longest + " " + entry[2] + " · " + journalAchievementRange(run.longestRanges[0], key)];
-          const value = appendJournalAchievementStat(records, entry[1], run.current, entry[2], notes, !complete);
+          const value = appendJournalAchievementStat(records, entry[1], run.current, entry[2], notes, !complete, "连续");
           value.parentElement.dataset.streak = key;
           const goal = document.createElement("p");
           goal.className = "achievement-run-goal";

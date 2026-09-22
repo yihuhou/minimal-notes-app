@@ -7,9 +7,10 @@
   const DAY = 86400000;
   const GROUPS = [
     { id: "streak", title: "每日长续", icon: "flame" },
-    { id: "rhythm", title: "每日千字", icon: "pen" },
     { id: "weekly", title: "周周有记", icon: "book" },
     { id: "monthly", title: "月月有记", icon: "book" },
+    { id: "rhythm", title: "每日千字", icon: "pen" },
+    { id: "weekly-words", title: "每周五千字", icon: "pen" },
     { id: "serial", title: "每月两万字", icon: "pen" },
     { id: "thousand", title: "千字积累", icon: "pen" },
     { id: "days", title: "日常积累", icon: "book" },
@@ -27,15 +28,18 @@
   add("streak", "longestStreak", [200, 365, 730],
     ["两百日长续", "三百六十五日", "七百三十日"],
     n => "连续 " + n + " 天，每日都有记录", "天", false, "daily");
-  add("rhythm", "thousandCharacterStreak", [14, 30, 60, 100],
-    ["十四日千言", "三十日千言", "六十日千言", "百日千言"],
-    n => "连续 " + n + " 天，每日不少于 1000 字", "天", true, "thousand");
   add("weekly", "consecutiveWeeks", [52, 104, 156],
     ["五十二周", "一百零四周", "一百五十六周"],
     n => "连续 " + n + " 个自然周，每周至少写一次", "周", false, "weekly");
   add("monthly", "consecutiveMonths", [18, 24, 36, 60],
     ["十八个月", "两年月月见", "三年月月见", "五年月月见"],
     n => "连续 " + n + " 个月，每月至少写一次", "个月", false, "monthly");
+  add("rhythm", "thousandCharacterStreak", [14, 30, 60, 100],
+    ["十四日千言", "三十日千言", "六十日千言", "百日千言"],
+    n => "连续 " + n + " 天，每日不少于 1000 字", "天", true, "thousand");
+  add("weekly-words", "fiveThousandCharacterWeeks", [26, 52, 104],
+    ["二十六周五千字", "五十二周五千字", "一百零四周五千字"],
+    n => "连续 " + n + " 个自然周，每周不少于 5000 字", "周", true, "weeklyWords");
   add("serial", "twentyThousandCharacterMonths", [12, 24, 36],
     ["十二月长篇", "二十四月长篇", "三十六月长篇"],
     n => "连续 " + n + " 个月，每月不少于 2 万字", "个月", true, "monthlyWords");
@@ -133,7 +137,8 @@
       bestDayCharacters: 0, bestDay: "", seasons: 0, consecutiveMonths: 0,
       weekendPairs: 0, newYearPairs: 0, returns: 0, leapDays: 0,
       hundredCharacterStreak: 0, threeHundredCharacterStreak: 0, thousandCharacterStreak: 0,
-      thousandCharacterDays: 0, bestWeekCharacters: 0, bestWeek: "", bestMonthCharacters: 0,
+      thousandCharacterDays: 0, fiveThousandCharacterWeeks: 0,
+      bestWeekCharacters: 0, bestWeek: "", bestMonthCharacters: 0,
       bestMonth: "", tenThousandCharacterMonths: 0, bestWeekendCharacters: 0, bestYearCharacters: 0 };
     const weeks = new Map();
     const months = new Map();
@@ -231,10 +236,13 @@
       thousand: streaks(days.filter(day => characters[day] >= 1000).map(dayNumber), todayNumber, 1, dayKey),
       weekly: streaks(Array.from(weeks.keys()), currentMonday, 7, dayKey),
       monthly: streaks(Array.from(months.keys()), currentMonthNumber, 1, monthLabel),
+      weeklyWords: streaks(Array.from(weekCharacters.keys()).filter(n => weekCharacters.get(n) >= 5000),
+        currentMonday, 7, dayKey),
       monthlyWords: streaks(Array.from(monthCharacters.keys()).filter(n => monthCharacters.get(n) >= 20000),
         currentMonthNumber, 1, monthLabel)
     };
     metrics.consecutiveWeeks = runs.weekly.longest;
+    metrics.fiveThousandCharacterWeeks = runs.weeklyWords.longest;
     metrics.twentyThousandCharacterMonths = runs.monthlyWords.longest;
     const calendar = buildCalendar(days, today);
     calendar.levels.forEach(level => { metrics["calendarCoverage" + level.years] = level.covered; });
@@ -260,9 +268,10 @@
     // Lifetime totals keep their existing fixed badge milestones instead.
     const personalRecords = [
       ["daily", "连续记录", "天", datesComplete],
-      ["thousand", "连续每日千字", "天", dailyComplete],
       ["weekly", "连续每周有记", "周", datesComplete],
       ["monthly", "连续每月有记", "个月", datesComplete],
+      ["thousand", "连续每日千字", "天", dailyComplete],
+      ["weeklyWords", "连续每周五千字", "周", dailyComplete],
       ["monthlyWords", "连续每月两万字", "个月", dailyComplete]
     ].map(function (entry) {
       const run = runs[entry[0]];

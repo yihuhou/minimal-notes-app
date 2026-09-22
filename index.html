@@ -2011,9 +2011,10 @@
       flex-direction: column;
       align-items: center;
       width: 100%;
-      min-height: 52px;
+      min-height: 72px;
     }
     .achievement-card-footer small { line-height: 1.55; }
+    .achievement-unlock-date { margin: 2px 0; color: var(--text-soft); font-size: 10px; line-height: 1.6; font-variant-numeric: tabular-nums; }
     .achievement-card progress {
       width: 100%;
       max-width: 120px;
@@ -11023,6 +11024,14 @@
         const footer = document.createElement("div");
         footer.className = "achievement-card-footer";
         footer.appendChild(status);
+        if (badge.unlocked) {
+          const hasDate = MinimalNotesAchievements.validDay(badge.achievedAt);
+          const unlockedDate = document.createElement(hasDate ? "time" : "span");
+          unlockedDate.className = "achievement-unlock-date";
+          if (hasDate) unlockedDate.dateTime = badge.achievedAt;
+          unlockedDate.textContent = hasDate ? "解锁于 " + badge.achievedAt : "解锁日期待补齐";
+          footer.appendChild(unlockedDate);
+        }
         card.append(series, name, rule, footer);
         if (badge.streak) {
           const history = document.createElement("small");

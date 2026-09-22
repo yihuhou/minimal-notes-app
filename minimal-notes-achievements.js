@@ -25,11 +25,11 @@
         requiresDailyCharacters: Boolean(requiresDailyCharacters), streakKey: streakKey || "" });
     });
   }
-  add("streak", "longestStreak", [200, 365, 730],
-    ["两百日长续", "三百六十五日", "七百三十日"],
+  add("streak", "longestStreak", [200, 365, 730, 1095],
+    ["两百日长续", "三百六十五日", "七百三十日", "千零九十五日"],
     n => "连续 " + n + " 天，每日都有记录", "天", false, "daily");
-  add("weekly", "consecutiveWeeks", [52, 104, 156],
-    ["五十二周", "一百零四周", "一百五十六周"],
+  add("weekly", "consecutiveWeeks", [52, 104, 156, 208],
+    ["五十二周", "一百零四周", "一百五十六周", "二百零八周"],
     n => "连续 " + n + " 个自然周，每周至少写一次", "周", false, "weekly");
   add("monthly", "consecutiveMonths", [18, 24, 36, 60],
     ["十八个月", "两年月月见", "三年月月见", "五年月月见"],
@@ -37,14 +37,14 @@
   add("rhythm", "thousandCharacterStreak", [14, 30, 60, 100],
     ["十四日千言", "三十日千言", "六十日千言", "百日千言"],
     n => "连续 " + n + " 天，每日不少于 1000 字", "天", true, "thousand");
-  add("weekly-words", "fiveThousandCharacterWeeks", [26, 52, 104],
-    ["二十六周五千字", "五十二周五千字", "一百零四周五千字"],
+  add("weekly-words", "fiveThousandCharacterWeeks", [26, 52, 104, 156],
+    ["二十六周五千字", "五十二周五千字", "一百零四周五千字", "一百五十六周五千字"],
     n => "连续 " + n + " 个自然周，每周不少于 5000 字", "周", true, "weeklyWords");
-  add("serial", "twentyThousandCharacterMonths", [12, 24, 36],
-    ["十二月长篇", "二十四月长篇", "三十六月长篇"],
+  add("serial", "twentyThousandCharacterMonths", [12, 24, 36, 48],
+    ["十二月长篇", "二十四月长篇", "三十六月长篇", "四十八月长篇"],
     n => "连续 " + n + " 个月，每月不少于 2 万字", "个月", true, "monthlyWords");
-  add("thousand", "thousandCharacterDays", [500, 1000, 2000],
-    ["五百日千言", "千日千言", "两千日千言"],
+  add("thousand", "thousandCharacterDays", [500, 1000, 2000, 3000],
+    ["五百日千言", "千日千言", "两千日千言", "三千日千言"],
     n => "累计 " + n + " 天，每日不少于 1000 字，可不连续", "天", true);
   add("days", "totalDays", [1000, 1500, 2000, 3000],
     ["千日留痕", "一千五百日", "两千日留痕", "三千日留痕"],
@@ -52,9 +52,10 @@
   add("words", "totalCharacters", [1000000, 2000000, 3000000, 5000000],
     ["百万字长卷", "两百万字", "三百万字", "五百万字"],
     n => "累计写下 " + (n / 10000) + " 万字", "字");
-  [1, 2, 3].forEach(function (years) {
+  [1, 2, 3, 4].forEach(function (years) {
     add("calendar", "calendarCoverage" + years, [365],
-      [years === 1 ? "日历全收藏" : years === 2 ? "日历再相逢" : "日历三重奏"],
+      [years === 1 ? "日历全收藏" : years === 2 ? "日历再相逢"
+        : years === 3 ? "日历三重奏" : "日历四重奏"],
       () => "365 个日期，每个都在至少 " + years + " 个年份留下记录", "个日期");
   });
 
@@ -103,7 +104,7 @@
       return { date: md, years: years, count: years.length, next: next };
     });
     return { dates: dates, leapYears: yearsByDate["02-29"] || [],
-      levels: [1, 2, 3].map(function (years) {
+      levels: [1, 2, 3, 4].map(function (years) {
         return { years: years, covered: dates.filter(day => day.count >= years).length,
           missing: dates.filter(day => day.count < years).sort((a, b) => a.next.localeCompare(b.next)) };
       }) };

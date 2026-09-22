@@ -1926,10 +1926,9 @@
     }
     .journal-achievements > .achievement-collection > summary { font-size: 13px; font-weight: 600; }
     .achievement-collection > summary:focus-visible { outline: 2px solid #876252; outline-offset: 4px; }
-    .achievement-group { margin-top: 20px; }
-    .achievement-group > summary { cursor: pointer; padding: 4px 0 10px; font-size: 12px; }
-    .achievement-group:not([open]) { margin-top: 6px; }
-    .achievement-group:not([open]) > summary { padding: 3px 0; }
+    .achievement-group { margin-top: 6px; }
+    .achievement-group > summary { cursor: pointer; padding: 3px 0; font-size: 12px; }
+    .achievement-group[open] > .achievement-grid { margin-top: 7px; }
     .achievement-group > summary:focus-visible { outline: 2px solid #876252; outline-offset: 2px; }
     .achievement-grid {
       display: grid;
@@ -2956,6 +2955,7 @@
                 <option value="1">每个日期至少 1 个年份</option>
                 <option value="2">每个日期至少 2 个年份</option>
                 <option value="3">每个日期至少 3 个年份</option>
+                <option value="4">每个日期至少 4 个年份</option>
               </select>
             </span>
             <p id="journalCalendarSummary"></p>

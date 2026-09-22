@@ -1862,19 +1862,24 @@
     .achievement-calendar h3 { margin: 0; font-size: 13px; color: #365f4b; }
     .achievement-calendar p { margin: 6px 0; font-size: 11px; }
     .achievement-calendar label { font-size: 11px; }
-    .achievement-calendar select { max-width: 100%; margin: 8px 0; padding: 5px 8px; font: inherit; font-size: 12px; }
+    .achievement-calendar-select { position: relative; display: inline-block; max-width: 100%; margin: 8px 0; }
+    .achievement-calendar-select::after { content: ""; position: absolute; right: 13px; top: 50%; width: 6px; height: 6px; border-right: 1.5px solid #515a44; border-bottom: 1.5px solid #515a44; transform: translateY(-70%) rotate(45deg); pointer-events: none; }
+    .achievement-calendar select { display: block; max-width: 100%; margin: 0; padding: 7px 36px 7px 10px; border: 1px solid #ccd6c7; border-radius: 6px; background: #fffdf8; appearance: none; -webkit-appearance: none; font: inherit; font-size: 12px; }
+    .achievement-calendar select:focus-visible { outline: 2px solid #365f4b; outline-offset: 2px; }
     .achievement-calendar-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 12px; }
     .achievement-calendar-month h4 { margin: 0 0 5px; font-size: 11px; font-weight: 500; }
     .achievement-calendar-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
     .achievement-calendar-day { display: grid; place-items: center; min-width: 0; padding: 0; min-height: 24px; border-radius: 4px; font-size: 10px; background: #e5e8e0; color: #697263; cursor: pointer; }
     .achievement-calendar-day.is-covered { background: #c9ddc8; color: #274b31; }
     .achievement-calendar-day.is-missing { outline: 1px dashed #8b907f; outline-offset: -1px; }
+    .achievement-calendar-day[aria-pressed="true"] { background: #365f4b; color: #fff; outline: 2px solid #365f4b; outline-offset: 1px; }
     .achievement-calendar-day:focus-visible { outline: 2px solid #365f4b; outline-offset: 1px; }
     .achievement-calendar-missing { color: #515a44; }
     .achievement-calendar-detail { min-height: 2.5em; }
     .achievement-personal-records { margin-bottom: 16px; }
     .achievement-personal-records dl { margin-top: 12px; }
     .achievement-milestones { margin-bottom: 20px; }
+    .journal-milestone, .journal-achievements { scroll-margin-top: calc(16px + env(safe-area-inset-top)); }
     .achievement-records {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2917,11 +2922,13 @@
             <h3 id="journalCalendarTitle">365 日期收藏</h3>
             <p>跨年份合并月日，看看一年里的每个日期是否都留下过记录。</p>
             <label for="journalCalendarLevel">覆盖目标 </label>
-            <select id="journalCalendarLevel">
-              <option value="1">每个日期至少 1 个年份</option>
-              <option value="2">每个日期至少 2 个年份</option>
-              <option value="3">每个日期至少 3 个年份</option>
-            </select>
+            <span class="achievement-calendar-select">
+              <select id="journalCalendarLevel">
+                <option value="1">每个日期至少 1 个年份</option>
+                <option value="2">每个日期至少 2 个年份</option>
+                <option value="3">每个日期至少 3 个年份</option>
+              </select>
+            </span>
             <p id="journalCalendarSummary"></p>
             <p id="journalCalendarMissing" class="achievement-calendar-missing"></p>
             <details id="journalCalendarDetails" class="achievement-collection">
@@ -10433,15 +10440,17 @@
         if (backgroundRenderTimer !== null) {
           render();
         }
+        const target = journalMilestone && !journalMilestone.hidden ? journalMilestone
+          : !journalAchievements.hidden ? journalAchievements : footer;
         const reduceMotion = window.matchMedia
           && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         try {
-          footer.scrollIntoView({
+          target.scrollIntoView({
             behavior: reduceMotion ? "auto" : "smooth",
-            block: "center"
+            block: "start"
           });
         } catch (error) {
-          footer.scrollIntoView(false);
+          target.scrollIntoView(true);
         }
         window.setTimeout(updateJournalBottomJump, reduceMotion ? 0 : 350);
       }
@@ -10668,8 +10677,14 @@
             const description = showDate(day.date) + " · " + (day.count ? day.years.join("、") + " 年有记录" : "现存日记中尚无记录");
             button.title = description;
             button.setAttribute("aria-label", description);
-            button.addEventListener("click", function () { detail.dataset.date = day.date; detail.textContent = description; });
-            if (selectedDate === day.date) detail.textContent = description;
+            button.setAttribute("aria-pressed", selectedDate === day.date ? "true" : "false");
+            button.addEventListener("click", function () {
+              detail.dataset.date = day.date;
+              detail.textContent = "已选日期：" + description;
+              grid.querySelectorAll('[aria-pressed="true"]').forEach(cell => cell.setAttribute("aria-pressed", "false"));
+              button.setAttribute("aria-pressed", "true");
+            });
+            if (selectedDate === day.date) detail.textContent = "已选日期：" + description;
             cells.appendChild(button);
           });
           block.append(heading, cells);

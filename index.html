@@ -1847,31 +1847,8 @@
       letter-spacing: 0.04em;
     }
 
-    .achievement-count {
-      margin: -6px -2px;
-      padding: 6px 2px;
-      border-radius: 4px;
-      color: #876252;
-      font-variant-numeric: tabular-nums;
-      text-decoration: underline;
-      text-decoration-color: rgba(135, 98, 82, 0.42);
-      text-decoration-style: dotted;
-      text-underline-offset: 3px;
-      white-space: nowrap;
-    }
-    .achievement-count:hover { text-decoration-color: currentColor; }
-    .achievement-count:focus-visible { outline: 2px solid #876252; outline-offset: 3px; }
-    .achievement-intro { margin: 4px 0 16px; }
     .achievement-section-title { margin: 20px 0 10px; font-size: 13px; font-weight: 600; color: #51483e; }
-    .achievement-records.achievement-runs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .achievement-records > div { padding: 12px; border: 1px solid #e7e0d4; border-radius: 10px; background: #fffdf8; }
-    .achievement-runs dt { color: #51483e; font-size: 12px; }
-    .achievement-runs small { margin-top: 4px; }
-    .achievement-run-pending { color: #a3653c; font-weight: 600; }
-    .achievement-run-goal { color: #765b47; font-size: 11px; margin: 8px 0 0; }
-    .achievement-run-history { margin-top: 6px; font-size: 10px; }
-    .achievement-run-history summary { cursor: pointer; }
-    .achievement-run-history ul { padding-left: 16px; }
     .achievement-calendar { margin: 16px 0; padding: 14px; background: #f0f5ee; border-radius: 10px; }
     .achievement-calendar h3 { margin: 0; font-size: 13px; color: #365f4b; }
     .achievement-calendar p { margin: 6px 0; font-size: 11px; }
@@ -1910,14 +1887,6 @@
     .achievement-records dd { margin: 2px 0 0; color: #51483e; font-variant-numeric: tabular-nums; }
     .achievement-records strong { font-size: clamp(20px, 4vw, 28px); font-weight: 550; }
     .achievement-records small { display: block; font-size: 10px; color: var(--text-soft); }
-    .achievement-next {
-      padding: 10px 12px;
-      margin: 0 0 12px;
-      border-radius: 8px;
-      background: rgba(135, 98, 82, 0.055);
-      color: #765b47;
-      font-size: 12px;
-    }
     .achievement-collection > summary {
       cursor: pointer;
       padding: 6px 0;
@@ -1926,6 +1895,11 @@
     }
     .journal-achievements > .achievement-collection > summary { font-size: 13px; font-weight: 600; }
     .achievement-collection > summary:focus-visible { outline: 2px solid #876252; outline-offset: 4px; }
+    .achievement-all-details { margin-top: 10px; }
+    .achievement-all-details > summary { padding: 10px 0; }
+    .achievement-detail-section { margin-top: 20px; }
+    .achievement-detail-section > .achievement-section-title,
+    .achievement-detail-section > .achievement-gallery-title { margin-top: 0; }
     .achievement-earned {
       margin: 10px 0 18px;
       padding-bottom: 18px;
@@ -1940,10 +1914,9 @@
     .achievement-earned .achievement-gallery-title { color: #365f4b; }
     .achievement-earned .achievement-card { background: #fffdf8; }
     .achievement-earned-empty { margin: 0; color: var(--text-soft); font-size: 11px; }
-    .achievement-group { margin-top: 6px; }
-    .achievement-group > summary { cursor: pointer; padding: 3px 0; font-size: 12px; }
-    .achievement-group[open] > .achievement-grid { margin-top: 7px; }
-    .achievement-group > summary:focus-visible { outline: 2px solid #876252; outline-offset: 2px; }
+    .achievement-group { margin-top: 16px; }
+    .achievement-group > h4 { margin: 0; color: #51483e; font-size: 12px; font-weight: 600; }
+    .achievement-group > .achievement-grid { margin-top: 7px; }
     .achievement-grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2049,7 +2022,7 @@
       .journal-achievements { padding: 16px 12px; }
       .achievement-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
       .achievement-records { gap: 20px 12px; }
-      .achievement-records.achievement-runs, .achievement-records.achievement-milestones { grid-template-columns: minmax(0, 1fr); }
+      .achievement-records.achievement-milestones { grid-template-columns: minmax(0, 1fr); }
       .achievement-calendar-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
       .achievement-calendar { padding: 10px; }
       .achievement-calendar-day { min-height: 20px; font-size: 9px; }
@@ -2971,50 +2944,45 @@
         <section id="journalAchievements" class="journal-achievements" aria-labelledby="journalAchievementsTitle" hidden>
           <div class="achievement-heading">
             <h2 id="journalAchievementsTitle">日记纪录与勋章</h2>
-            <button id="journalAchievementsCount" class="achievement-count" type="button"
-              aria-label="查看已解锁勋章" aria-controls="journalAchievementCollection" aria-expanded="false"></button>
           </div>
-          <p class="achievement-intro">看见正在延续的日常，也留下时间积累的分量。</p>
-          <h3 class="achievement-section-title">本轮连续</h3>
-          <dl id="journalAchievementRecords" class="achievement-records achievement-runs"></dl>
-          <p id="journalAchievementNext" class="achievement-next"></p>
-          <details id="journalAchievementPersonalRecords" class="achievement-collection achievement-personal-records">
-            <summary>个人纪录与本期字数</summary>
-            <div class="achievement-comparison-headings"><span>个人纪录</span><span>本期字数</span></div>
-            <dl id="journalAchievementPeaks" class="achievement-records"></dl>
-          </details>
-          <h3 class="achievement-section-title">长期积累</h3>
-          <dl id="journalAchievementTotals" class="achievement-records achievement-milestones"></dl>
-          <section class="achievement-calendar" aria-labelledby="journalCalendarTitle">
-            <h3 id="journalCalendarTitle">365 日期收藏</h3>
-            <p>跨年份合并月日，看看一年里的每个日期是否都留下过记录。</p>
-            <label for="journalCalendarLevel">覆盖目标 </label>
-            <span class="achievement-calendar-select">
-              <select id="journalCalendarLevel">
-                <option value="1">每个日期至少 1 个年份</option>
-                <option value="2">每个日期至少 2 个年份</option>
-                <option value="3">每个日期至少 3 个年份</option>
-                <option value="4">每个日期至少 4 个年份</option>
-              </select>
-            </span>
-            <p id="journalCalendarSummary"></p>
-            <p id="journalCalendarMissing" class="achievement-calendar-missing"></p>
-            <details id="journalCalendarDetails" class="achievement-collection">
-              <summary>查看全年日期与记录年份</summary>
-              <p id="journalCalendarDetail" class="achievement-calendar-detail" aria-live="polite">点选日期查看记录年份；虚线标出尚未达到本级目标的日期。</p>
-              <div id="journalCalendarGrid" class="achievement-calendar-grid"></div>
-            </details>
-            <p id="journalCalendarLeap"></p>
+          <section class="achievement-earned" aria-labelledby="journalAchievementEarnedTitle">
+            <h3 id="journalAchievementEarnedTitle" class="achievement-gallery-title">已获得</h3>
+            <ul id="journalAchievementEarned" class="achievement-grid"></ul>
+            <p id="journalAchievementEarnedEmpty" class="achievement-earned-empty" hidden>第一枚勋章还在路上。</p>
           </section>
-          <details id="journalAchievementCollection" class="achievement-collection">
-            <summary>查看勋章收藏册 · 10 个系列</summary>
-            <section class="achievement-earned" aria-labelledby="journalAchievementEarnedTitle">
-              <h3 id="journalAchievementEarnedTitle" class="achievement-gallery-title">已获得</h3>
-              <ul id="journalAchievementEarned" class="achievement-grid"></ul>
-              <p id="journalAchievementEarnedEmpty" class="achievement-earned-empty" hidden>第一枚勋章还在路上。</p>
+          <dl id="journalAchievementTotals" class="achievement-records achievement-milestones"></dl>
+          <details id="journalAchievementCollection" class="achievement-collection achievement-all-details">
+            <summary>查看完整记录与勋章</summary>
+            <section class="achievement-detail-section" aria-labelledby="journalAchievementGalleryTitle">
+              <h3 id="journalAchievementGalleryTitle" class="achievement-gallery-title">全部勋章 · 按系列</h3>
+              <div id="journalAchievementGallery"></div>
             </section>
-            <h3 class="achievement-gallery-title">全部勋章 · 按系列</h3>
-            <div id="journalAchievementGallery"></div>
+            <section class="achievement-calendar" aria-labelledby="journalCalendarTitle">
+              <h3 id="journalCalendarTitle">365 日期收藏</h3>
+              <p>跨年份合并月日，看看一年里的每个日期是否都留下过记录。</p>
+              <label for="journalCalendarLevel">覆盖目标 </label>
+              <span class="achievement-calendar-select">
+                <select id="journalCalendarLevel">
+                  <option value="1">每个日期至少 1 个年份</option>
+                  <option value="2">每个日期至少 2 个年份</option>
+                  <option value="3">每个日期至少 3 个年份</option>
+                  <option value="4">每个日期至少 4 个年份</option>
+                </select>
+              </span>
+              <p id="journalCalendarSummary"></p>
+              <p id="journalCalendarMissing" class="achievement-calendar-missing"></p>
+              <details id="journalCalendarDetails" class="achievement-collection">
+                <summary>查看全年日期与记录年份</summary>
+                <p id="journalCalendarDetail" class="achievement-calendar-detail" aria-live="polite">点选日期查看记录年份；虚线标出尚未达到本级目标的日期。</p>
+                <div id="journalCalendarGrid" class="achievement-calendar-grid"></div>
+              </details>
+              <p id="journalCalendarLeap"></p>
+            </section>
+            <section id="journalAchievementPersonalRecords" class="achievement-detail-section achievement-personal-records" aria-labelledby="journalAchievementPersonalRecordsTitle">
+              <h3 id="journalAchievementPersonalRecordsTitle" class="achievement-section-title">个人纪录与本期字数</h3>
+              <div class="achievement-comparison-headings"><span>个人纪录</span><span>本期字数</span></div>
+              <dl id="journalAchievementPeaks" class="achievement-records"></dl>
+            </section>
             <details class="achievement-collection achievement-rules-disclosure">
               <summary>统计口径与规则</summary>
               <p id="journalAchievementRules" class="achievement-rules"></p>
@@ -3411,8 +3379,6 @@
       const journalMilestoneBreakdown = document.getElementById("journalMilestoneBreakdown");
       const journalMilestoneNext = document.getElementById("journalMilestoneNext");
       const journalAchievements = document.getElementById("journalAchievements");
-      const journalAchievementsCount = document.getElementById("journalAchievementsCount");
-      const journalAchievementCollection = document.getElementById("journalAchievementCollection");
       let journalAchievementsRenderKey = "";
       let journalAchievementsRefreshTimer = 0;
       let journalAchievementNewIds = [];
@@ -3520,10 +3486,6 @@
           document.getElementById("journalAchievementToast").hidden = true;
         });
         document.getElementById("journalAchievementToastView").addEventListener("click", showNewJournalAchievements);
-        journalAchievementsCount.addEventListener("click", showJournalAchievementCollection);
-        journalAchievementCollection.addEventListener("toggle", function () {
-          journalAchievementsCount.setAttribute("aria-expanded", String(journalAchievementCollection.open));
-        });
         window.addEventListener("focus", function () {
           if (state.localSaveError) { retryLocalSave(); }
           if (state.filter === "journal") renderJournalAchievements(getCurrentStatsForDisplay());
@@ -10719,23 +10681,17 @@
         searchRenderTimer = null;
         searchComposing = false;
         render();
-        if (journalAchievementNewIds.length) document.getElementById("journalAchievementCollection").open = true;
-        if (journalPersonalRecordBreaks.some(record => !record.streakKey)) {
-          document.getElementById("journalAchievementPersonalRecords").open = true;
-        }
         let firstCard = null;
         journalAchievementNewIds.forEach(function (id) {
-          const cards = Array.from(document.querySelectorAll('.achievement-card[data-badge-id="' + cssEscape(id) + '"]'));
-          cards.forEach(function (card) {
-            const details = card.closest("details");
-            if (details) details.open = true;
-          });
-          firstCard = firstCard || cards[0] || null;
+          const selector = '.achievement-card[data-badge-id="' + cssEscape(id) + '"]';
+          firstCard = firstCard || document.querySelector("#journalAchievementEarned " + selector)
+            || document.querySelector(selector);
         });
         const firstRecord = journalPersonalRecordBreaks[0];
         if (!firstCard && firstRecord) {
+          document.getElementById("journalAchievementCollection").open = true;
           firstCard = firstRecord.streakKey
-            ? document.querySelector('[data-streak="' + cssEscape(firstRecord.streakKey) + '"]')
+            ? document.querySelector("#journalAchievementCollection > summary")
             : document.getElementById("journalAchievementPersonalRecords");
         }
         document.getElementById("journalAchievementToast").hidden = true;
@@ -10744,25 +10700,6 @@
           firstCard.focus({ preventScroll: true });
           firstCard.scrollIntoView({ block: "center", behavior: "auto" });
         }
-      }
-
-      function showJournalAchievementCollection() {
-        journalAchievementCollection.open = true;
-        journalAchievementsCount.setAttribute("aria-expanded", "true");
-        const summary = journalAchievementCollection.querySelector("summary");
-        const reduceMotion = window.matchMedia
-          && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        window.requestAnimationFrame(function () {
-          summary.focus({ preventScroll: true });
-          try {
-            summary.scrollIntoView({
-              behavior: reduceMotion ? "auto" : "smooth",
-              block: "start"
-            });
-          } catch (error) {
-            summary.scrollIntoView(true);
-          }
-        });
       }
 
       function journalAchievementRange(range, key) {
@@ -10875,61 +10812,8 @@
         const renderKey = JSON.stringify([model, journalAchievementNewIds]);
         if (renderKey === journalAchievementsRenderKey) return model;
         journalAchievementsRenderKey = renderKey;
-        document.getElementById("journalAchievementsCount").textContent = model.unlocked + " / " + model.badges.length + " 已解锁";
-        const records = document.getElementById("journalAchievementRecords");
-        const openRuns = new Set(Array.from(records.querySelectorAll("details[open]")).map(item => item.dataset.run));
-        records.replaceChildren();
         const metrics = model.metrics;
         const monthly = model.monthly;
-        [["daily", "每日有记录", "天", "今日"],
-          ["weekly", "每周至少写一次", "周", "本周"], ["monthly", "每月至少写一次", "个月", "本月"],
-          ["thousand", "每日不少于 1000 字", "天", "今日"],
-          ["weeklyWords", "每周不少于 5000 字", "周", "本周"],
-          ["monthlyWords", "每月不少于 2 万字", "个月", "本月"]].forEach(function (entry) {
-          const key = entry[0];
-          const run = model.streaks[key];
-          const complete = ["thousand", "weeklyWords", "monthlyWords"].includes(key)
-            ? model.dailyComplete : model.datesComplete;
-          const next = model.badges.find(badge => badge.streakKey === key && !badge.unlocked);
-          let status = entry[3] + (run.currentQualified ? "已达标" : "待达标");
-          if (key === "thousand") status += " · 今日 " + formatSummaryNumber(model.todayCharacters) + " / 1,000 字";
-          if (key === "weeklyWords") status += " · 本周 " + formatSummaryNumber(model.weeklyCharacters) + " / 5,000 字";
-          if (key === "monthlyWords") status += " · 本月 " + formatSummaryNumber(monthly.characters) + " / 20,000 字";
-          const notes = [complete ? status : "等待完整统计 · 以下为已知纪录",
-            run.currentRange ? journalAchievementRange(run.currentRange, key) : "达标后开启新一轮",
-            "历史最高 " + run.longest + " " + entry[2] + " · " + journalAchievementRange(run.longestRanges[0], key)];
-          const value = appendJournalAchievementStat(records, entry[1], run.current, entry[2], notes, !complete, "连续");
-          if (complete && !run.currentQualified) {
-            const pending = document.createElement("span");
-            pending.className = "achievement-run-pending";
-            pending.textContent = entry[3] + "待达标";
-            value.querySelector("small").replaceChildren(pending, status.slice(pending.textContent.length));
-          }
-          value.parentElement.dataset.streak = key;
-          const goal = document.createElement("p");
-          goal.className = "achievement-run-goal";
-          goal.textContent = complete ? next
-            ? "本轮 " + run.current + " / " + next.target + " " + entry[2] + " · 再连续 "
-              + Math.max(0, next.target - run.current) + " " + entry[2] + "达成「" + next.name + "」"
-            : "本系列勋章均已达成 · 继续积累新纪录" : "统计补齐后显示本轮目标进度";
-          value.appendChild(goal);
-          if (run.longestRanges.length > 1) {
-            const history = document.createElement("details");
-            history.className = "achievement-run-history";
-            history.dataset.run = key;
-            history.open = openRuns.has(key);
-            const summary = document.createElement("summary");
-            summary.textContent = "查看 " + run.longestRanges.length + " 次并列纪录";
-            const list = document.createElement("ul");
-            run.longestRanges.forEach(function (range) {
-              const li = document.createElement("li"); li.textContent = journalAchievementRange(range, key); list.appendChild(li);
-            });
-            history.append(summary, list); value.appendChild(history);
-          }
-        });
-        document.getElementById("journalAchievementNext").textContent = model.datesComplete
-          ? "连续挑战按本轮进度计算；已达成的勋章保留，历史纪录另列。"
-          : "当前显示已知数据，完整日期统计补齐后将更新连续纪录和日历覆盖。";
         const peaks = document.getElementById("journalAchievementPeaks");
         peaks.replaceChildren();
         [
@@ -10970,15 +10854,12 @@
         document.getElementById("journalAchievementEarnedTitle").textContent = "已获得 · " + earnedBadges.length + " 枚";
         document.getElementById("journalAchievementEarnedEmpty").hidden = Boolean(earnedBadges.length);
         const gallery = document.getElementById("journalAchievementGallery");
-        const openGroups = new Set(Array.from(gallery.querySelectorAll("details[open]"))
-          .map(group => group.dataset.group));
         gallery.replaceChildren();
         model.groups.forEach(function (group) {
-          const section = document.createElement("details");
+          const section = document.createElement("section");
           section.className = "achievement-group";
           section.dataset.group = group.id;
-          section.open = openGroups.has(group.id);
-          const heading = document.createElement("summary");
+          const heading = document.createElement("h4");
           const groupBadges = model.badges.filter(badge => badge.group === group.id);
           heading.textContent = group.title + " · " + groupBadges.filter(badge => badge.unlocked).length
             + " / " + groupBadges.length;

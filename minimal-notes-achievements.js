@@ -118,6 +118,33 @@
   }
   function count(value) { return Number.isSafeInteger(value) && value > 0 ? value : 0; }
 
+  function firstStreakAchievement(values, target, step, label, achievedByPeriod) {
+    let previous = null;
+    let length = 0;
+    const periods = Array.from(new Set(values)).sort((a, b) => a - b);
+    for (const period of periods) {
+      length = previous !== null && period === previous + step ? length + 1 : 1;
+      if (length >= target) return achievedByPeriod && achievedByPeriod.get(period) || label(period);
+      previous = period;
+    }
+    return "";
+  }
+
+  function cumulativeAchievement(days, target, value) {
+    let total = 0;
+    for (const day of days) {
+      total += value(day);
+      if (total >= target) return day;
+    }
+    return "";
+  }
+
+  function newestFirst(badges) {
+    return badges.slice().sort(function (left, right) {
+      return String(right.achievedAt || "").localeCompare(String(left.achievedAt || ""));
+    });
+  }
+
   function streaks(values, currentPeriod, step, label) {
     const runs = [];
     Array.from(new Set(values)).sort((a, b) => a - b).forEach(function (number) {
@@ -151,7 +178,10 @@
     });
     return { dates: dates, leapYears: yearsByDate["02-29"] || [],
       levels: [1, 2, 3, 4].map(function (years) {
-        return { years: years, covered: dates.filter(day => day.count >= years).length,
+        const coveredDates = dates.filter(day => day.count >= years);
+        return { years: years, covered: coveredDates.length,
+          achievedAt: coveredDates.length === dates.length
+            ? coveredDates.map(day => day.years[years - 1] + "-" + day.date).sort().pop() : "",
           missing: dates.filter(day => day.count < years).sort((a, b) => a.next.localeCompare(b.next)) };
       }) };
   }
@@ -193,6 +223,10 @@
     const weekCharacters = new Map();
     const monthCharacters = new Map();
     const yearCharacters = new Map();
+    const firstDayByWeek = new Map();
+    const firstDayByMonth = new Map();
+    const weeklyWordsAchievedAt = new Map();
+    const monthlyWordsAchievedAt = new Map();
     const characterRuns = [
       { minimum: 100, metric: "hundredCharacterStreak", run: 0 },
       { minimum: 300, metric: "threeHundredCharacterStreak", run: 0 },
@@ -215,9 +249,19 @@
       weeks.set(monday, (weeks.get(monday) || 0) + 1);
       const monthNumber = year * 12 + month;
       months.set(monthNumber, (months.get(monthNumber) || 0) + 1);
+      if (!firstDayByWeek.has(monday)) firstDayByWeek.set(monday, day);
+      if (!firstDayByMonth.has(monthNumber)) firstDayByMonth.set(monthNumber, day);
       const dayCharacters = characters[day] || 0;
-      weekCharacters.set(monday, (weekCharacters.get(monday) || 0) + dayCharacters);
-      monthCharacters.set(monthNumber, (monthCharacters.get(monthNumber) || 0) + dayCharacters);
+      const previousWeekCharacters = weekCharacters.get(monday) || 0;
+      const previousMonthCharacters = monthCharacters.get(monthNumber) || 0;
+      weekCharacters.set(monday, previousWeekCharacters + dayCharacters);
+      monthCharacters.set(monthNumber, previousMonthCharacters + dayCharacters);
+      if (previousWeekCharacters < 5000 && previousWeekCharacters + dayCharacters >= 5000) {
+        weeklyWordsAchievedAt.set(monday, day);
+      }
+      if (previousMonthCharacters < 20000 && previousMonthCharacters + dayCharacters >= 20000) {
+        monthlyWordsAchievedAt.set(monthNumber, day);
+      }
       yearCharacters.set(year, (yearCharacters.get(year) || 0) + dayCharacters);
       characterRuns.forEach(function (item) {
         item.run = dayCharacters >= item.minimum ? (consecutive ? item.run + 1 : 1) : 0;
@@ -293,12 +337,38 @@
     metrics.twentyThousandCharacterMonths = runs.monthlyWords.longest;
     const calendar = buildCalendar(days, today);
     calendar.levels.forEach(level => { metrics["calendarCoverage" + level.years] = level.covered; });
+    const streakAchievementSources = {
+      daily: { values: days.map(dayNumber), step: 1, label: dayKey },
+      thousand: { values: days.filter(day => characters[day] >= 1000).map(dayNumber), step: 1, label: dayKey },
+      weekly: { values: Array.from(weeks.keys()), step: 7, label: dayKey, achievedByPeriod: firstDayByWeek },
+      monthly: { values: Array.from(months.keys()), step: 1, label: monthLabel, achievedByPeriod: firstDayByMonth },
+      weeklyWords: { values: Array.from(weekCharacters.keys()).filter(n => weekCharacters.get(n) >= 5000),
+        step: 7, label: dayKey, achievedByPeriod: weeklyWordsAchievedAt },
+      monthlyWords: { values: Array.from(monthCharacters.keys()).filter(n => monthCharacters.get(n) >= 20000),
+        step: 1, label: monthLabel, achievedByPeriod: monthlyWordsAchievedAt }
+    };
     const badges = BADGES.map(function (badge) {
       const value = metrics[badge.metric];
       const run = runs[badge.streakKey];
       const progressValue = run ? run.current : value;
       const complete = badge.metric === "totalCharacters" || (badge.requiresDailyCharacters ? dailyComplete : datesComplete);
+      let achievedAt = "";
+      const source = streakAchievementSources[badge.streakKey];
+      if (source && value >= badge.target) {
+        achievedAt = firstStreakAchievement(source.values, badge.target, source.step, source.label,
+          source.achievedByPeriod);
+      } else if (badge.metric === "totalDays" && value >= badge.target) {
+        achievedAt = days[badge.target - 1] || "";
+      } else if (badge.metric === "thousandCharacterDays" && value >= badge.target) {
+        achievedAt = days.filter(day => characters[day] >= 1000)[badge.target - 1] || "";
+      } else if (badge.metric === "totalCharacters" && value >= badge.target) {
+        achievedAt = cumulativeAchievement(days, badge.target, day => characters[day] || 0);
+      } else if (badge.group === "calendar" && value >= badge.target) {
+        const years = Number(badge.metric.slice("calendarCoverage".length));
+        achievedAt = (calendar.levels.find(level => level.years === years) || {}).achievedAt || "";
+      }
       return Object.assign({}, badge, { value: value, progressValue: progressValue, unlocked: value >= badge.target,
+        achievedAt: achievedAt,
         progress: Math.min(1, progressValue / badge.target), streak: run || null,
         pending: !complete && value < badge.target });
     });
@@ -375,5 +445,5 @@
   }
 
   return { compute: compute, journalDay: journalDay, validDay: validDay, newlyUnlocked: newlyUnlocked,
-    newlyBrokenRecords: newlyBrokenRecords, medalSvg: medalSvg };
+    newlyBrokenRecords: newlyBrokenRecords, medalSvg: medalSvg, newestFirst: newestFirst };
 }));

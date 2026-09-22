@@ -2005,6 +2005,15 @@
     .achievement-name { margin: 5px 0; color: #51483e; font-size: 13px; font-weight: 550; }
     .achievement-rule { margin: 0 0 10px; font-size: 11px; flex: 1; }
     .achievement-state { color: var(--medal-ink); font-size: 11px; font-variant-numeric: tabular-nums; }
+    .achievement-card-footer {
+      display: flex;
+      flex: 0 0 auto;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      min-height: 52px;
+    }
+    .achievement-card-footer small { line-height: 1.55; }
     .achievement-card progress {
       width: 100%;
       max-width: 120px;
@@ -10945,7 +10954,7 @@
         });
         renderJournalAchievementCalendar(model);
         const earned = document.getElementById("journalAchievementEarned");
-        const earnedBadges = model.badges.filter(badge => badge.unlocked);
+        const earnedBadges = MinimalNotesAchievements.newestFirst(model.badges.filter(badge => badge.unlocked));
         earned.replaceChildren();
         earnedBadges.forEach(function (badge) {
           const group = model.groups.find(item => item.id === badge.group);
@@ -11011,19 +11020,22 @@
         status.className = "achievement-state";
         status.textContent = isNew ? "✓ 新解锁" : badge.unlocked ? "✓ 已解锁" : badge.pending ? "等待逐日统计"
           : (badge.streak ? "本轮 " : "累计 ") + formatSummaryNumber(badge.progressValue) + " / " + formatSummaryNumber(badge.target) + " " + badge.unit;
-        card.append(series, name, rule, status);
+        const footer = document.createElement("div");
+        footer.className = "achievement-card-footer";
+        footer.appendChild(status);
+        card.append(series, name, rule, footer);
         if (badge.streak) {
           const history = document.createElement("small");
           history.textContent = "历史最高 " + formatSummaryNumber(badge.value) + " " + badge.unit + " · "
             + journalAchievementRange(badge.streak.longestRanges[0], badge.streakKey);
-          card.appendChild(history);
+          footer.appendChild(history);
         }
         if (!badge.unlocked && !badge.pending) {
           const progress = document.createElement("progress");
           progress.max = badge.target;
           progress.value = badge.progressValue;
           progress.setAttribute("aria-label", badge.name + (badge.streak ? "本轮进度" : "累计进度"));
-          card.appendChild(progress);
+          footer.appendChild(progress);
         }
         return card;
       }

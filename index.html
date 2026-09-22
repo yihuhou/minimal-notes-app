@@ -1820,6 +1820,144 @@
       color: #876252;
     }
 
+    .journal-achievements {
+      flex: 1 0 100%;
+      min-width: 0;
+      margin: 0 0 16px;
+      padding: 20px;
+      border: 1px solid rgba(135, 98, 82, 0.15);
+      border-radius: 16px;
+      background: linear-gradient(135deg, #fcfaf5, #f8f7f2);
+      color: var(--text-soft);
+      line-height: 1.6;
+    }
+
+    .achievement-heading {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .achievement-heading h2 {
+      margin: 0;
+      color: #51483e;
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+
+    .achievement-count { color: #876252; white-space: nowrap; }
+    .achievement-intro { margin: 4px 0 16px; }
+    .achievement-records {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin: 0 0 14px;
+    }
+    .achievement-records div { min-width: 0; }
+    .achievement-records dt { font-size: 11px; }
+    .achievement-records dd { margin: 2px 0 0; color: #51483e; font-variant-numeric: tabular-nums; }
+    .achievement-records strong { font-size: clamp(20px, 4vw, 28px); font-weight: 550; }
+    .achievement-records small { display: block; font-size: 10px; color: var(--text-soft); }
+    .achievement-next {
+      padding: 10px 12px;
+      margin: 0 0 12px;
+      border-radius: 8px;
+      background: rgba(135, 98, 82, 0.055);
+      color: #765b47;
+      font-size: 12px;
+    }
+    .achievement-collection > summary {
+      cursor: pointer;
+      padding: 6px 0;
+      color: #51483e;
+      font-size: 12px;
+    }
+    .achievement-collection > summary:focus-visible { outline: 2px solid #876252; outline-offset: 4px; }
+    .achievement-group { margin-top: 20px; }
+    .achievement-group > summary { cursor: pointer; padding: 4px 0 10px; font-size: 12px; }
+    .achievement-group > summary:focus-visible { outline: 2px solid #876252; outline-offset: 2px; }
+    .achievement-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .achievement-card {
+      --medal-ink: #7e6f56;
+      --medal-fill: #ede7db;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 14px 10px 12px;
+      border: 1px solid rgba(135, 98, 82, 0.12);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.55);
+      text-align: center;
+      min-width: 0;
+    }
+    .achievement-card[data-group="streak"] { --medal-ink: #a35e43; --medal-fill: #f4e1cf; }
+    .achievement-card[data-group="rhythm"] { --medal-ink: #a2677b; --medal-fill: #f0e0e6; }
+    .achievement-card[data-group="calendar"] { --medal-ink: #537c70; --medal-fill: #dcebe0; }
+    .achievement-card[data-group="days"] { --medal-ink: #617797; --medal-fill: #e0e8f1; }
+    .achievement-card[data-group="serial"] { --medal-ink: #617797; --medal-fill: #e0e8f1; }
+    .achievement-card[data-group="words"] { --medal-ink: #93722e; --medal-fill: #f3e8c6; }
+    .achievement-card[data-group="daily"] { --medal-ink: #89719b; --medal-fill: #eae2f0; }
+    .achievement-card[data-group="moments"] { --medal-ink: #a2677b; --medal-fill: #f0e0e6; }
+    .achievement-card.is-locked { --medal-ink: #9b968b; --medal-fill: #eeede7; background: transparent; }
+    .achievement-card.is-new { border-color: #537c70; box-shadow: 0 0 0 2px rgba(83, 124, 112, 0.12); }
+    .achievement-toast {
+      position: fixed;
+      z-index: 45;
+      top: calc(16px + env(safe-area-inset-top));
+      right: 16px;
+      width: min(360px, calc(100% - 32px));
+      padding: 14px 16px;
+      border: 1px solid #b9cec2;
+      border-radius: 14px;
+      background: #f6faf5;
+      box-shadow: 0 8px 32px rgba(32, 59, 47, 0.15);
+      color: #365f4b;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .achievement-toast p { margin: 4px 0 10px; }
+    .achievement-toast-actions { display: flex; justify-content: flex-end; gap: 8px; }
+    .achievement-toast button { padding: 6px 10px; border-radius: 7px; background: #e4eee5; }
+    .achievement-toast button:focus-visible { outline: 2px solid #537c70; outline-offset: 2px; }
+    .achievement-medal { width: 58px; height: 66px; color: var(--medal-ink); flex: 0 0 auto; }
+    .achievement-name { margin: 5px 0; color: #51483e; font-size: 13px; font-weight: 550; }
+    .achievement-rule { margin: 0 0 10px; font-size: 11px; flex: 1; }
+    .achievement-state { color: var(--medal-ink); font-size: 11px; font-variant-numeric: tabular-nums; }
+    .achievement-card progress {
+      width: 100%;
+      max-width: 120px;
+      height: 4px;
+      margin-top: 7px;
+      appearance: none;
+      border: 0;
+      border-radius: 4px;
+      overflow: hidden;
+      background: #e9e6df;
+      accent-color: #a58b67;
+    }
+    .achievement-card progress::-webkit-progress-bar { background: #e9e6df; }
+    .achievement-card progress::-webkit-progress-value { background: #a58b67; border-radius: 4px; }
+    .achievement-card progress::-moz-progress-bar { background: #a58b67; }
+    .achievement-rules { margin: 18px 0 0; font-size: 10px; color: var(--text-soft); }
+    @media (max-width: 620px) {
+      .journal-achievements { padding: 16px 12px; }
+      .achievement-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .achievement-records { gap: 6px; }
+    }
+    @media (max-width: 350px) {
+      .achievement-grid { grid-template-columns: minmax(0, 1fr); }
+      .achievement-records strong { font-size: 19px; }
+    }
+
     .journal-ritual-count {
       display: inline-flex;
       align-items: baseline;
@@ -2727,6 +2865,20 @@
           <div id="journalMilestoneBreakdown" class="journal-milestone-breakdown"></div>
           <div id="journalMilestoneNext" class="journal-milestone-next"></div>
         </section>
+        <section id="journalAchievements" class="journal-achievements" aria-labelledby="journalAchievementsTitle" hidden>
+          <div class="achievement-heading">
+            <h2 id="journalAchievementsTitle">日记勋章</h2>
+            <span id="journalAchievementsCount" class="achievement-count" aria-label="勋章解锁数量"></span>
+          </div>
+          <p class="achievement-intro">连续的陪伴，零散的片刻，都值得收藏。</p>
+          <dl id="journalAchievementRecords" class="achievement-records"></dl>
+          <p id="journalAchievementNext" class="achievement-next"></p>
+          <details id="journalAchievementCollection" class="achievement-collection">
+            <summary>查看勋章收藏册 · 6 个分组</summary>
+            <div id="journalAchievementGallery"></div>
+            <p id="journalAchievementRules" class="achievement-rules"></p>
+          </details>
+        </section>
         <span>GitHub 用作主同步；云盘 JSON 仅作为电脑端备份。</span>
         <span id="summaryText">0 条记录</span>
       </footer>
@@ -2734,11 +2886,19 @@
     <aside id="ideaPane" class="idea-pane" aria-live="polite"></aside>
     </div>
   </main>
-  <button id="journalBottomJump" class="journal-bottom-jump" type="button" aria-label="跳到日记底部查看写作里程碑与小红花统计" title="跳到写作统计" hidden>
+  <button id="journalBottomJump" class="journal-bottom-jump" type="button" aria-label="跳到日记底部查看勋章、写作里程碑与小红花统计" title="跳到写作统计与勋章" hidden>
     <svg class="journal-bottom-jump-arrow" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
       <path d="M16 7v17M9.25 18 16 24.75 22.75 18" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"></path>
     </svg>
   </button>
+  <div id="journalAchievementToast" class="achievement-toast" role="region" aria-label="新解锁日记勋章" hidden>
+    <strong>新勋章，收下了</strong>
+    <p id="journalAchievementToastText" role="status" aria-live="polite" aria-atomic="true"></p>
+    <div class="achievement-toast-actions">
+      <button id="journalAchievementToastDismiss" type="button">收起</button>
+      <button id="journalAchievementToastView" type="button">查看勋章</button>
+    </div>
+  </div>
   <div id="gTeacherFeedbackMenu" class="g-teacher-feedback-menu" role="menu" aria-label="G老师日记反馈" hidden>
     <button type="button" data-g-teacher-feedback-aspect="content" data-g-teacher-feedback="like" role="menuitemcheckbox">内容喜欢</button>
     <button type="button" data-g-teacher-feedback-aspect="content" data-g-teacher-feedback="dislike" role="menuitemcheckbox">内容不喜欢</button>
@@ -2761,6 +2921,7 @@
 
   <script src="minimal-notes-store.js"></script>
   <script src="minimal-notes-cache.js"></script>
+  <script src="minimal-notes-achievements.js"></script>
   <script>
     (function () {
       "use strict";
@@ -3108,6 +3269,11 @@
       const journalMilestoneTotal = document.getElementById("journalMilestoneTotal");
       const journalMilestoneBreakdown = document.getElementById("journalMilestoneBreakdown");
       const journalMilestoneNext = document.getElementById("journalMilestoneNext");
+      const journalAchievements = document.getElementById("journalAchievements");
+      let journalAchievementsRenderKey = "";
+      let journalAchievementsRefreshTimer = 0;
+      let journalAchievementNewIds = [];
+      let journalAchievementPendingBefore = null;
       const journalBottomJump = document.getElementById("journalBottomJump");
       const statusText = document.getElementById("statusText");
       const healthSummary = document.getElementById("healthSummary");
@@ -3205,8 +3371,13 @@
 
       function bindEvents() {
         retryLocalSaveButton.addEventListener("click", retryLocalSave);
+        document.getElementById("journalAchievementToastDismiss").addEventListener("click", function () {
+          document.getElementById("journalAchievementToast").hidden = true;
+        });
+        document.getElementById("journalAchievementToastView").addEventListener("click", showNewJournalAchievements);
         window.addEventListener("focus", function () {
           if (state.localSaveError) { retryLocalSave(); }
+          if (state.filter === "journal") renderJournalAchievements(getCurrentStatsForDisplay());
         });
         window.addEventListener("beforeunload", function (event) {
           if (state.localSaveError) {
@@ -5048,9 +5219,11 @@
         }
         pushHistory(record, "created", now);
 
+        const achievementsBefore = record.type === "journal" && !isGTeacherRecord(record)
+          ? getJournalAchievementModel() : null;
         state.records.unshift(record);
         state.editingId = null;
-        persist();
+        const saved = persist();
         quickInput.value = "";
         quickEventAt.value = "";
         quickType.value = "auto";
@@ -5058,6 +5231,7 @@
         render();
         focusQuickInput();
         setStatus(CREATE_STATUS_MESSAGES[parsed.type] || "已保存。");
+        notifyJournalAchievementUnlocks(achievementsBefore, saved);
       }
 
       function toggleRecord(id) {
@@ -5304,6 +5478,9 @@
           || record.eventAt !== updated.eventAt
           || !recurrencesEqual(record.recurrence, updated.recurrence)
           || getRecordTypeLock(record) !== normalizeRecordType(updated.typeLock);
+        const achievementsBefore = updated.type === "journal"
+          && !isGTeacherRecord(Object.assign({}, record, { text: updated.text }))
+          ? getJournalAchievementModel() : null;
         record.text = updated.text;
         record.type = updated.type;
         record.eventAt = updated.eventAt;
@@ -5328,9 +5505,10 @@
         }
 
         state.editingId = null;
-        persist();
+        const saved = persist();
         render();
         setStatus("已更新。");
+        notifyJournalAchievementUnlocks(achievementsBefore, saved);
       }
 
       async function exportRecords() {
@@ -6536,6 +6714,9 @@
       }
 
       function resetRemoteSyncState() {
+        journalAchievementPendingBefore = null;
+        journalAchievementNewIds = [];
+        document.getElementById("journalAchievementToast").hidden = true;
         invalidateRemoteSession();
         state.remote.enabled = false;
         state.remote.token = "";
@@ -10251,6 +10432,7 @@
         const totalVisibleCount = Number(currentStats.activeRecords || 0);
         openCount.textContent = String(unfinishedCount);
         renderJournalMilestone(currentStats);
+        renderJournalAchievements(currentStats);
 
         if (state.filter === "journal") {
           const visibleUserJournalRecords = visible.filter(function (record) {
@@ -10277,6 +10459,180 @@
         }
 
         summaryText.textContent = "共 " + totalVisibleCount + " 条，当前显示 " + visible.length + " 条";
+      }
+
+      function getJournalAchievementModel(currentStats) {
+        if (!window.MinimalNotesAchievements) return null;
+        const historical = normalizeHistoricalJournalStats(state.journalStats && state.journalStats.historical);
+        return window.MinimalNotesAchievements.compute(currentStats || getCurrentStatsForDisplay(), historical);
+      }
+
+      function notifyJournalAchievementUnlocks(before, saved) {
+        if (!before) return;
+        if (!saved) {
+          journalAchievementPendingBefore = journalAchievementPendingBefore || before;
+          return;
+        }
+        const baseline = journalAchievementPendingBefore || before;
+        journalAchievementPendingBefore = null;
+        const model = getJournalAchievementModel();
+        const unlocked = window.MinimalNotesAchievements.newlyUnlocked(baseline, model);
+        if (!unlocked.length) return;
+        const toast = document.getElementById("journalAchievementToast");
+        const previousIds = toast.hidden ? [] : journalAchievementNewIds;
+        journalAchievementNewIds = Array.from(new Set(previousIds.concat(unlocked.map(badge => badge.id))));
+        const names = model.badges.filter(badge => journalAchievementNewIds.includes(badge.id)).map(badge => badge.name);
+        toast.hidden = false;
+        document.getElementById("journalAchievementToastText").textContent = names.slice(0, 3).join(" · ")
+          + (names.length > 3 ? " 等 " + names.length + " 枚" : "") + "，已加入收藏册。";
+        renderJournalAchievements(getCurrentStatsForDisplay());
+      }
+
+      function showNewJournalAchievements() {
+        state.filter = "journal";
+        state.search = "";
+        searchInput.value = "";
+        window.clearTimeout(searchRenderTimer);
+        searchRenderTimer = null;
+        searchComposing = false;
+        render();
+        document.getElementById("journalAchievementCollection").open = true;
+        let firstCard = null;
+        journalAchievementNewIds.forEach(function (id) {
+          const card = document.querySelector('.achievement-card[data-badge-id="' + cssEscape(id) + '"]');
+          if (!card) return;
+          card.closest("details").open = true;
+          firstCard = firstCard || card;
+        });
+        document.getElementById("journalAchievementToast").hidden = true;
+        if (firstCard) {
+          firstCard.tabIndex = -1;
+          firstCard.focus({ preventScroll: true });
+          firstCard.scrollIntoView({ block: "center", behavior: "auto" });
+        }
+      }
+
+      function renderJournalAchievements(currentStats) {
+        window.clearTimeout(journalAchievementsRefreshTimer);
+        journalAchievements.hidden = state.filter !== "journal" || !window.MinimalNotesAchievements;
+        if (journalAchievements.hidden) return;
+        const untilNextDay = 86400000 - ((Date.now() + 3 * 3600000) % 86400000);
+        journalAchievementsRefreshTimer = window.setTimeout(function () {
+          renderJournalAchievements(getCurrentStatsForDisplay());
+        }, untilNextDay + 100);
+        const model = getJournalAchievementModel(currentStats);
+        const renderKey = JSON.stringify([model, journalAchievementNewIds]);
+        if (renderKey === journalAchievementsRenderKey) return;
+        journalAchievementsRenderKey = renderKey;
+        document.getElementById("journalAchievementsCount").textContent = model.unlocked + " / " + model.badges.length + " 已解锁";
+        const records = document.getElementById("journalAchievementRecords");
+        records.replaceChildren();
+        const metrics = model.metrics;
+        const monthly = model.monthly;
+        [["当前连续", metrics.currentStreak, "天", model.wroteToday ? "今天已记录" : "今天还可以续上"],
+          ["最长连续", metrics.longestStreak, "天", "累计记录 " + formatSummaryNumber(metrics.totalDays) + " 天"],
+          ["单日字数纪录", metrics.bestDayCharacters, "字", metrics.bestDay || "等待第一篇日记"],
+          ["单周字数纪录", metrics.bestWeekCharacters, "字", metrics.bestWeek ? metrics.bestWeek + " 起" : "等待第一篇日记"],
+          ["单月字数纪录", metrics.bestMonthCharacters, "字", metrics.bestMonth || "等待第一篇日记"],
+          ["本月已写", monthly.characters, "字", "本月记录 " + monthly.days + " 天"]]
+          .forEach(function (entry, index) {
+            const item = document.createElement("div");
+            const label = document.createElement("dt");
+            label.textContent = entry[0];
+            const value = document.createElement("dd");
+            const number = document.createElement("strong");
+            number.textContent = index >= 2 && !model.dailyComplete ? "≥" + formatSummaryNumber(entry[1]) : formatSummaryNumber(entry[1]);
+            value.append(number, " " + entry[2]);
+            const note = document.createElement("small");
+            note.textContent = index === 0 && !metrics.currentStreak && !model.wroteToday ? "随时可以重新开始"
+              : index >= 2 && !model.dailyComplete ? "等待完整逐日统计" : entry[3];
+            value.appendChild(note);
+            item.append(label, value);
+            records.appendChild(item);
+          });
+        const next = model.badges.filter(badge => !badge.unlocked && !badge.pending)
+          .sort((a, b) => b.progress - a.progress)[0];
+        document.getElementById("journalAchievementNext").textContent = next
+          ? "下一枚可以期待「" + next.name + "」 · " + formatSummaryNumber(Math.min(next.value, next.target))
+            + " / " + formatSummaryNumber(next.target) + " " + next.unit + " · " + next.rule
+          : model.unlocked === model.badges.length ? "所有勋章都已点亮。下一页，继续写自己的故事。"
+            : "逐日统计补齐后，会继续核对未解锁的勋章。";
+        const gallery = document.getElementById("journalAchievementGallery");
+        const firstGalleryRender = !gallery.hasChildNodes();
+        const openGroups = new Set(Array.from(gallery.querySelectorAll("details[open]"))
+          .map(group => group.dataset.group));
+        gallery.replaceChildren();
+        model.groups.forEach(function (group, index) {
+          const section = document.createElement("details");
+          section.className = "achievement-group";
+          section.dataset.group = group.id;
+          section.open = openGroups.has(group.id) || (firstGalleryRender && index === 0);
+          const heading = document.createElement("summary");
+          const groupBadges = model.badges.filter(badge => badge.group === group.id);
+          heading.textContent = group.title + " · " + groupBadges.filter(badge => badge.unlocked).length
+            + " / " + groupBadges.length;
+          const list = document.createElement("ul");
+          list.className = "achievement-grid";
+          groupBadges.forEach(function (badge) {
+            list.appendChild(createJournalAchievementCard(badge, group.icon));
+          });
+          section.append(heading, list);
+          gallery.appendChild(section);
+        });
+        document.getElementById("journalAchievementRules").textContent =
+          "按北京时间凌晨 5 点换日，00:00–04:59 归前一天。完整周按周一至周日，完整月按自然月；四季按同一年春夏秋冬计算。"
+          + "仅统计本人日记，字数含标点、不含空白；同日多篇合并。连续勋章按最长纪录解锁，断更后仍保留。"
+          + "单周、单月和单年字数分别按自然周、自然月和自然年合计；达到字数即可解锁。"
+          + "每天最低字数的连续勋章要求每个日记日都达标，多个条目合计。"
+          + "勋章随现存日记重算，编辑、删除或补录会更新结果。"
+          + (model.hasHistorical ? model.historicalDaysAvailable
+            ? "历史日记已去重并计入。" : "历史字数已计入；历史逐日统计待更新。" : "当前统计 Minimal Notes 中的日记。");
+      }
+
+      function createJournalAchievementCard(badge, icon) {
+        const card = document.createElement("li");
+        card.className = "achievement-card" + (badge.unlocked ? " is-unlocked" : " is-locked");
+        const isNew = badge.unlocked && journalAchievementNewIds.includes(badge.id);
+        card.classList.toggle("is-new", isNew);
+        card.dataset.group = badge.group;
+        card.dataset.badgeId = badge.id;
+        card.innerHTML = journalAchievementMedal(icon);
+        const name = document.createElement("div");
+        name.className = "achievement-name";
+        name.textContent = badge.name;
+        const rule = document.createElement("p");
+        rule.className = "achievement-rule";
+        rule.textContent = badge.rule;
+        const status = document.createElement("span");
+        status.className = "achievement-state";
+        status.textContent = isNew ? "✓ 新解锁" : badge.unlocked ? "✓ 已解锁" : badge.pending ? "等待逐日统计"
+          : formatSummaryNumber(badge.value) + " / " + formatSummaryNumber(badge.target) + " " + badge.unit;
+        card.append(name, rule, status);
+        if (!badge.unlocked && !badge.pending) {
+          const progress = document.createElement("progress");
+          progress.max = badge.target;
+          progress.value = badge.value;
+          progress.setAttribute("aria-label", badge.name + "进度");
+          card.appendChild(progress);
+        }
+        return card;
+      }
+
+      function journalAchievementMedal(icon) {
+        const paths = {
+          flame: '<path d="M29 17c2 6-7 9-7 15a8 8 0 0 0 16 0c0-4-2-6-4-9 0 5-3 6-3 6s2-6-2-12Z"/>',
+          calendar: '<rect x="20" y="21" width="20" height="18" rx="3"/><path d="M25 18v6m10-6v6M20 27h20m-15 6 3 3 7-6"/>',
+          book: '<path d="M30 23c-4-3-8-3-12-2v18c4-1 8-1 12 2 4-3 8-3 12-2V21c-4-1-8-1-12 2Zm0 0v18"/>',
+          pen: '<path d="m21 35-1 6 6-2 15-15-5-5-15 16Zm12-13 5 5M21 35l5 4M20 44h20"/>',
+          feather: '<path d="M21 41c-1-14 5-22 19-22 0 14-8 21-19 22Zm0 0 15-17M21 41l-3 4m9-10 7 1m-4-4 1-7"/>',
+          spark: '<path d="m30 18 3 9 9 3-9 3-3 9-3-9-9-3 9-3 3-9Zm12-2v6m-3-3h6M18 40v6m-3-3h6"/>'
+        };
+        return '<svg class="achievement-medal" viewBox="0 0 60 68" aria-hidden="true" focusable="false">'
+          + '<path d="m16 44-3 20 10-4 7 6 4-22m-4 1 7 21 5-7 7 1-6-20" fill="var(--medal-fill)" stroke="currentColor" stroke-width="1.1"/>'
+          + '<circle cx="30" cy="30" r="27" fill="var(--medal-fill)" stroke="currentColor" stroke-width="1.2"/>'
+          + '<circle cx="30" cy="30" r="23" fill="none" stroke="currentColor" stroke-width=".6" stroke-dasharray="1 3"/>'
+          + '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+          + paths[icon] + '</g></svg>';
       }
 
       function renderJournalMilestone(currentStats) {
@@ -15507,7 +15863,10 @@
       function retryLocalSave() {
         const saved = saveLocalRecords({ preservePayloadTime: true });
         updateStorageStatus();
-        if (saved) { setStatus("已保存到当前浏览器。"); }
+        if (saved) {
+          setStatus("已保存到当前浏览器。");
+          notifyJournalAchievementUnlocks(journalAchievementPendingBefore, true);
+        }
         return saved;
       }
 

@@ -1030,6 +1030,7 @@
       userJournals: 0,
       gTeacherJournals: 0,
       userJournalCharacters: 0,
+      userJournalCharactersByDate: {},
       userJournalByDate: {}
     };
   }
@@ -1049,6 +1050,17 @@
     result.userJournals = count(source.userJournals);
     result.gTeacherJournals = count(source.gTeacherJournals);
     result.userJournalCharacters = count(source.userJournalCharacters);
+    // Absence means an older manifest, not a complete map containing zero words.
+    if (!source.userJournalCharactersByDate) {
+      delete result.userJournalCharactersByDate;
+    } else {
+      Object.keys(source.userJournalCharactersByDate).sort().forEach(function (day) {
+        const characters = count(source.userJournalCharactersByDate[day]);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(day) && characters) {
+          result.userJournalCharactersByDate[day] = characters;
+        }
+      });
+    }
     Object.keys(source.userJournalByDate || {}).sort().forEach(function (day) {
       const dayCount = count(source.userJournalByDate[day]);
       if (/^\d{4}-\d{2}-\d{2}$/.test(day) && dayCount) {
@@ -1082,6 +1094,15 @@
     );
     const day = journalDayKey(canonical);
     if (day) {
+      if (stats.userJournalCharactersByDate) {
+        const characters = Math.max(0, (stats.userJournalCharactersByDate[day] || 0)
+          + amount * countTextCharacters(canonical.text));
+        if (characters) {
+          stats.userJournalCharactersByDate[day] = characters;
+        } else {
+          delete stats.userJournalCharactersByDate[day];
+        }
+      }
       const nextDayCount = Math.max(0, (stats.userJournalByDate[day] || 0) + amount);
       if (nextDayCount) {
         stats.userJournalByDate[day] = nextDayCount;
@@ -1961,6 +1982,9 @@
     });
     if (layout.manifest.currentStats && hasCompleteSnapshotFiles(layout)) {
       const expectedStats = computeCurrentStats(activeRecords);
+      if (!layout.manifest.currentStats.userJournalCharactersByDate) {
+        delete expectedStats.userJournalCharactersByDate;
+      }
       if (stableStringify(normalizeCurrentStats(layout.manifest.currentStats)) !== stableStringify(expectedStats)) {
         errors.push("Manifest currentStats differ from canonical active records.");
       }

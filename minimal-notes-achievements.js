@@ -6,58 +6,53 @@
 
   const DAY = 86400000;
   const GROUPS = [
-    { id: "streak", title: "坚持与日历", icon: "flame" },
-    { id: "rhythm", title: "每天有话说", icon: "pen" },
-    { id: "serial", title: "周刊、月刊与连载", icon: "book" },
-    { id: "days", title: "日子收藏家", icon: "book" },
-    { id: "words", title: "字里行间", icon: "pen" },
-    { id: "moments", title: "时间的小彩蛋", icon: "spark" }
+    { id: "streak", title: "每日长续", icon: "flame" },
+    { id: "rhythm", title: "每日千字", icon: "pen" },
+    { id: "weekly", title: "周周有记", icon: "book" },
+    { id: "monthly", title: "月月有记", icon: "book" },
+    { id: "serial", title: "每月两万字", icon: "pen" },
+    { id: "thousand", title: "千字积累", icon: "pen" },
+    { id: "days", title: "日常积累", icon: "book" },
+    { id: "words", title: "长卷", icon: "pen" },
+    { id: "calendar", title: "日历收藏", icon: "spark" }
   ];
   const BADGES = [];
-  function add(group, metric, targets, names, rule, unit, requiresDailyCharacters) {
+  function add(group, metric, targets, names, rule, unit, requiresDailyCharacters, streakKey) {
     targets.forEach(function (target, index) {
       BADGES.push({ id: metric + "-" + target, group: group, metric: metric, target: target,
         name: names[index], rule: rule(target), unit: unit,
-        requiresDailyCharacters: Boolean(requiresDailyCharacters) });
+        requiresDailyCharacters: Boolean(requiresDailyCharacters), streakKey: streakKey || "" });
     });
   }
-  add("streak", "longestStreak", [7, 30, 100, 200, 365],
-    ["一周同行", "三十日长信", "百日如一", "两百日的约定", "一整年的陪伴"],
-    n => "曾连续 " + n + " 天写日记", "天");
-  add("streak", "perfectWeeks", [1], ["完美的一周"],
-    n => "累计 " + n + " 个完整周，周一至周日每天都有记录", "周");
-  add("streak", "perfectMonths", [1, 12], ["完美的一个月", "十二个月的圆满"],
-    n => "累计 " + n + " 个完整自然月，每天都有记录", "月");
-  add("days", "totalDays", [365, 1000], ["日子成册", "千日留痕"],
+  add("streak", "longestStreak", [200, 365, 730],
+    ["两百日长续", "三百六十五日", "七百三十日"],
+    n => "连续 " + n + " 天，每日都有记录", "天", false, "daily");
+  add("rhythm", "thousandCharacterStreak", [14, 30, 60, 100],
+    ["十四日千言", "三十日千言", "六十日千言", "百日千言"],
+    n => "连续 " + n + " 天，每日不少于 1000 字", "天", true, "thousand");
+  add("weekly", "consecutiveWeeks", [52, 104, 156],
+    ["五十二周", "一百零四周", "一百五十六周"],
+    n => "连续 " + n + " 个自然周，每周至少写一次", "周", false, "weekly");
+  add("monthly", "consecutiveMonths", [18, 24, 36, 60],
+    ["十八个月", "两年月月见", "三年月月见", "五年月月见"],
+    n => "连续 " + n + " 个月，每月至少写一次", "个月", false, "monthly");
+  add("serial", "twentyThousandCharacterMonths", [12, 24, 36],
+    ["十二月长篇", "二十四月长篇", "三十六月长篇"],
+    n => "连续 " + n + " 个月，每月不少于 2 万字", "个月", true, "monthlyWords");
+  add("thousand", "thousandCharacterDays", [500, 1000, 2000],
+    ["五百日千言", "千日千言", "两千日千言"],
+    n => "累计 " + n + " 天，每日不少于 1000 字，可不连续", "天", true);
+  add("days", "totalDays", [1000, 1500, 2000, 3000],
+    ["千日留痕", "一千五百日", "两千日留痕", "三千日留痕"],
     n => "累计记录 " + n + " 个不同的日子", "天");
-  add("words", "totalCharacters", [500000, 1000000, 2000000], ["半部人生书", "百万字长卷", "双百万字"],
+  add("words", "totalCharacters", [1000000, 2000000, 3000000, 5000000],
+    ["百万字长卷", "两百万字", "三百万字", "五百万字"],
     n => "累计写下 " + (n / 10000) + " 万字", "字");
-  add("words", "bestDayCharacters", [1000, 7500], ["千字一日", "七千五百字的长谈"],
-    n => "同一个日记日累计写下 " + n.toLocaleString("zh-CN") + " 字", "字", true);
-  add("moments", "seasons", [4], ["四季来信"], () => "同一年里，春夏秋冬都留下记录", "季");
-  add("moments", "consecutiveMonths", [24], ["两年月月见"], n => "连续 " + n + " 个月，每个月都来写过", "月");
-  add("moments", "newYearPairs", [1], ["跨年信笺"],
-    n => "累计 " + n + " 次，相邻的 12 月 31 日和 1 月 1 日都有记录", "次");
-  add("moments", "returns", [1], ["重新落笔"], () => "空白至少 7 天之后，再次写下日记", "次");
-  add("moments", "leapDays", [1], ["四年一遇"], () => "在 2 月 29 日留下记录", "次");
-  add("rhythm", "hundredCharacterStreak", [30], ["微光连载"],
-    n => "连续 " + n + " 天，每天至少 100 字", "天", true);
-  add("rhythm", "threeHundredCharacterStreak", [100, 365], ["百日有声", "每日成章"],
-    n => "连续 " + n + " 天，每天至少 300 字", "天", true);
-  add("rhythm", "thousandCharacterStreak", [7, 14, 30], ["七日千言", "半月千言", "三十日千言"],
-    n => "连续 " + n + " 天，每天至少 1000 字", "天", true);
-  add("serial", "bestWeekCharacters", [10000, 20000, 30000], ["万字周刊", "两万字特刊", "三万字特刊"],
-    n => "同一个自然周，周一至周日累计至少 " + n.toLocaleString("zh-CN") + " 字", "字", true);
-  add("serial", "bestMonthCharacters", [30000, 60000, 100000], ["三万字月刊", "六万字月刊", "十万字合订本"],
-    n => "同一个自然月累计至少 " + n.toLocaleString("zh-CN") + " 字", "字", true);
-  add("serial", "tenThousandCharacterMonths", [12], ["十二月连载"],
-    n => "连续 " + n + " 个月，每月累计至少 1 万字", "月", true);
-  add("moments", "bestWeekendCharacters", [3000], ["周末特刊"],
-    () => "同一个周末两天都有记录，周六和周日合计至少 3000 字", "字", true);
-  add("words", "thousandCharacterDays", [100], ["百日千言"],
-    n => "累计 " + n + " 天，每天写下至少 1000 字，不要求连续", "天", true);
-  add("words", "bestYearCharacters", [300000], ["三十万字年鉴"],
-    n => "同一个自然年累计至少 " + (n / 10000) + " 万字", "字", true);
+  [1, 2, 3].forEach(function (years) {
+    add("calendar", "calendarCoverage" + years, [365],
+      [years === 1 ? "日历全收藏" : years === 2 ? "日历再相逢" : "日历三重奏"],
+      () => "365 个日期，每个都在至少 " + years + " 个年份留下记录", "个日期");
+  });
 
   function validDay(day) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
@@ -71,6 +66,43 @@
       .toISOString().slice(0, 10);
   }
   function count(value) { return Number.isSafeInteger(value) && value > 0 ? value : 0; }
+
+  function streaks(values, currentPeriod, step, label) {
+    const runs = [];
+    Array.from(new Set(values)).sort((a, b) => a - b).forEach(function (number) {
+      const last = runs[runs.length - 1];
+      if (last && number === last.end + step) { last.end = number; last.length += 1; }
+      else runs.push({ start: number, end: number, length: 1 });
+    });
+    const format = run => run ? { start: label(run.start), end: label(run.end), length: run.length } : null;
+    const longest = runs.reduce((best, run) => Math.max(best, run.length), 0);
+    const last = runs[runs.length - 1];
+    const current = last && last.end >= currentPeriod - step ? last : null;
+    return { longest: longest, current: current ? current.length : 0,
+      currentRange: format(current), currentQualified: Boolean(current && current.end === currentPeriod),
+      longestRanges: runs.filter(run => run.length === longest).reverse().map(format) };
+  }
+
+  function buildCalendar(days, today) {
+    const yearsByDate = {};
+    days.forEach(function (day) {
+      const md = day.slice(5);
+      if (!yearsByDate[md]) yearsByDate[md] = [];
+      yearsByDate[md].push(day.slice(0, 4));
+    });
+    const dates = Array.from({ length: 365 }, function (_, index) {
+      const md = dayKey(dayNumber("2025-01-01") + index).slice(5);
+      const years = yearsByDate[md] || [];
+      let next = today.slice(0, 4) + "-" + md;
+      if (next < today || years.includes(today.slice(0, 4))) next = (Number(today.slice(0, 4)) + 1) + "-" + md;
+      return { date: md, years: years, count: years.length, next: next };
+    });
+    return { dates: dates, leapYears: yearsByDate["02-29"] || [],
+      levels: [1, 2, 3].map(function (years) {
+        return { years: years, covered: dates.filter(day => day.count >= years).length,
+          missing: dates.filter(day => day.count < years).sort((a, b) => a.next.localeCompare(b.next)) };
+      }) };
+  }
 
   function compute(current, historical, now) {
     current = current || {};
@@ -180,23 +212,52 @@
         metrics.bestWeek = dayKey(monday);
       }
     });
-    yearCharacters.forEach(value => { metrics.bestYearCharacters = Math.max(metrics.bestYearCharacters, value); });
+    yearCharacters.forEach(function (value, year) {
+      if (value > metrics.bestYearCharacters) { metrics.bestYearCharacters = value; metrics.bestYear = String(year); }
+    });
     seasons.forEach(value => { metrics.seasons = Math.max(metrics.seasons, value.size); });
-    const dailyComplete = Boolean(current.userJournalCharactersByDate)
+    const datesComplete = Boolean(current.userJournalByDate)
       && (!count(historical.characters) || Boolean(historical.charactersByDate));
+    const dailyComplete = datesComplete && Boolean(current.userJournalCharactersByDate)
+      && (!count(historical.characters) || Boolean(historical.charactersByDate));
+    const currentMonday = todayNumber - ((new Date(todayNumber * DAY).getUTCDay() + 6) % 7);
+    const currentMonthNumber = Number(today.slice(0, 4)) * 12 + Number(today.slice(5, 7)) - 1;
+    const monthLabel = n => Math.floor(n / 12) + "-" + String(n % 12 + 1).padStart(2, "0");
+    const runs = {
+      daily: streaks(days.map(dayNumber), todayNumber, 1, dayKey),
+      thousand: streaks(days.filter(day => characters[day] >= 1000).map(dayNumber), todayNumber, 1, dayKey),
+      weekly: streaks(Array.from(weeks.keys()), currentMonday, 7, dayKey),
+      monthly: streaks(Array.from(months.keys()), currentMonthNumber, 1, monthLabel),
+      monthlyWords: streaks(Array.from(monthCharacters.keys()).filter(n => monthCharacters.get(n) >= 20000),
+        currentMonthNumber, 1, monthLabel)
+    };
+    metrics.consecutiveWeeks = runs.weekly.longest;
+    metrics.twentyThousandCharacterMonths = runs.monthlyWords.longest;
+    const calendar = buildCalendar(days, today);
+    calendar.levels.forEach(level => { metrics["calendarCoverage" + level.years] = level.covered; });
     const badges = BADGES.map(function (badge) {
       const value = metrics[badge.metric];
-      return Object.assign({}, badge, { value: value, unlocked: value >= badge.target,
-        progress: Math.min(1, value / badge.target),
-        pending: badge.requiresDailyCharacters && !dailyComplete && value < badge.target });
+      const run = runs[badge.streakKey];
+      const progressValue = run ? run.current : value;
+      const complete = badge.metric === "totalCharacters" || (badge.requiresDailyCharacters ? dailyComplete : datesComplete);
+      return Object.assign({}, badge, { value: value, progressValue: progressValue, unlocked: value >= badge.target,
+        progress: Math.min(1, progressValue / badge.target), streak: run || null,
+        pending: !complete && value < badge.target });
     });
     const currentMonth = today.slice(0, 7);
-    const currentMonthNumber = Number(today.slice(0, 4)) * 12 + Number(today.slice(5, 7)) - 1;
     const currentMonthlyCharacters = monthCharacters.get(currentMonthNumber) || 0;
     const monthly = { month: currentMonth, characters: currentMonthlyCharacters,
       days: months.get(currentMonthNumber) || 0 };
-    return { today: today, metrics: metrics, badges: badges, groups: GROUPS,
-      monthly: monthly,
+    const yearDays = {};
+    days.forEach(day => { yearDays[day.slice(0, 4)] = (yearDays[day.slice(0, 4)] || 0) + 1; });
+    const fullYears = Object.keys(yearDays).filter(function (year) {
+      return yearDays[year] === (Date.UTC(Number(year) + 1, 0, 1) - Date.UTC(Number(year), 0, 1)) / DAY;
+    });
+    return { today: today, metrics: metrics, badges: badges, groups: GROUPS, streaks: runs, calendar: calendar,
+      monthly: monthly, todayCharacters: characters[today] || 0,
+      weeklyCharacters: weekCharacters.get(currentMonday) || 0,
+      yearlyCharacters: yearCharacters.get(Number(today.slice(0, 4))) || 0,
+      fullYears: fullYears, datesComplete: datesComplete,
       unlocked: badges.filter(b => b.unlocked).length, dailyComplete: dailyComplete,
       historicalDaysAvailable: Boolean(historical.charactersByDate),
       hasHistorical: count(historical.characters) > 0, wroteToday: dates.has(today) };

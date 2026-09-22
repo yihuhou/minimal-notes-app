@@ -1849,6 +1849,32 @@
 
     .achievement-count { color: #876252; white-space: nowrap; }
     .achievement-intro { margin: 4px 0 16px; }
+    .achievement-section-title { margin: 20px 0 10px; font-size: 13px; font-weight: 600; color: #51483e; }
+    .achievement-records.achievement-runs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .achievement-runs > div { padding: 12px; border: 1px solid #e7e0d4; border-radius: 10px; background: #fffdf8; }
+    .achievement-runs dt { color: #51483e; font-size: 12px; }
+    .achievement-runs small { margin-top: 4px; }
+    .achievement-run-goal { color: #765b47; font-size: 11px; margin: 8px 0 0; }
+    .achievement-run-history { margin-top: 6px; font-size: 10px; }
+    .achievement-run-history summary { cursor: pointer; }
+    .achievement-run-history ul { padding-left: 16px; }
+    .achievement-calendar { margin: 16px 0; padding: 14px; background: #f0f5ee; border-radius: 10px; }
+    .achievement-calendar h3 { margin: 0; font-size: 13px; color: #365f4b; }
+    .achievement-calendar p { margin: 6px 0; font-size: 11px; }
+    .achievement-calendar label { font-size: 11px; }
+    .achievement-calendar select { max-width: 100%; margin: 8px 0; padding: 5px 8px; font: inherit; font-size: 12px; }
+    .achievement-calendar-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 12px; }
+    .achievement-calendar-month h4 { margin: 0 0 5px; font-size: 11px; font-weight: 500; }
+    .achievement-calendar-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+    .achievement-calendar-day { display: grid; place-items: center; min-width: 0; padding: 0; min-height: 24px; border-radius: 4px; font-size: 10px; background: #e5e8e0; color: #697263; cursor: pointer; }
+    .achievement-calendar-day.is-covered { background: #c9ddc8; color: #274b31; }
+    .achievement-calendar-day.is-missing { outline: 1px dashed #8b907f; outline-offset: -1px; }
+    .achievement-calendar-day:focus-visible { outline: 2px solid #365f4b; outline-offset: 1px; }
+    .achievement-calendar-missing { color: #515a44; }
+    .achievement-calendar-detail { min-height: 2.5em; }
+    .achievement-personal-records { margin-bottom: 16px; }
+    .achievement-personal-records dl { margin-top: 12px; }
+    .achievement-milestones { margin-bottom: 20px; }
     .achievement-records {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1952,10 +1978,17 @@
       .journal-achievements { padding: 16px 12px; }
       .achievement-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
       .achievement-records { gap: 6px; }
+      .achievement-records.achievement-runs, .achievement-records.achievement-milestones { grid-template-columns: minmax(0, 1fr); }
+      .achievement-personal-records .achievement-records { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .achievement-calendar-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+      .achievement-calendar { padding: 10px; }
+      .achievement-calendar-day { min-height: 20px; font-size: 9px; }
     }
     @media (max-width: 350px) {
       .achievement-grid { grid-template-columns: minmax(0, 1fr); }
       .achievement-records strong { font-size: 19px; }
+      .achievement-calendar-grid { grid-template-columns: minmax(0, 1fr); }
+      .achievement-calendar-day { min-height: 28px; font-size: 11px; }
     }
 
     .journal-ritual-count {
@@ -2867,14 +2900,39 @@
         </section>
         <section id="journalAchievements" class="journal-achievements" aria-labelledby="journalAchievementsTitle" hidden>
           <div class="achievement-heading">
-            <h2 id="journalAchievementsTitle">日记勋章</h2>
+            <h2 id="journalAchievementsTitle">日记纪录与勋章</h2>
             <span id="journalAchievementsCount" class="achievement-count" aria-label="勋章解锁数量"></span>
           </div>
-          <p class="achievement-intro">连续的陪伴，零散的片刻，都值得收藏。</p>
-          <dl id="journalAchievementRecords" class="achievement-records"></dl>
+          <p class="achievement-intro">看见正在延续的日常，也留下时间积累的分量。</p>
+          <h3 class="achievement-section-title">本轮连续</h3>
+          <dl id="journalAchievementRecords" class="achievement-records achievement-runs"></dl>
           <p id="journalAchievementNext" class="achievement-next"></p>
+          <details id="journalAchievementPersonalRecords" class="achievement-collection achievement-personal-records">
+            <summary>个人纪录与本期字数</summary>
+            <dl id="journalAchievementPeaks" class="achievement-records"></dl>
+          </details>
+          <h3 class="achievement-section-title">长期积累</h3>
+          <dl id="journalAchievementTotals" class="achievement-records achievement-milestones"></dl>
+          <section class="achievement-calendar" aria-labelledby="journalCalendarTitle">
+            <h3 id="journalCalendarTitle">365 日期收藏</h3>
+            <p>跨年份合并月日，看看一年里的每个日期是否都留下过记录。</p>
+            <label for="journalCalendarLevel">覆盖目标 </label>
+            <select id="journalCalendarLevel">
+              <option value="1">每个日期至少 1 个年份</option>
+              <option value="2">每个日期至少 2 个年份</option>
+              <option value="3">每个日期至少 3 个年份</option>
+            </select>
+            <p id="journalCalendarSummary"></p>
+            <p id="journalCalendarMissing" class="achievement-calendar-missing"></p>
+            <details id="journalCalendarDetails" class="achievement-collection">
+              <summary>查看全年日期与记录年份</summary>
+              <p id="journalCalendarDetail" class="achievement-calendar-detail" aria-live="polite">点选日期查看记录年份；虚线标出尚未达到本级目标的日期。</p>
+              <div id="journalCalendarGrid" class="achievement-calendar-grid"></div>
+            </details>
+            <p id="journalCalendarLeap"></p>
+          </section>
           <details id="journalAchievementCollection" class="achievement-collection">
-            <summary>查看勋章收藏册 · 6 个分组</summary>
+            <summary>查看勋章收藏册 · 9 个系列</summary>
             <div id="journalAchievementGallery"></div>
             <p id="journalAchievementRules" class="achievement-rules"></p>
           </details>
@@ -10533,6 +10591,97 @@
         }
       }
 
+      function journalAchievementRange(range, key) {
+        if (!range) return "尚无纪录";
+        if (key === "weekly") {
+          return range.start + " 起，至 " + range.end + " 这一周";
+        }
+        return range.start === range.end ? range.start : range.start + " — " + range.end;
+      }
+
+      function appendJournalAchievementStat(container, title, number, unit, notes, incomplete) {
+        const item = document.createElement("div");
+        const label = document.createElement("dt");
+        label.textContent = title;
+        const value = document.createElement("dd");
+        const strong = document.createElement("strong");
+        strong.textContent = (incomplete ? "≥" : "") + formatSummaryNumber(number);
+        value.append(strong, " " + unit);
+        notes.forEach(function (text) {
+          const note = document.createElement("small");
+          note.textContent = text;
+          value.appendChild(note);
+        });
+        item.append(label, value);
+        container.appendChild(item);
+        return value;
+      }
+
+      function renderJournalAchievementCalendar(model) {
+        const select = document.getElementById("journalCalendarLevel");
+        const level = model.calendar.levels[Number(select.value) - 1];
+        const prefix = model.datesComplete ? "" : "已知至少 ";
+        document.getElementById("journalCalendarSummary").textContent = prefix + level.covered + " / 365 个日期达标"
+          + (model.datesComplete ? " · 尚缺 " + level.missing.length + " 个" : " · 等待完整日期统计");
+        const missing = document.getElementById("journalCalendarMissing");
+        if (missing.dataset.level !== String(level.years)) delete missing.dataset.expanded;
+        missing.dataset.level = String(level.years);
+        const showDate = value => Number(value.slice(0, 2)) + "月" + Number(value.slice(3)) + "日";
+        const displayMissing = function (all) {
+          missing.dataset.expanded = all ? "true" : "false";
+          missing.replaceChildren();
+          missing.append(model.datesComplete ? "尚未达标：" : "已知记录尚未覆盖：",
+            level.missing.slice(0, all ? undefined : 12).map(day => showDate(day.date)).join("、"));
+          if (!all && level.missing.length > 12) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.textContent = " · 展开全部 " + level.missing.length + " 个日期";
+            button.addEventListener("click", () => displayMissing(true));
+            missing.appendChild(button);
+          }
+          if (model.datesComplete) missing.append("。下一次待记录日期：", level.missing[0].next,
+            level.missing[0].next === model.today ? "（今天）" : "");
+        };
+        if (level.missing.length) {
+          displayMissing(missing.dataset.expanded === "true");
+        } else missing.textContent = "这一层日历已全部收藏。";
+        const detail = document.getElementById("journalCalendarDetail");
+        const selectedDate = detail.dataset.date;
+        detail.textContent = "点选日期查看记录年份；虚线标出尚未达到本级目标的日期。";
+        const grid = document.getElementById("journalCalendarGrid");
+        const focusedDate = grid.contains(document.activeElement) ? document.activeElement.dataset.date : "";
+        grid.replaceChildren();
+        for (let month = 1; month <= 12; month += 1) {
+          const block = document.createElement("div");
+          block.className = "achievement-calendar-month";
+          const heading = document.createElement("h4");
+          const dates = model.calendar.dates.filter(day => Number(day.date.slice(0, 2)) === month);
+          heading.textContent = month + "月 · " + dates.filter(day => day.count >= level.years).length + " / " + dates.length;
+          const cells = document.createElement("div");
+          cells.className = "achievement-calendar-days";
+          dates.forEach(function (day) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.dataset.date = day.date;
+            button.className = "achievement-calendar-day " + (day.count >= level.years ? "is-covered" : "is-missing");
+            button.textContent = Number(day.date.slice(3));
+            const description = showDate(day.date) + " · " + (day.count ? day.years.join("、") + " 年有记录" : "现存日记中尚无记录");
+            button.title = description;
+            button.setAttribute("aria-label", description);
+            button.addEventListener("click", function () { detail.dataset.date = day.date; detail.textContent = description; });
+            if (selectedDate === day.date) detail.textContent = description;
+            cells.appendChild(button);
+          });
+          block.append(heading, cells);
+          grid.appendChild(block);
+        }
+        if (focusedDate) grid.querySelector('[data-date="' + focusedDate + '"]').focus({ preventScroll: true });
+        document.getElementById("journalCalendarLeap").textContent = "2月29日单独收藏："
+          + (model.calendar.leapYears.length ? model.calendar.leapYears.join("、") + " 年已有记录" : "尚无记录")
+          + "。完整自然年每日记录：" + (model.fullYears.length ? model.fullYears.join("、") + " 年" : model.datesComplete ? "尚未达成" : "待完整统计") + "。";
+        select.onchange = function () { renderJournalAchievementCalendar(model); };
+      }
+
       function renderJournalAchievements(currentStats) {
         window.clearTimeout(journalAchievementsRefreshTimer);
         journalAchievements.hidden = state.filter !== "journal" || !window.MinimalNotesAchievements;
@@ -10547,37 +10696,73 @@
         journalAchievementsRenderKey = renderKey;
         document.getElementById("journalAchievementsCount").textContent = model.unlocked + " / " + model.badges.length + " 已解锁";
         const records = document.getElementById("journalAchievementRecords");
+        const openRuns = new Set(Array.from(records.querySelectorAll("details[open]")).map(item => item.dataset.run));
         records.replaceChildren();
         const metrics = model.metrics;
         const monthly = model.monthly;
-        [["当前连续", metrics.currentStreak, "天", model.wroteToday ? "今天已记录" : "今天还可以续上"],
-          ["最长连续", metrics.longestStreak, "天", "累计记录 " + formatSummaryNumber(metrics.totalDays) + " 天 · 5 点换日"],
-          ["单日字数纪录", metrics.bestDayCharacters, "字", metrics.bestDay || "等待第一篇日记"],
-          ["单周字数纪录", metrics.bestWeekCharacters, "字", metrics.bestWeek ? metrics.bestWeek + " 起" : "等待第一篇日记"],
-          ["单月字数纪录", metrics.bestMonthCharacters, "字", metrics.bestMonth || "等待第一篇日记"],
-          ["本月已写", monthly.characters, "字", "本月记录 " + monthly.days + " 天"]]
-          .forEach(function (entry, index) {
-            const item = document.createElement("div");
-            const label = document.createElement("dt");
-            label.textContent = entry[0];
-            const value = document.createElement("dd");
-            const number = document.createElement("strong");
-            number.textContent = index >= 2 && !model.dailyComplete ? "≥" + formatSummaryNumber(entry[1]) : formatSummaryNumber(entry[1]);
-            value.append(number, " " + entry[2]);
-            const note = document.createElement("small");
-            note.textContent = index === 0 && !metrics.currentStreak && !model.wroteToday ? "随时可以重新开始"
-              : index >= 2 && !model.dailyComplete ? "等待完整逐日统计" : entry[3];
-            value.appendChild(note);
-            item.append(label, value);
-            records.appendChild(item);
-          });
-        const next = model.badges.filter(badge => !badge.unlocked && !badge.pending)
-          .sort((a, b) => b.progress - a.progress)[0];
-        document.getElementById("journalAchievementNext").textContent = next
-          ? "下一枚可以期待「" + next.name + "」 · " + formatSummaryNumber(Math.min(next.value, next.target))
-            + " / " + formatSummaryNumber(next.target) + " " + next.unit + " · " + next.rule
-          : model.unlocked === model.badges.length ? "所有勋章都已点亮。下一页，继续写自己的故事。"
-            : "逐日统计补齐后，会继续核对未解锁的勋章。";
+        [["daily", "每日有记录", "天", "今日"], ["thousand", "每日不少于 1000 字", "天", "今日"],
+          ["weekly", "每周至少写一次", "周", "本周"], ["monthly", "每月至少写一次", "个月", "本月"],
+          ["monthlyWords", "每月不少于 2 万字", "个月", "本月"]].forEach(function (entry) {
+          const key = entry[0];
+          const run = model.streaks[key];
+          const complete = key === "thousand" || key === "monthlyWords" ? model.dailyComplete : model.datesComplete;
+          const next = model.badges.find(badge => badge.streakKey === key && !badge.unlocked);
+          let status = entry[3] + (run.currentQualified ? "已达标" : "待达标");
+          if (key === "thousand") status += " · 今日 " + formatSummaryNumber(model.todayCharacters) + " / 1,000 字";
+          if (key === "monthlyWords") status += " · 本月 " + formatSummaryNumber(monthly.characters) + " / 20,000 字";
+          const notes = [complete ? status : "等待完整统计 · 以下为已知纪录",
+            run.currentRange ? journalAchievementRange(run.currentRange, key) : "达标后开启新一轮",
+            "历史最高 " + run.longest + " " + entry[2] + " · " + journalAchievementRange(run.longestRanges[0], key)];
+          const value = appendJournalAchievementStat(records, entry[1], run.current, entry[2], notes, !complete);
+          value.parentElement.dataset.streak = key;
+          const goal = document.createElement("p");
+          goal.className = "achievement-run-goal";
+          goal.textContent = complete ? next
+            ? "本轮 " + run.current + " / " + next.target + " " + entry[2] + " · 再连续 "
+              + Math.max(0, next.target - run.current) + " " + entry[2] + "达成「" + next.name + "」"
+            : "本系列勋章均已达成 · 继续积累新纪录" : "统计补齐后显示本轮目标进度";
+          value.appendChild(goal);
+          if (run.longestRanges.length > 1) {
+            const history = document.createElement("details");
+            history.className = "achievement-run-history";
+            history.dataset.run = key;
+            history.open = openRuns.has(key);
+            const summary = document.createElement("summary");
+            summary.textContent = "查看 " + run.longestRanges.length + " 次并列纪录";
+            const list = document.createElement("ul");
+            run.longestRanges.forEach(function (range) {
+              const li = document.createElement("li"); li.textContent = journalAchievementRange(range, key); list.appendChild(li);
+            });
+            history.append(summary, list); value.appendChild(history);
+          }
+        });
+        document.getElementById("journalAchievementNext").textContent = model.datesComplete
+          ? "连续挑战按本轮进度计算；已达成的勋章保留，历史纪录另列。"
+          : "当前显示已知数据，完整日期统计补齐后将更新连续纪录和日历覆盖。";
+        const peaks = document.getElementById("journalAchievementPeaks");
+        peaks.replaceChildren();
+        [["单日字数纪录", metrics.bestDayCharacters, metrics.bestDay],
+          ["单周字数纪录", metrics.bestWeekCharacters, metrics.bestWeek ? metrics.bestWeek + " 起的周" : ""],
+          ["单月字数纪录", metrics.bestMonthCharacters, metrics.bestMonth],
+          ["单年字数纪录", metrics.bestYearCharacters, metrics.bestYear],
+          ["本周已写", model.weeklyCharacters, "按周一至周日累计"],
+          ["本月已写", monthly.characters, "本月记录 " + monthly.days + " 天"],
+          ["本年已写", model.yearlyCharacters, model.today.slice(0, 4) + " 年"]].forEach(function (entry) {
+          appendJournalAchievementStat(peaks, entry[0], entry[1], "字", [entry[2] || "等待第一篇日记"], !model.dailyComplete);
+        });
+        const totals = document.getElementById("journalAchievementTotals");
+        totals.replaceChildren();
+        [["totalDays", "累计有记录", "天", model.datesComplete],
+          ["thousandCharacterDays", "累计每日千字", "天", model.dailyComplete],
+          ["totalCharacters", "累计写作", "字", true]].forEach(function (entry) {
+          const next = model.badges.find(badge => badge.metric === entry[0] && !badge.unlocked);
+          const note = !entry[3] ? "等待完整统计" : next
+            ? "下一目标 " + formatSummaryNumber(next.target) + " " + entry[2] + " · 还差 "
+              + formatSummaryNumber(next.target - metrics[entry[0]]) + " " + entry[2]
+            : "本系列勋章均已达成";
+          appendJournalAchievementStat(totals, entry[1], metrics[entry[0]], entry[2], [note], !entry[3]);
+        });
+        renderJournalAchievementCalendar(model);
         const gallery = document.getElementById("journalAchievementGallery");
         const firstGalleryRender = !gallery.hasChildNodes();
         const openGroups = new Set(Array.from(gallery.querySelectorAll("details[open]"))
@@ -10592,6 +10777,8 @@
           const groupBadges = model.badges.filter(badge => badge.group === group.id);
           heading.textContent = group.title + " · " + groupBadges.filter(badge => badge.unlocked).length
             + " / " + groupBadges.length;
+          const nextTier = groupBadges.find(badge => !badge.unlocked);
+          if (nextTier) heading.textContent += " · 下一枚「" + nextTier.name + "」";
           const list = document.createElement("ul");
           list.className = "achievement-grid";
           groupBadges.forEach(function (badge) {
@@ -10601,11 +10788,10 @@
           gallery.appendChild(section);
         });
         document.getElementById("journalAchievementRules").textContent =
-          "按北京时间凌晨 5 点换日，00:00–04:59 归前一天。完整周按周一至周日，完整月按自然月；四季按同一年春夏秋冬计算。"
-          + "累计天数也按此口径重算历史日期，可能与沿用旧网站基数的小红花不同。"
-          + "仅统计本人日记，字数含标点、不含空白；同日多篇合并。连续勋章按最长纪录解锁，断更后仍保留。"
-          + "单周、单月和单年字数分别按自然周、自然月和自然年合计；达到字数即可解锁。"
-          + "每天最低字数的连续勋章要求每个日记日都达标，多个条目合计。"
+          "仅统计本人日记，字数含标点、不含空白；同日多篇合并。每日归属沿用北京时间凌晨 5 点换日。"
+          + "周按周一至周日，月按自然月；每周或每月至少一次即满足对应周期。"
+          + "本期尚未结束时，上一期的连续仍可续上；本期待达标时显示已完成的连续数。"
+          + "历史达标用于解锁，未达成目标按本轮显示进度。日历跨年份合并月日，2 月 29 日单列。"
           + "勋章随现存日记重算，编辑、删除或补录会更新结果。"
           + (model.hasHistorical ? model.historicalDaysAvailable
             ? "历史日记已去重并计入。" : "历史字数已计入；历史逐日统计待更新。" : "当前统计 Minimal Notes 中的日记。");
@@ -10628,13 +10814,19 @@
         const status = document.createElement("span");
         status.className = "achievement-state";
         status.textContent = isNew ? "✓ 新解锁" : badge.unlocked ? "✓ 已解锁" : badge.pending ? "等待逐日统计"
-          : formatSummaryNumber(badge.value) + " / " + formatSummaryNumber(badge.target) + " " + badge.unit;
+          : (badge.streak ? "本轮 " : "累计 ") + formatSummaryNumber(badge.progressValue) + " / " + formatSummaryNumber(badge.target) + " " + badge.unit;
         card.append(name, rule, status);
+        if (badge.streak) {
+          const history = document.createElement("small");
+          history.textContent = "历史最高 " + formatSummaryNumber(badge.value) + " " + badge.unit + " · "
+            + journalAchievementRange(badge.streak.longestRanges[0], badge.streakKey);
+          card.appendChild(history);
+        }
         if (!badge.unlocked && !badge.pending) {
           const progress = document.createElement("progress");
           progress.max = badge.target;
-          progress.value = badge.value;
-          progress.setAttribute("aria-label", badge.name + "进度");
+          progress.value = badge.progressValue;
+          progress.setAttribute("aria-label", badge.name + (badge.streak ? "本轮进度" : "累计进度"));
           card.appendChild(progress);
         }
         return card;

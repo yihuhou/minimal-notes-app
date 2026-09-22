@@ -43,8 +43,8 @@
   add("serial", "twentyThousandCharacterMonths", [12, 24, 36, 48],
     ["十二月长篇", "二十四月长篇", "三十六月长篇", "四十八月长篇"],
     n => "连续 " + n + " 个月，每月不少于 2 万字", "个月", true, "monthlyWords");
-  add("thousand", "thousandCharacterDays", [500, 1000, 2000, 3000],
-    ["五百日千言", "千日千言", "两千日千言", "三千日千言"],
+  add("thousand", "thousandCharacterDays", [500, 1000, 1500, 2000],
+    ["五百日千言", "千日千言", "一千五百日千言", "两千日千言"],
     n => "累计 " + n + " 天，每日不少于 1000 字，可不连续", "天", true);
   add("days", "totalDays", [1000, 1500, 2000, 3000],
     ["千日留痕", "一千五百日", "两千日留痕", "三千日留痕"],

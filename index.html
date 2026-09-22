@@ -10636,7 +10636,9 @@
           return section;
         }
         badges.forEach(function (badge) {
-          const section = addSection("已解锁新勋章：" + badge.name);
+          const group = model.groups.find(item => item.id === badge.group);
+          const badgeTitle = (group ? group.title + " · " : "") + badge.name;
+          const section = addSection("已解锁新勋章：" + badgeTitle);
           const rule = document.createElement("p");
           rule.textContent = badge.streakKey === "thousand"
             ? "连续 " + formatSummaryNumber(badge.target) + " 天，每天写下至少 1,000 字。"

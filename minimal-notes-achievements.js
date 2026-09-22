@@ -6,7 +6,7 @@
 
   const DAY = 86400000;
   const GROUPS = [
-    { id: "streak", title: "每日长续", icon: "flame" },
+    { id: "streak", title: "日日有记", icon: "flame" },
     { id: "weekly", title: "周周有记", icon: "book" },
     { id: "monthly", title: "月月有记", icon: "book" },
     { id: "rhythm", title: "每日千字", icon: "pen" },
@@ -14,7 +14,7 @@
     { id: "serial", title: "每月两万字", icon: "pen" },
     { id: "thousand", title: "千字积累", icon: "pen" },
     { id: "days", title: "日常积累", icon: "book" },
-    { id: "words", title: "长卷", icon: "pen" },
+    { id: "words", title: "写作长卷", icon: "pen" },
     { id: "calendar", title: "日历收藏", icon: "spark" }
   ];
   const BADGES = [];
@@ -26,36 +26,36 @@
     });
   }
   add("streak", "longestStreak", [200, 365, 730, 1095],
-    ["两百日长续", "三百六十五日", "七百三十日", "千零九十五日"],
+    ["两百日长续", "一年不辍", "两年不辍", "三年不辍"],
     n => "连续 " + n + " 天，每日都有记录", "天", false, "daily");
   add("weekly", "consecutiveWeeks", [52, 104, 156, 208],
-    ["五十二周", "一百零四周", "一百五十六周", "二百零八周"],
+    ["一载相见", "两载相见", "三载相见", "四载相见"],
     n => "连续 " + n + " 个自然周，每周至少写一次", "周", false, "weekly");
   add("monthly", "consecutiveMonths", [18, 24, 36, 60],
-    ["十八个月", "两年月月见", "三年月月见", "五年月月见"],
+    ["一年半相伴", "两年相伴", "三年相伴", "五年相伴"],
     n => "连续 " + n + " 个月，每月至少写一次", "个月", false, "monthly");
   add("rhythm", "thousandCharacterStreak", [14, 30, 60, 100],
-    ["十四日千言", "三十日千言", "六十日千言", "百日千言"],
+    ["两周千言", "满月千言", "双月千言", "百日千言"],
     n => "连续 " + n + " 天，每日不少于 1000 字", "天", true, "thousand");
   add("weekly-words", "fiveThousandCharacterWeeks", [26, 52, 104, 156],
-    ["二十六周五千字", "五十二周五千字", "一百零四周五千字", "一百五十六周五千字"],
+    ["半载成章", "一载成章", "两载成章", "三载成章"],
     n => "连续 " + n + " 个自然周，每周不少于 5000 字", "周", true, "weeklyWords");
   add("serial", "twentyThousandCharacterMonths", [12, 24, 36, 48],
-    ["十二月长篇", "二十四月长篇", "三十六月长篇", "四十八月长篇"],
+    ["一年长卷", "两年长卷", "三年长卷", "四年长卷"],
     n => "连续 " + n + " 个月，每月不少于 2 万字", "个月", true, "monthlyWords");
   add("thousand", "thousandCharacterDays", [500, 1000, 1500, 2000],
-    ["五百日千言", "千日千言", "一千五百日千言", "两千日千言"],
+    ["千言成习", "千言成卷", "千言成林", "千言成河"],
     n => "累计 " + n + " 天，每日不少于 1000 字，可不连续", "天", true);
   add("days", "totalDays", [1000, 1500, 2000, 3000],
-    ["千日留痕", "一千五百日", "两千日留痕", "三千日留痕"],
+    ["日久成习", "日久成册", "日久成卷", "日久成史"],
     n => "累计记录 " + n + " 个不同的日子", "天");
   add("words", "totalCharacters", [1000000, 2000000, 3000000, 5000000],
-    ["百万字长卷", "两百万字", "三百万字", "五百万字"],
+    ["百万字长卷", "两百万字长卷", "三百万字长卷", "五百万字长卷"],
     n => "累计写下 " + (n / 10000) + " 万字", "字");
   [1, 2, 3, 4].forEach(function (years) {
     add("calendar", "calendarCoverage" + years, [365],
-      [years === 1 ? "日历全收藏" : years === 2 ? "日历再相逢"
-        : years === 3 ? "日历三重奏" : "日历四重奏"],
+      [years === 1 ? "岁时初圆" : years === 2 ? "岁时重逢"
+        : years === 3 ? "岁时三叠" : "岁时四叠"],
       () => "365 个日期，每个都在至少 " + years + " 个年份留下记录", "个日期");
   });
 

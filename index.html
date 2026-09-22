@@ -7712,7 +7712,7 @@
       }
 
       function scheduleSnapshotBrowseLoad() {
-        if (state.snapshots.autoLoadPaused || state.search || state.remote.temporary
+        if (state.snapshots.autoLoadPaused || getVisibleJournalSummaryRect() || state.search || state.remote.temporary
           || (state.filter !== "journal" && state.filter !== "completed")) {
           return;
         }
@@ -7720,7 +7720,7 @@
       }
 
       function maybeLoadNextSnapshotForBrowsing() {
-        if (state.snapshots.autoLoadPaused || state.snapshots.browsePromise || state.search
+        if (state.snapshots.autoLoadPaused || getVisibleJournalSummaryRect() || state.snapshots.browsePromise || state.search
           || (state.filter !== "journal" && state.filter !== "completed")) {
           return;
         }
@@ -10199,6 +10199,9 @@
         }
         window.clearTimeout(backgroundRenderTimer);
         backgroundRenderTimer = null;
+        // A sync or an already-running snapshot request can add records above
+        // the collection. Keep the part of the footer being read on screen.
+        const summaryAnchor = getVisibleJournalSummaryRect();
         scheduleAutoCompletionRefresh();
         const visible = getVisibleRecords();
         renderFilters();
@@ -10207,8 +10210,14 @@
         renderList(visible);
         updateGTeacherTagAlignment();
         renderIdeaPane();
-        updateJournalBottomJump();
         renderSnapshotLoadStatus();
+        if (summaryAnchor) {
+          const offset = getSummaryFooter().getBoundingClientRect().top - summaryAnchor.top;
+          if (Math.abs(offset) > 1) {
+            window.scrollBy({ top: offset, behavior: "instant" });
+          }
+        }
+        updateJournalBottomJump();
         scheduleSnapshotBrowseLoad();
       }
 
@@ -10311,6 +10320,12 @@
         const scrollY = getWindowScrollY();
         const delta = scrollY - journalBottomJumpLastScrollY;
         journalBottomJumpLastScrollY = scrollY;
+        if (state.filter === "journal" && state.snapshots.footerJumpActive
+          && (delta < -4 || scrollY <= 4) && !getVisibleJournalSummaryRect()) {
+          resumeSnapshotAutoLoad();
+          scheduleRecordListGrow();
+          scheduleSnapshotBrowseLoad();
+        }
         if (state.filter !== "journal" || scrollY <= 4) {
           journalBottomJumpShowIntent = false;
           return;
@@ -10323,9 +10338,6 @@
 
         if (delta < -4) {
           journalBottomJumpShowIntent = false;
-          if (state.snapshots.footerJumpActive && delta < -20) {
-            resumeSnapshotAutoLoad();
-          }
         }
       }
 
@@ -10392,6 +10404,15 @@
         }
 
         return summaryText.closest ? summaryText.closest(".footer") : summaryText;
+      }
+
+      function getVisibleJournalSummaryRect() {
+        if (state.filter !== "journal" || journalAchievements.hidden) {
+          return null;
+        }
+        const footer = getSummaryFooter();
+        const rect = footer && footer.getBoundingClientRect();
+        return rect && rect.bottom > 0 && rect.top < window.innerHeight ? rect : null;
       }
 
       function getWindowScrollY() {
@@ -10530,7 +10551,7 @@
         const metrics = model.metrics;
         const monthly = model.monthly;
         [["当前连续", metrics.currentStreak, "天", model.wroteToday ? "今天已记录" : "今天还可以续上"],
-          ["最长连续", metrics.longestStreak, "天", "累计记录 " + formatSummaryNumber(metrics.totalDays) + " 天"],
+          ["最长连续", metrics.longestStreak, "天", "累计记录 " + formatSummaryNumber(metrics.totalDays) + " 天 · 5 点换日"],
           ["单日字数纪录", metrics.bestDayCharacters, "字", metrics.bestDay || "等待第一篇日记"],
           ["单周字数纪录", metrics.bestWeekCharacters, "字", metrics.bestWeek ? metrics.bestWeek + " 起" : "等待第一篇日记"],
           ["单月字数纪录", metrics.bestMonthCharacters, "字", metrics.bestMonth || "等待第一篇日记"],
@@ -10581,6 +10602,7 @@
         });
         document.getElementById("journalAchievementRules").textContent =
           "按北京时间凌晨 5 点换日，00:00–04:59 归前一天。完整周按周一至周日，完整月按自然月；四季按同一年春夏秋冬计算。"
+          + "累计天数也按此口径重算历史日期，可能与沿用旧网站基数的小红花不同。"
           + "仅统计本人日记，字数含标点、不含空白；同日多篇合并。连续勋章按最长纪录解锁，断更后仍保留。"
           + "单周、单月和单年字数分别按自然周、自然月和自然年合计；达到字数即可解锁。"
           + "每天最低字数的连续勋章要求每个日记日都达标，多个条目合计。"
@@ -10930,12 +10952,12 @@
       }
 
       function scheduleRecordListGrow() {
-        if (recordListGrowFrame || state.snapshots.autoLoadPaused || recordListMore.hidden) {
+        if (recordListGrowFrame || state.snapshots.autoLoadPaused || getVisibleJournalSummaryRect() || recordListMore.hidden) {
           return;
         }
         recordListGrowFrame = window.requestAnimationFrame(function () {
           recordListGrowFrame = 0;
-          if (!state.snapshots.autoLoadPaused
+          if (!state.snapshots.autoLoadPaused && !getVisibleJournalSummaryRect()
             && recordListMore.getBoundingClientRect().top < window.innerHeight + SNAPSHOT_LOAD_DISTANCE_PX) {
             showMoreRecords();
           }

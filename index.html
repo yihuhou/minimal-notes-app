@@ -10526,7 +10526,7 @@
         const totalVisibleCount = Number(currentStats.activeRecords || 0);
         openCount.textContent = String(unfinishedCount);
         renderJournalMilestone(currentStats);
-        renderJournalAchievements(currentStats);
+        const journalAchievementModel = renderJournalAchievements(currentStats);
 
         if (state.filter === "journal") {
           const visibleUserJournalRecords = visible.filter(function (record) {
@@ -10535,13 +10535,18 @@
           const userJournalCount = Number(currentStats.userJournals || 0);
           const gTeacherCount = Number(currentStats.gTeacherJournals || 0);
           const journalWordCount = Number(currentStats.userJournalCharacters || 0);
-          const journalDayCount = Object.keys(currentStats.userJournalByDate || {}).length;
+          const journalDayCount = journalAchievementModel ? journalAchievementModel.currentDays
+            : Object.keys(currentStats.userJournalByDate || {}).length;
           const journalRitualStats = getJournalRitualStats();
-          const journalRitualCount = journalRitualStats
-            ? journalRitualStats.baseCount + Object.keys(currentStats.userJournalByDate || {}).filter(function (day) {
-              return day >= journalRitualStats.startDay;
-            }).length
-            : null;
+          let journalRitualCount = null;
+          if (journalRitualStats) {
+            journalRitualCount = journalAchievementModel && journalAchievementModel.datesComplete && journalAchievementModel.historicalDaysAvailable
+              ? journalAchievementModel.metrics.totalDays
+              : journalRitualStats.baseCount + Object.keys(currentStats.userJournalByDate || {}).filter(function (day) {
+                // Preserve older imports until their historical daily aggregate is available.
+                return day >= journalRitualStats.startDay && (!journalAchievementModel || day <= journalAchievementModel.today);
+              }).length;
+          }
           const countText = !state.search
             ? "我的日记 " + formatSummaryNumber(userJournalCount) + " 条"
             : "我的日记共 " + formatSummaryNumber(userJournalCount) + " 条，当前显示 " + formatSummaryNumber(visibleUserJournalRecords.length) + " 条";
@@ -10552,6 +10557,7 @@
           return;
         }
 
+        summaryText.title = "";
         summaryText.textContent = "共 " + totalVisibleCount + " 条，当前显示 " + visible.length + " 条";
       }
 
@@ -10709,11 +10715,11 @@
         if (journalAchievements.hidden) return;
         const untilNextDay = 86400000 - ((Date.now() + 3 * 3600000) % 86400000);
         journalAchievementsRefreshTimer = window.setTimeout(function () {
-          renderJournalAchievements(getCurrentStatsForDisplay());
+          renderSummary(getVisibleRecords());
         }, untilNextDay + 100);
         const model = getJournalAchievementModel(currentStats);
         const renderKey = JSON.stringify([model, journalAchievementNewIds]);
-        if (renderKey === journalAchievementsRenderKey) return;
+        if (renderKey === journalAchievementsRenderKey) return model;
         journalAchievementsRenderKey = renderKey;
         document.getElementById("journalAchievementsCount").textContent = model.unlocked + " / " + model.badges.length + " 已解锁";
         const records = document.getElementById("journalAchievementRecords");
@@ -10814,13 +10820,14 @@
           gallery.appendChild(section);
         });
         document.getElementById("journalAchievementRules").textContent =
-          "仅统计本人日记，字数含标点、不含空白；同日多篇合并。每日归属沿用北京时间凌晨 5 点换日。"
+          "仅统计本人日记，字数含标点、不含空白；同日多篇合并。历史日记按原始日期、自然日零点换日；Minimal Notes 日记按北京时间凌晨 5 点换日。"
           + "周按周一至周日，月按自然月；每周或每月至少一次即满足对应周期。"
           + "本期尚未结束时，上一期的连续仍可续上；本期待达标时显示已完成的连续数。"
           + "历史达标用于解锁，未达成目标按本轮显示进度。日历跨年份合并月日，2 月 29 日单列。"
           + "勋章随现存日记重算，编辑、删除或补录会更新结果。"
           + (model.hasHistorical ? model.historicalDaysAvailable
             ? "历史日记已去重并计入。" : "历史字数已计入；历史逐日统计待更新。" : "当前统计 Minimal Notes 中的日记。");
+        return model;
       }
 
       function createJournalAchievementCard(badge, icon) {
@@ -10909,6 +10916,8 @@
       function renderJournalSummaryText(countText, journalDayCount, journalWordCount, ritualStats, ritualCount, suffixText) {
         const summaryPrefix = countText + " · " + formatSummaryNumber(journalDayCount) + " 天";
         const suffix = suffixText || "";
+        summaryText.title = "天数与字数统计 Minimal Notes 中的本人日记，按北京时间凌晨 5 点换日。"
+          + (ritualStats ? "小红花统计历史日记与 Minimal Notes 的累计记录天数；历史按原始日期、自然日零点换日，同日只计一次。" : "");
         if (!ritualStats) {
           summaryText.textContent = summaryPrefix + " · " + formatSummaryNumber(journalWordCount) + " 字" + suffix;
           return;
@@ -10919,9 +10928,7 @@
         const icon = document.createElement("span");
 
         ritual.className = "journal-ritual-count";
-        if (ritualStats.title) {
-          ritual.title = ritualStats.title;
-        }
+        ritual.title = "累计记录天数：历史日记按原始日期、自然日零点换日；Minimal Notes 日记按北京时间凌晨 5 点换日。同日只计一朵。";
         if (ritualStats.icon) {
           icon.className = "journal-ritual-icon";
           icon.setAttribute("aria-hidden", "true");
@@ -10990,50 +10997,6 @@
       function getJournalRitualStats() {
         const stats = normalizeJournalStats(state.journalStats);
         return stats.ritual || null;
-      }
-
-      function countJournalDays(records) {
-        const days = new Set();
-        (records || []).forEach(function (record) {
-          const dayKey = getJournalDayKey(record);
-          if (dayKey) {
-            days.add(dayKey);
-          }
-        });
-        return days.size;
-      }
-
-      function countJournalRitualDays(records, ritualStats) {
-        const days = new Set();
-        (records || []).forEach(function (record) {
-          const dayKey = getJournalRitualDayKey(record, ritualStats);
-          if (dayKey && dayKey >= ritualStats.startDay) {
-            days.add(dayKey);
-          }
-        });
-        return days.size;
-      }
-
-      function getJournalDayKey(record) {
-        const value = getJournalDateValue(record);
-        if (!value || !isValidDate(value)) {
-          return "";
-        }
-
-        return formatLocalDayKey(new Date(value));
-      }
-
-      function getJournalRitualDayKey(record, ritualStats) {
-        const value = normalizeDateTime(record && record.createdAt) || normalizeDateTime(record && record.updatedAt);
-        if (!value || !isValidDate(value)) {
-          return "";
-        }
-
-        const date = new Date(value);
-        if (ritualStats && ritualStats.dayBoundaryHour > 0 && date.getHours() < ritualStats.dayBoundaryHour) {
-          date.setDate(date.getDate() - 1);
-        }
-        return formatLocalDayKey(date);
       }
 
       function formatLocalDayKey(date) {

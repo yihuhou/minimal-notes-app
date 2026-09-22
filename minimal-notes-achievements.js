@@ -109,14 +109,16 @@
     historical = historical || {};
     const today = journalDay(now);
     const todayNumber = dayNumber(today);
-    // Manifest keys are already journal days; never shift these a second time.
-    const dates = new Set();
+    // V4 keys use 05:00 journal days; historical keys use archive calendar dates.
+    // Both maps already contain their final dates; merge without shifting again.
+    const currentDays = Object.keys(current.userJournalByDate || {}).filter(function (day) {
+      return validDay(day) && day <= today && count(current.userJournalByDate[day]);
+    });
+    const dates = new Set(currentDays);
     const characters = {};
     const historicalDays = historical.charactersByDate || {};
-    [current.userJournalByDate || {}, historicalDays].forEach(function (map) {
-      Object.keys(map).forEach(function (day) {
-        if (validDay(day) && day <= today && count(map[day])) dates.add(day);
-      });
+    Object.keys(historicalDays).forEach(function (day) {
+      if (validDay(day) && day <= today && count(historicalDays[day])) dates.add(day);
     });
     [current.userJournalCharactersByDate || {}, historicalDays].forEach(function (map) {
       Object.keys(map).forEach(function (day) {
@@ -253,7 +255,8 @@
     const fullYears = Object.keys(yearDays).filter(function (year) {
       return yearDays[year] === (Date.UTC(Number(year) + 1, 0, 1) - Date.UTC(Number(year), 0, 1)) / DAY;
     });
-    return { today: today, metrics: metrics, badges: badges, groups: GROUPS, streaks: runs, calendar: calendar,
+    return { today: today, currentDays: currentDays.length,
+      metrics: metrics, badges: badges, groups: GROUPS, streaks: runs, calendar: calendar,
       monthly: monthly, todayCharacters: characters[today] || 0,
       weeklyCharacters: weekCharacters.get(currentMonday) || 0,
       yearlyCharacters: yearCharacters.get(Number(today.slice(0, 4))) || 0,

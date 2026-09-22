@@ -10684,8 +10684,8 @@
         const value = document.createElement("dd");
         const strong = document.createElement("strong");
         strong.textContent = (incomplete ? "≥" : "") + formatSummaryNumber(number);
-        if (prefix) value.append(prefix);
-        value.append(strong, (prefix ? "" : " ") + unit);
+        if (prefix) value.append(prefix + " ");
+        value.append(strong, " " + unit);
         notes.forEach(function (text) {
           const note = document.createElement("small");
           note.textContent = text;

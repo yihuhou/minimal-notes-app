@@ -1877,7 +1877,10 @@
     .achievement-calendar-missing { color: #515a44; }
     .achievement-calendar-detail { min-height: 2.5em; }
     .achievement-personal-records { margin-bottom: 16px; }
-    .achievement-personal-records dl { margin-top: 12px; }
+    .achievement-personal-records dl { margin-top: 6px; }
+    .achievement-comparison-headings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; color: #51483e; font-size: 12px; font-weight: 600; }
+    .achievement-comparison-headings span { padding: 0 12px; }
+    .achievement-personal-records .achievement-records { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .achievement-milestones { margin-bottom: 20px; }
     .journal-milestone, .journal-achievements { scroll-margin-top: calc(16px + env(safe-area-inset-top)); }
     .achievement-records {
@@ -1987,7 +1990,6 @@
       .achievement-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
       .achievement-records { gap: 20px 12px; }
       .achievement-records.achievement-runs, .achievement-records.achievement-milestones { grid-template-columns: minmax(0, 1fr); }
-      .achievement-personal-records .achievement-records { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .achievement-calendar-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
       .achievement-calendar { padding: 10px; }
       .achievement-calendar-day { min-height: 20px; font-size: 9px; }
@@ -2917,6 +2919,7 @@
           <p id="journalAchievementNext" class="achievement-next"></p>
           <details id="journalAchievementPersonalRecords" class="achievement-collection achievement-personal-records">
             <summary>个人纪录与本期字数</summary>
+            <div class="achievement-comparison-headings"><span>个人纪录</span><span>本期字数</span></div>
             <dl id="journalAchievementPeaks" class="achievement-records"></dl>
           </details>
           <h3 class="achievement-section-title">长期积累</h3>
@@ -10759,14 +10762,19 @@
           : "当前显示已知数据，完整日期统计补齐后将更新连续纪录和日历覆盖。";
         const peaks = document.getElementById("journalAchievementPeaks");
         peaks.replaceChildren();
-        [["单日字数纪录", metrics.bestDayCharacters, metrics.bestDay],
-          ["单周字数纪录", metrics.bestWeekCharacters, metrics.bestWeek ? metrics.bestWeek + " 起的周" : ""],
-          ["单月字数纪录", metrics.bestMonthCharacters, metrics.bestMonth],
-          ["单年字数纪录", metrics.bestYearCharacters, metrics.bestYear],
-          ["本周已写", model.weeklyCharacters, "按周一至周日累计"],
-          ["本月已写", monthly.characters, "本月记录 " + monthly.days + " 天"],
-          ["本年已写", model.yearlyCharacters, model.today.slice(0, 4) + " 年"]].forEach(function (entry) {
-          appendJournalAchievementStat(peaks, entry[0], entry[1], "字", [entry[2] || "等待第一篇日记"], !model.dailyComplete);
+        [
+          [["单日字数纪录", metrics.bestDayCharacters, metrics.bestDay],
+            ["今日已写", model.todayCharacters, model.today]],
+          [["单周字数纪录", metrics.bestWeekCharacters, metrics.bestWeek ? metrics.bestWeek + " 起的周" : ""],
+            ["本周已写", model.weeklyCharacters, "按周一至周日累计"]],
+          [["单月字数纪录", metrics.bestMonthCharacters, metrics.bestMonth],
+            ["本月已写", monthly.characters, "本月记录 " + monthly.days + " 天"]],
+          [["单年字数纪录", metrics.bestYearCharacters, metrics.bestYear],
+            ["本年已写", model.yearlyCharacters, model.today.slice(0, 4) + " 年"]]
+        ].forEach(function (pair) {
+          pair.forEach(function (entry) {
+            appendJournalAchievementStat(peaks, entry[0], entry[1], "字", [entry[2] || "等待第一篇日记"], !model.dailyComplete);
+          });
         });
         const totals = document.getElementById("journalAchievementTotals");
         totals.replaceChildren();

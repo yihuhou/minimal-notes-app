@@ -1944,10 +1944,6 @@
     .achievement-group > summary { cursor: pointer; padding: 3px 0; font-size: 12px; }
     .achievement-group[open] > .achievement-grid { margin-top: 7px; }
     .achievement-group > summary:focus-visible { outline: 2px solid #876252; outline-offset: 2px; }
-    .achievement-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 12px 0 5px; padding: 0; list-style: none; }
-    .achievement-legend li { display: flex; align-items: center; gap: 5px; color: #69645b; font-size: 11px; }
-    .achievement-legend li::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--medal-ink); }
-    .achievement-legend-note { margin: 0 0 14px; color: var(--text-soft); font-size: 10px; line-height: 1.7; }
     .achievement-grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2996,13 +2992,6 @@
           </section>
           <details id="journalAchievementCollection" class="achievement-collection">
             <summary>查看勋章收藏册 · 10 个系列</summary>
-            <ul class="achievement-legend" aria-label="勋章类别">
-              <li data-medal-family="presence">连续有记</li>
-              <li data-medal-family="practice">连续达量</li>
-              <li data-medal-family="accumulation">长期积累</li>
-              <li data-medal-family="calendar">日历收藏</li>
-            </ul>
-            <p class="achievement-legend-note">日、周、月对应单点、七格、月历；笔尖表示字数要求，叠页与长卷表示积累。实心菱格表示系列内等级，浅色勋章待解锁。</p>
             <section class="achievement-earned" aria-labelledby="journalAchievementEarnedTitle">
               <h3 id="journalAchievementEarnedTitle" class="achievement-gallery-title">已获得</h3>
               <ul id="journalAchievementEarned" class="achievement-grid"></ul>

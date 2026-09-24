@@ -3028,9 +3028,9 @@
     </div>
   </div>
 
-  <script src="minimal-notes-store.js"></script>
-  <script src="minimal-notes-cache.js"></script>
-  <script src="minimal-notes-achievements.js"></script>
+  <script src="minimal-notes-store.js?v=20260924-journal-stats"></script>
+  <script src="minimal-notes-cache.js?v=20260924-journal-stats"></script>
+  <script src="minimal-notes-achievements.js?v=20260924-journal-stats"></script>
   <script>
     (function () {
       "use strict";
@@ -3039,6 +3039,9 @@
       const SHARD_CACHE = window.MinimalNotesCache;
       if (!RECORDS_STORE) {
         throw new Error("Minimal Notes v4 store helper failed to load.");
+      }
+      if (!RECORDS_STORE.computeCurrentStats([]).userJournalCharactersByDate) {
+        throw new Error("Minimal Notes journal statistics helper is outdated. Refresh the page.");
       }
 
       const STORAGE_KEY = "minimal-record-tool-v1";

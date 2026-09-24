@@ -2534,7 +2534,13 @@
       return left.recordId.localeCompare(right.recordId);
     });
     hot.recurrenceCompletionArchive = mergeJsonItems(hot.recurrenceCompletionArchive, payload && payload.recurrenceCompletionArchive);
+    const previousHistoricalStats = hot.journalStats && hot.journalStats.historical;
     hot.journalStats = clone(payload && payload.journalStats || hot.journalStats || {});
+    const incomingHistoricalStats = hot.journalStats.historical;
+    if (previousHistoricalStats && (!incomingHistoricalStats
+      || (!incomingHistoricalStats.charactersByDate && previousHistoricalStats.charactersByDate))) {
+      hot.journalStats.historical = clone(previousHistoricalStats);
+    }
     next.files[manifest.hot.path] = hot;
     next.hot = hot;
 
@@ -2557,6 +2563,10 @@
       currentStats = normalizeCurrentStats(currentStats);
     } else if (!(manifest.snapshots || []).length) {
       currentStats = computeCurrentStats(Array.from(currentRecords.values()));
+    }
+    if (manifest.currentStats && manifest.currentStats.userJournalCharactersByDate
+      && (!currentStats || !currentStats.userJournalCharactersByDate)) {
+      throw new Error("A v4 commit cannot discard the journal characters-by-date summary.");
     }
     if (currentStats
       && stableStringify(normalizeCurrentStats(manifest.currentStats)) !== stableStringify(currentStats)) {

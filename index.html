@@ -10730,9 +10730,15 @@
             || document.querySelector(selector);
         });
         const firstRecord = journalPersonalRecordBreaks[0] || journalWritingMilestones[0]
+          || journalCumulativeMilestones.find(milestone => milestone.id === "currentStreak")
           || journalCumulativeMilestones[0];
         if (!firstCard && firstRecord) {
-          if (firstRecord.id === "currentStreak" || firstRecord.streakKey) {
+          if (firstRecord.id === "currentStreak") {
+            document.getElementById("journalAchievementCollection").open = true;
+            const streakGroup = document.querySelector('#journalAchievementGallery .achievement-group[data-group="streak"]');
+            firstCard = streakGroup && (streakGroup.querySelector(".achievement-card.is-locked")
+              || streakGroup.querySelector(".achievement-card:last-child"));
+          } else if (firstRecord.streakKey) {
             document.getElementById("journalAchievementCollection").open = true;
             firstCard = document.querySelector("#journalAchievementCollection > summary");
           } else if (firstRecord.id === "totalCharacters" || firstRecord.id === "totalDays"

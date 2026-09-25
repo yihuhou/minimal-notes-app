@@ -3042,7 +3042,7 @@
 
   <script src="minimal-notes-store.js?v=20260924-journal-stats"></script>
   <script src="minimal-notes-cache.js?v=20260924-journal-stats"></script>
-  <script src="minimal-notes-achievements.js?v=20260925-badge-wording"></script>
+  <script src="minimal-notes-achievements.js?v=20260925-cumulative-milestones"></script>
   <script>
     (function () {
       "use strict";
@@ -3398,6 +3398,8 @@
       const journalPersonalRecordNotified = new Set();
       let journalWritingMilestones = [];
       const journalWritingMilestoneNotified = new Set();
+      let journalCumulativeMilestones = [];
+      const journalCumulativeMilestoneNotified = new Set();
       let journalAchievementPendingBefore = null;
       const journalBottomJump = document.getElementById("journalBottomJump");
       const statusText = document.getElementById("statusText");
@@ -6844,6 +6846,8 @@
         journalPersonalRecordNotified.clear();
         journalWritingMilestones = [];
         journalWritingMilestoneNotified.clear();
+        journalCumulativeMilestones = [];
+        journalCumulativeMilestoneNotified.clear();
         document.getElementById("journalAchievementToast").hidden = true;
         invalidateRemoteSession();
         state.remote.enabled = false;
@@ -10616,7 +10620,19 @@
           .filter(function (milestone) {
             return !journalWritingMilestoneNotified.has(milestone.id + ":" + milestone.period + ":" + milestone.target);
           });
-        if (!unlocked.length && !broken.length && !milestones.length) return;
+        const cumulativeCrossings = window.MinimalNotesAchievements.newlyReachedCumulativeMilestones(baseline, model);
+        const cumulative = cumulativeCrossings
+          .filter(function (milestone) {
+            const key = milestone.id + ":" + milestone.period + ":" + milestone.target;
+            return !journalCumulativeMilestoneNotified.has(key)
+              && !unlocked.some(badge => badge.metric === (milestone.id === "currentStreak"
+                ? "longestStreak" : milestone.id) && badge.target === milestone.target)
+              && !(milestone.id === "currentStreak" && broken.some(record =>
+                record.id === "streak-daily" && record.value === milestone.target));
+          });
+        cumulativeCrossings.forEach(milestone => journalCumulativeMilestoneNotified.add(
+          milestone.id + ":" + milestone.period + ":" + milestone.target));
+        if (!unlocked.length && !broken.length && !milestones.length && !cumulative.length) return;
         const toast = document.getElementById("journalAchievementToast");
         const previousIds = toast.hidden ? [] : journalAchievementNewIds;
         journalPersonalRecordBreaks = (toast.hidden ? [] : journalPersonalRecordBreaks).concat(broken);
@@ -10624,13 +10640,16 @@
         journalWritingMilestones = (toast.hidden ? [] : journalWritingMilestones).concat(milestones);
         milestones.forEach(milestone => journalWritingMilestoneNotified.add(
           milestone.id + ":" + milestone.period + ":" + milestone.target));
+        journalCumulativeMilestones = (toast.hidden ? [] : journalCumulativeMilestones).concat(cumulative);
         journalAchievementNewIds = Array.from(new Set(previousIds.concat(unlocked.map(badge => badge.id))));
         const badges = model.badges.filter(badge => journalAchievementNewIds.includes(badge.id));
         const hasRecords = journalPersonalRecordBreaks.length > 0;
         const hasMilestones = journalWritingMilestones.length > 0;
+        const hasCumulative = journalCumulativeMilestones.length > 0;
         document.getElementById("journalAchievementToastView").textContent = hasRecords
           ? badges.length ? "查看勋章与纪录" : "查看纪录"
-          : hasMilestones ? badges.length ? "查看勋章与字数" : "查看字数" : "查看勋章";
+          : hasMilestones ? badges.length ? "查看勋章与字数" : "查看字数"
+            : hasCumulative ? badges.length ? "查看勋章与统计" : "查看统计" : "查看勋章";
         const content = document.createDocumentFragment();
         function addSection(title) {
           const section = document.createElement("div");
@@ -10666,7 +10685,7 @@
             section.appendChild(line);
           });
         }
-        if (hasMilestones) {
+        if (hasMilestones || hasCumulative) {
           const section = addSection("已达到写作里程碑");
           const periodLabels = { "characters-day": "今天", "characters-week": "本周",
             "characters-month": "本月", "characters-year": "今年" };
@@ -10675,6 +10694,19 @@
             const target = document.createElement("strong");
             target.textContent = formatSummaryNumber(milestone.target) + "字";
             line.append((periodLabels[milestone.id] || "") + "已写", target, "。");
+            section.appendChild(line);
+          });
+          journalCumulativeMilestones.forEach(function (milestone) {
+            const line = document.createElement("p");
+            const target = document.createElement("strong");
+            target.textContent = milestone.id === "totalCharacters"
+              ? formatSummaryNumber(milestone.target / 10000) + "万"
+              : formatSummaryNumber(milestone.target);
+            if (milestone.id === "totalCharacters") line.append("累计写下", target, "字。");
+            else if (milestone.id === "totalDays") line.append("累计写日记", target, "天。");
+            else if (milestone.id === "thousandCharacterDays")
+              line.append("累计", target, "天，每天写下至少1,000字。");
+            else line.append("连续写日记", target, "天。");
             section.appendChild(line);
           });
         }
@@ -10697,12 +10729,19 @@
           firstCard = firstCard || document.querySelector("#journalAchievementEarned " + selector)
             || document.querySelector(selector);
         });
-        const firstRecord = journalPersonalRecordBreaks[0] || journalWritingMilestones[0];
+        const firstRecord = journalPersonalRecordBreaks[0] || journalWritingMilestones[0]
+          || journalCumulativeMilestones[0];
         if (!firstCard && firstRecord) {
-          document.getElementById("journalAchievementCollection").open = true;
-          firstCard = firstRecord.streakKey
-            ? document.querySelector("#journalAchievementCollection > summary")
-            : document.getElementById("journalAchievementPersonalRecords");
+          if (firstRecord.id === "currentStreak" || firstRecord.streakKey) {
+            document.getElementById("journalAchievementCollection").open = true;
+            firstCard = document.querySelector("#journalAchievementCollection > summary");
+          } else if (firstRecord.id === "totalCharacters" || firstRecord.id === "totalDays"
+            || firstRecord.id === "thousandCharacterDays") {
+            firstCard = document.getElementById("journalAchievementTotals");
+          } else {
+            document.getElementById("journalAchievementCollection").open = true;
+            firstCard = document.getElementById("journalAchievementPersonalRecords");
+          }
         }
         document.getElementById("journalAchievementToast").hidden = true;
         if (firstCard) {
@@ -10894,7 +10933,7 @@
           + "本期尚未结束时，上一期的连续仍可续上；本期待达标时显示已完成的连续数。"
           + "历史达标用于解锁，未达成目标按本轮显示进度。日历跨年份合并月日，2 月 29 日单列。"
           + "勋章随现存日记重算，编辑、删除或补录会更新结果。"
-          + "保存日记时，首次超过此前的连续或字数纪录会提醒；日、周、月、年字数达到本期整点里程碑也会提醒。同一纪录突破或同一期同一里程碑只提醒一次。累计数仅在达成勋章时提醒。"
+          + "保存日记时，首次超过此前的连续或字数纪录会提醒；日、周、月、年字数达到本期整点里程碑也会提醒。累计字数每满十万字，累计写日记、累计千字日和连续写日记每满一百天也会提醒。同一纪录或里程碑在当前页面只提醒一次；与勋章或纪录重合时合并显示。"
           + (model.hasHistorical ? model.historicalDaysAvailable
             ? "历史日记已去重并计入。" : "历史字数已计入；历史逐日统计待更新。" : "当前统计 Minimal Notes 中的日记。");
         return model;

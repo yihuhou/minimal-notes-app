@@ -518,7 +518,30 @@
       });
   }
 
+  function newlyReachedCumulativeMilestones(before, after) {
+    if (!before || !after) return [];
+    const series = [
+      { id: "totalCharacters", step: 100000, complete: true },
+      { id: "totalDays", step: 100, complete: before.datesComplete && after.datesComplete },
+      { id: "thousandCharacterDays", step: 100, complete: before.dailyComplete && after.dailyComplete },
+      { id: "currentStreak", step: 100, complete: before.datesComplete && after.datesComplete,
+        period: after.streaks.daily.currentRange && after.streaks.daily.currentRange.start }
+    ];
+    return series.flatMap(function (item) {
+      if (!item.complete) return [];
+      const previous = Number(before.metrics[item.id]) || 0;
+      const current = Number(after.metrics[item.id]) || 0;
+      const crossed = [];
+      for (let target = (Math.floor(previous / item.step) + 1) * item.step;
+        target <= current; target += item.step) {
+        crossed.push({ id: item.id, target: target, value: current, period: item.period || "" });
+      }
+      return crossed;
+    });
+  }
+
   return { compute: compute, journalDay: journalDay, validDay: validDay, newlyUnlocked: newlyUnlocked,
     newlyBrokenRecords: newlyBrokenRecords, newlyReachedWritingMilestones: newlyReachedWritingMilestones,
+    newlyReachedCumulativeMilestones: newlyReachedCumulativeMilestones,
     medalSvg: medalSvg, newestFirst: newestFirst };
 }));

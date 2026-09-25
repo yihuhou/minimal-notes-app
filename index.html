@@ -1751,12 +1751,29 @@
       cursor: pointer;
     }
 
+    .snapshot-load-status button[data-snapshot-load] {
+      min-height: 44px;
+      padding: 10px 20px;
+      border: 1px solid var(--border-strong);
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    .snapshot-load-status button[data-snapshot-load]:focus-visible,
+    #recordListMore:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+
     #recordListMore {
       width: 100%;
+      min-height: 44px;
       padding: 12px;
       border: 0;
       background: transparent;
-      color: var(--text-faint);
+      color: var(--text-soft);
       cursor: pointer;
     }
 
@@ -2920,7 +2937,7 @@
 
       <section class="list-wrap">
         <div id="recordList" class="list" aria-live="polite"></div>
-        <button id="recordListMore" class="snapshot-load-status" type="button" hidden>显示更多记录</button>
+        <button id="recordListMore" class="snapshot-load-status" type="button" hidden>加载更多记录</button>
         <div id="snapshotLoadStatus" class="snapshot-load-status" aria-live="polite" hidden></div>
       </section>
 
@@ -3072,7 +3089,6 @@
       const REMOTE_WRITE_DEBOUNCE = 5000;
       const REMOTE_WRITE_MAX_ATTEMPTS = 5;
       const SNAPSHOT_CACHE_MAX_BYTES = 20 * 1024 * 1024;
-      const SNAPSHOT_LOAD_DISTANCE_PX = 600;
       const SNAPSHOT_SEARCH_CONCURRENCY = 2;
       const REMOTE_V4_ATOMIC_COMMIT_MUTATION = [
         "mutation MinimalNotesV4AtomicCommit($input: CreateCommitOnBranchInput!) {",
@@ -3325,8 +3341,6 @@
           browsePromise: null,
           searchToken: 0,
           searchInFlight: false,
-          autoLoadPaused: false,
-          footerJumpActive: false,
           error: ""
         },
         journalPrivateHighlights: {
@@ -3442,7 +3456,6 @@
       let recordListVisible = [];
       let recordListNodes = new Map();
       let ideaPaneNodes = new Map();
-      let recordListGrowFrame = 0;
       let healthSummaryLoadId = 0;
       let deleteDialogResolve = null;
       let deleteDialogPreviousFocus = null;
@@ -3534,14 +3547,11 @@
           const nextFilter = button.dataset.filter;
           if (state.filter !== nextFilter) {
             resetJournalBottomJumpIntent();
-            resumeSnapshotAutoLoad();
           }
           state.filter = nextFilter;
           render();
           if (state.search) {
             queueSnapshotSearch();
-          } else {
-            scheduleSnapshotBrowseLoad();
           }
         });
 
@@ -3571,7 +3581,6 @@
         });
         searchInput.addEventListener("input", queueSearchRender);
         recordListMore.addEventListener("click", showMoreRecords);
-        window.addEventListener("scroll", scheduleRecordListGrow, { passive: true });
 
         recordList.addEventListener("click", handleListClick);
         recordList.addEventListener("keydown", handleListKeydown);
@@ -3609,11 +3618,15 @@
         if (journalBottomJump) {
           journalBottomJump.addEventListener("click", jumpToJournalSummary);
           window.addEventListener("scroll", scheduleJournalBottomJumpUpdate, { passive: true });
-          window.addEventListener("scroll", scheduleSnapshotBrowseLoad, { passive: true });
           window.addEventListener("resize", scheduleJournalBottomJumpUpdate);
         }
         if (snapshotLoadStatus) {
           snapshotLoadStatus.addEventListener("click", function (event) {
+            const load = event.target.closest("[data-snapshot-load]");
+            if (load) {
+              loadNextSnapshotForBrowsing();
+              return;
+            }
             const retry = event.target.closest("[data-snapshot-retry]");
             if (!retry) {
               return;
@@ -7774,7 +7787,6 @@
         searchRenderTimer = window.setTimeout(function () {
           searchRenderTimer = null;
           state.search = searchInput.value.trim();
-          resumeSnapshotAutoLoad();
           render();
           queueSnapshotSearch();
         }, 180);
@@ -7827,16 +7839,8 @@
         }
       }
 
-      function scheduleSnapshotBrowseLoad() {
-        if (state.snapshots.autoLoadPaused || getVisibleJournalSummaryRect() || state.search || state.remote.temporary
-          || (state.filter !== "journal" && state.filter !== "completed")) {
-          return;
-        }
-        window.requestAnimationFrame(maybeLoadNextSnapshotForBrowsing);
-      }
-
-      function maybeLoadNextSnapshotForBrowsing() {
-        if (state.snapshots.autoLoadPaused || getVisibleJournalSummaryRect() || state.snapshots.browsePromise || state.search
+      function loadNextSnapshotForBrowsing() {
+        if (state.snapshots.browsePromise || state.search || state.remote.temporary
           || (state.filter !== "journal" && state.filter !== "completed")) {
           return;
         }
@@ -7845,14 +7849,13 @@
           renderSnapshotLoadStatus();
           return;
         }
-        const documentBottom = getDocumentScrollHeight() - (getWindowScrollY() + window.innerHeight);
         if (searchComposing || searchRenderTimer !== null || !recordListMore.hidden) {
           return;
         }
-        if (documentBottom > SNAPSHOT_LOAD_DISTANCE_PX) {
-          return;
-        }
-        state.snapshots.browsePromise = loadSnapshotDescriptor(remaining[0]).catch(function () {
+        state.snapshots.browsePromise = loadSnapshotDescriptor(remaining[0]).then(function (records) {
+          render({ preserveSummaryAnchor: false });
+          return records;
+        }).catch(function () {
           return [];
         }).finally(function () {
           state.snapshots.browsePromise = null;
@@ -7866,13 +7869,8 @@
         if (state.search) {
           queueSnapshotSearch();
         } else {
-          maybeLoadNextSnapshotForBrowsing();
+          loadNextSnapshotForBrowsing();
         }
-      }
-
-      function resumeSnapshotAutoLoad() {
-        state.snapshots.autoLoadPaused = false;
-        state.snapshots.footerJumpActive = false;
       }
 
       async function materializeCompleteRecords() {
@@ -10248,8 +10246,6 @@
         state.snapshots.browsePromise = null;
         state.snapshots.searchToken += 1;
         state.snapshots.searchInFlight = false;
-        state.snapshots.autoLoadPaused = false;
-        state.snapshots.footerJumpActive = false;
         state.snapshots.error = "";
         state.records = hotRecords;
       }
@@ -10307,7 +10303,7 @@
         );
       }
 
-      function render() {
+      function render(options) {
         // Background loads can finish between keystrokes or during IME composition.
         // The settled search renders their latest data in one pass.
         if (searchComposing || searchRenderTimer !== null) {
@@ -10317,7 +10313,8 @@
         backgroundRenderTimer = null;
         // A sync or an already-running snapshot request can add records above
         // the collection. Keep the part of the footer being read on screen.
-        const summaryAnchor = getVisibleJournalSummaryRect();
+        const summaryAnchor = options && options.preserveSummaryAnchor === false
+          ? null : getVisibleJournalSummaryRect();
         scheduleAutoCompletionRefresh();
         const visible = getVisibleRecords();
         renderFilters();
@@ -10334,7 +10331,6 @@
           }
         }
         updateJournalBottomJump();
-        scheduleSnapshotBrowseLoad();
       }
 
       function getCurrentStatsForDisplay() {
@@ -10436,12 +10432,6 @@
         const scrollY = getWindowScrollY();
         const delta = scrollY - journalBottomJumpLastScrollY;
         journalBottomJumpLastScrollY = scrollY;
-        if (state.filter === "journal" && state.snapshots.footerJumpActive
-          && (delta < -4 || scrollY <= 4) && !getVisibleJournalSummaryRect()) {
-          resumeSnapshotAutoLoad();
-          scheduleRecordListGrow();
-          scheduleSnapshotBrowseLoad();
-        }
         if (state.filter !== "journal" || scrollY <= 4) {
           journalBottomJumpShowIntent = false;
           return;
@@ -10483,8 +10473,6 @@
           return;
         }
 
-        state.snapshots.autoLoadPaused = true;
-        state.snapshots.footerJumpActive = true;
         if (state.snapshots.browsePromise) {
           await state.snapshots.browsePromise;
         }
@@ -11188,19 +11176,6 @@
         scheduleGTeacherTagAlignmentUpdate();
       }
 
-      function scheduleRecordListGrow() {
-        if (recordListGrowFrame || state.snapshots.autoLoadPaused || getVisibleJournalSummaryRect() || recordListMore.hidden) {
-          return;
-        }
-        recordListGrowFrame = window.requestAnimationFrame(function () {
-          recordListGrowFrame = 0;
-          if (!state.snapshots.autoLoadPaused && !getVisibleJournalSummaryRect()
-            && recordListMore.getBoundingClientRect().top < window.innerHeight + SNAPSHOT_LOAD_DISTANCE_PX) {
-            showMoreRecords();
-          }
-        });
-      }
-
       function renderSnapshotLoadStatus() {
         if (!snapshotLoadStatus) {
           return;
@@ -11241,9 +11216,11 @@
           return;
         }
         if (relevant.length) {
-          snapshotLoadStatus.textContent = state.search
-            ? "还有更早记录尚未搜索。"
-            : "向下滚动以加载更早记录。";
+          if (state.search) {
+            snapshotLoadStatus.textContent = "还有更早记录尚未搜索。";
+          } else {
+            snapshotLoadStatus.innerHTML = '<button type="button" data-snapshot-load>加载更多记录</button>';
+          }
           return;
         }
         snapshotLoadStatus.textContent = "已显示全部相关记录。";

@@ -3042,7 +3042,7 @@
 
   <script src="minimal-notes-store.js?v=20260924-journal-stats"></script>
   <script src="minimal-notes-cache.js?v=20260924-journal-stats"></script>
-  <script src="minimal-notes-achievements.js?v=20260925-writing-milestones"></script>
+  <script src="minimal-notes-achievements.js?v=20260925-badge-wording"></script>
   <script>
     (function () {
       "use strict";
@@ -10643,12 +10643,11 @@
         }
         badges.forEach(function (badge) {
           const group = model.groups.find(item => item.id === badge.group);
-          const badgeTitle = (group ? group.title + " · " : "") + badge.name;
+          const noticeName = badge.group === "words" ? badge.name.replace(/长卷$/, "") : badge.name;
+          const badgeTitle = (group ? group.title + " · " : "") + noticeName;
           const section = addSection("已解锁新勋章：" + badgeTitle);
           const rule = document.createElement("p");
-          rule.textContent = badge.streakKey === "thousand"
-            ? "连续 " + formatSummaryNumber(badge.target) + " 天，每天写下至少 1,000 字。"
-            : badge.rule + "。";
+          rule.textContent = badge.rule + "。";
           section.appendChild(rule);
         });
         if (hasRecords) {

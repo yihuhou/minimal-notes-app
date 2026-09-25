@@ -3400,6 +3400,7 @@
       const journalWritingMilestoneNotified = new Set();
       let journalCumulativeMilestones = [];
       const journalCumulativeMilestoneNotified = new Set();
+      let journalStreakMilestoneReached = false;
       let journalAchievementPendingBefore = null;
       const journalBottomJump = document.getElementById("journalBottomJump");
       const statusText = document.getElementById("statusText");
@@ -6848,6 +6849,7 @@
         journalWritingMilestoneNotified.clear();
         journalCumulativeMilestones = [];
         journalCumulativeMilestoneNotified.clear();
+        journalStreakMilestoneReached = false;
         document.getElementById("journalAchievementToast").hidden = true;
         invalidateRemoteSession();
         state.remote.enabled = false;
@@ -10634,6 +10636,8 @@
           milestone.id + ":" + milestone.period + ":" + milestone.target));
         if (!unlocked.length && !broken.length && !milestones.length && !cumulative.length) return;
         const toast = document.getElementById("journalAchievementToast");
+        journalStreakMilestoneReached = (!toast.hidden && journalStreakMilestoneReached)
+          || cumulativeCrossings.some(milestone => milestone.id === "currentStreak");
         const previousIds = toast.hidden ? [] : journalAchievementNewIds;
         journalPersonalRecordBreaks = (toast.hidden ? [] : journalPersonalRecordBreaks).concat(broken);
         broken.forEach(record => journalPersonalRecordNotified.add(record.id + ":" + record.period));
@@ -10724,6 +10728,13 @@
         searchComposing = false;
         render();
         let firstCard = null;
+        if (journalStreakMilestoneReached
+          && journalAchievementNewIds.every(id => id.startsWith("longestStreak-"))) {
+          document.getElementById("journalAchievementCollection").open = true;
+          const streakGroup = document.querySelector('#journalAchievementGallery .achievement-group[data-group="streak"]');
+          firstCard = streakGroup && (streakGroup.querySelector(".achievement-card.is-locked")
+            || streakGroup.querySelector(".achievement-card:last-child"));
+        }
         journalAchievementNewIds.forEach(function (id) {
           const selector = '.achievement-card[data-badge-id="' + cssEscape(id) + '"]';
           firstCard = firstCard || document.querySelector("#journalAchievementEarned " + selector)

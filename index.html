@@ -10674,11 +10674,8 @@
           journalWritingMilestones.forEach(function (milestone) {
             const line = document.createElement("p");
             const target = document.createElement("strong");
-            target.textContent = formatSummaryNumber(milestone.target) + " 字";
-            const written = document.createElement("strong");
-            written.textContent = formatSummaryNumber(milestone.value) + " 字";
-            line.append((periodLabels[milestone.id] || milestone.name.replace(/纪录$/, ""))
-              + "达到 ", target, "（已写 ", written, "）。");
+            target.textContent = formatSummaryNumber(milestone.target) + "字";
+            line.append((periodLabels[milestone.id] || "") + "已写", target, "。");
             section.appendChild(line);
           });
         }

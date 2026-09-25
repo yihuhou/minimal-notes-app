@@ -10669,12 +10669,16 @@
         }
         if (hasMilestones) {
           const section = addSection("已达到写作里程碑");
+          const periodLabels = { "characters-day": "今天", "characters-week": "本周",
+            "characters-month": "本月", "characters-year": "今年" };
           journalWritingMilestones.forEach(function (milestone) {
             const line = document.createElement("p");
             const target = document.createElement("strong");
             target.textContent = formatSummaryNumber(milestone.target) + " 字";
-            line.append(milestone.name.replace(/纪录$/, "") + "达到 ", target, "（本期 "
-              + formatSummaryNumber(milestone.value) + " 字）。");
+            const written = document.createElement("strong");
+            written.textContent = formatSummaryNumber(milestone.value) + " 字";
+            line.append((periodLabels[milestone.id] || milestone.name.replace(/纪录$/, ""))
+              + "达到 ", target, "（已写 ", written, "）。");
             section.appendChild(line);
           });
         }

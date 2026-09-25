@@ -1751,22 +1751,11 @@
       cursor: pointer;
     }
 
-    .snapshot-load-status button[data-snapshot-load] {
-      min-height: 44px;
-      padding: 10px 20px;
-      border: 1px solid var(--border-strong);
-      border-radius: 999px;
-      background: var(--panel);
-      color: var(--text);
-      font-size: 13px;
+    #snapshotLoadStatus.has-load-button {
+      padding: 0;
     }
 
-    .snapshot-load-status button[data-snapshot-load]:focus-visible,
-    #recordListMore:focus-visible {
-      outline: 2px solid var(--focus);
-      outline-offset: 2px;
-    }
-
+    .snapshot-load-status button[data-snapshot-load],
     #recordListMore {
       width: 100%;
       min-height: 44px;
@@ -1775,6 +1764,12 @@
       background: transparent;
       color: var(--text-soft);
       cursor: pointer;
+    }
+
+    .snapshot-load-status button[data-snapshot-load]:focus-visible,
+    #recordListMore:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
     }
 
     .footer {
@@ -11180,6 +11175,7 @@
         if (!snapshotLoadStatus) {
           return;
         }
+        snapshotLoadStatus.classList.remove("has-load-button");
         const descriptors = state.snapshots.descriptors;
         if (!descriptors.length || state.remote.temporary) {
           snapshotLoadStatus.hidden = true;
@@ -11219,6 +11215,7 @@
           if (state.search) {
             snapshotLoadStatus.textContent = "还有更早记录尚未搜索。";
           } else {
+            snapshotLoadStatus.classList.add("has-load-button");
             snapshotLoadStatus.innerHTML = '<button type="button" data-snapshot-load>加载更多记录</button>';
           }
           return;

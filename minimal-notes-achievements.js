@@ -5,6 +5,12 @@
   "use strict";
 
   const DAY = 86400000;
+  const WRITING_MILESTONES = {
+    day: [2000, 3000, 4000, 5000, 6000],
+    week: [8000, 10000, 12000, 14000, 16000],
+    month: [30000, 40000, 50000],
+    year: [100000, 150000, 200000, 250000]
+  };
   const GROUPS = [
     { id: "streak", title: "日日有记", family: "presence", icon: "day" },
     { id: "weekly", title: "周周有记", family: "presence", icon: "week" },
@@ -460,7 +466,8 @@
       });
       personalRecords.push({ id: "characters-" + entry[0], name: entry[1], unit: "字",
         complete: dailyComplete, period: String(entry[3]), value: value,
-        best: Math.max(value, previousBest), previousBest: previousBest });
+        best: Math.max(value, previousBest), previousBest: previousBest,
+        nextMilestone: WRITING_MILESTONES[entry[0]].find(target => target > value) || 0 });
     });
     return { today: today, currentDays: currentDays.length,
       metrics: metrics, badges: badges, groups: GROUPS, streaks: runs, calendar: calendar,
@@ -495,6 +502,22 @@
     });
   }
 
+  function newlyReachedWritingMilestones(before, after) {
+    if (!before || !after) return [];
+    return (after.personalRecords || []).filter(record => record.id.startsWith("characters-"))
+      .flatMap(function (record) {
+        const previous = (before.personalRecords || []).find(item => item.id === record.id);
+        if (!previous || !previous.complete || !record.complete || previous.period !== record.period
+          || record.value <= previous.value) return [];
+        const periodType = record.id.slice("characters-".length);
+        return (WRITING_MILESTONES[periodType] || [])
+          .filter(target => previous.value < target && record.value >= target)
+          .map(target => ({ id: record.id, name: record.name, unit: record.unit,
+            period: record.period, value: record.value, target: target }));
+      });
+  }
+
   return { compute: compute, journalDay: journalDay, validDay: validDay, newlyUnlocked: newlyUnlocked,
-    newlyBrokenRecords: newlyBrokenRecords, medalSvg: medalSvg, newestFirst: newestFirst };
+    newlyBrokenRecords: newlyBrokenRecords, newlyReachedWritingMilestones: newlyReachedWritingMilestones,
+    medalSvg: medalSvg, newestFirst: newestFirst };
 }));

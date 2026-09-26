@@ -3040,7 +3040,7 @@
     </div>
   </div>
 
-  <script src="minimal-notes-store.js?v=20260924-journal-stats"></script>
+  <script src="minimal-notes-store.js?v=20260926-english-word-count"></script>
   <script src="minimal-notes-cache.js?v=20260924-journal-stats"></script>
   <script src="minimal-notes-achievements.js?v=20260925-cumulative-milestones"></script>
   <script>
@@ -3052,7 +3052,8 @@
       if (!RECORDS_STORE) {
         throw new Error("Minimal Notes v4 store helper failed to load.");
       }
-      if (!RECORDS_STORE.computeCurrentStats([]).userJournalCharactersByDate) {
+      if (!RECORDS_STORE.computeCurrentStats([]).userJournalCharactersByDate
+        || typeof RECORDS_STORE.countTextCharacters !== "function") {
         throw new Error("Minimal Notes journal statistics helper is outdated. Refresh the page.");
       }
 
@@ -10945,7 +10946,7 @@
           gallery.appendChild(section);
         });
         document.getElementById("journalAchievementRules").textContent =
-          "仅统计本人日记，字数含标点、不含空白；同日多篇合并。历史日记按原始日期、自然日零点换日；Minimal Notes 日记按北京时间凌晨 5 点换日。"
+          "仅统计本人日记，英文每个单词计 1 字，中文及其他非空白字符逐字计数，含标点；同日多篇合并。历史日记按原始日期、自然日零点换日；Minimal Notes 日记按北京时间凌晨 5 点换日。"
           + "周按周一至周日，月按自然月；每周或每月至少一次即满足对应周期。"
           + "本期尚未结束时，上一期的连续仍可续上；本期待达标时显示已完成的连续数。"
           + "历史达标用于解锁，未达成目标按本轮显示进度。日历跨年份合并月日，2 月 29 日单列。"
@@ -11034,13 +11035,14 @@
         journalMilestoneNext.textContent = "距 " + formatSummaryNumber(nextMilestone / 10000)
           + " 万字，还有 " + formatSummaryNumber(nextMilestone - total) + " 字";
         journalMilestone.title = "历史日记：" + historical.fromDay + " 至 " + historical.throughDay
-          + "；与 Minimal Notes 重复的日记已去重。按正文非空白字符计数，包含标点，不含 G老师。";
+          + "；与 Minimal Notes 重复的日记已去重。英文每个单词计 1 字，中文及其他非空白字符逐字计数，含标点，不含 G老师。";
       }
 
       function renderJournalSummaryText(countText, journalDayCount, journalWordCount, ritualStats, ritualCount, suffixText) {
         const summaryPrefix = countText + " · " + formatSummaryNumber(journalDayCount) + " 天";
         const suffix = suffixText || "";
         summaryText.title = "天数与字数统计 Minimal Notes 中的本人日记，按北京时间凌晨 5 点换日。"
+          + "英文每个单词计 1 字，中文及其他非空白字符逐字计数，含标点。"
           + (ritualStats ? "小红花统计历史日记与 Minimal Notes 的累计记录天数；历史按原始日期、自然日零点换日，同日只计一次。" : "");
         if (!ritualStats) {
           summaryText.textContent = summaryPrefix + " · " + formatSummaryNumber(journalWordCount) + " 字" + suffix;
@@ -11135,7 +11137,7 @@
       }
 
       function countTextCharacters(text) {
-        return Array.from(String(text || "").replace(/\s+/g, "")).length;
+        return RECORDS_STORE.countTextCharacters(text);
       }
 
       function isGTeacherRecord(record) {

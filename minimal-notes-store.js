@@ -1013,7 +1013,10 @@
   }
 
   function countTextCharacters(value) {
-    return Array.from(String(value || "").replace(/\s+/g, "")).length;
+    // Collapse English words before removing whitespace so adjacent words stay
+    // separate. Apostrophes inside contractions belong to the same word.
+    const text = String(value || "").replace(/[A-Za-z]+(?:['’][A-Za-z]+)*/g, "a");
+    return Array.from(text.replace(/\s+/g, "")).length;
   }
 
   function emptyCurrentStats() {
@@ -2800,6 +2803,7 @@
     collectLayoutTrash: collectLayoutTrash,
     commitRepositoryPayload: commitRepositoryPayload,
     computeCurrentStats: computeCurrentStats,
+    countTextCharacters: countTextCharacters,
     exportV3Snapshot: exportV3Snapshot,
     enableRecordIndexShards: enableRecordIndexShards,
     findRecordIndexDescriptor: findRecordIndexDescriptor,

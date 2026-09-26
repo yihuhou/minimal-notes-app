@@ -2230,7 +2230,7 @@
   }
 
   function nextShardPath(manifest, kind, month, basePath) {
-    const pattern = new RegExp("/" + kind + "/" + month.replace("-", "\\-") + "-(\\d{3})\\.json$");
+    const pattern = new RegExp("/" + kind + "/" + month.replace("-", "\\-") + "-(\\d{3,})\\.json$");
     const maximum = (manifest[kind] || []).reduce(function (current, descriptor) {
       const match = String(descriptor.path || "").match(pattern);
       return match ? Math.max(current, Number.parseInt(match[1], 10)) : current;
@@ -2267,9 +2267,11 @@
     const now = normalizeIso(opts.now, new Date().toISOString());
     const month = now.slice(0, 7);
     const shardMaxBytes = manifest.limits && manifest.limits.shardBytes || 250 * 1024;
-    const openMonthMatch = openPath.match(/\/(\d{4}-\d{2})-\d{3}\.json$/);
+    const openMonthMatch = openPath.match(/\/(\d{4}-\d{2})-\d{3,}\.json$/);
     const candidate = clone(openEnvelope);
     candidate[itemKey] = candidate[itemKey].concat(clone(uniqueAdditions));
+    // Reserve the extra byte used by open:false when this shard is frozen.
+    candidate.open = false;
     let shouldRoll = !openMonthMatch || openMonthMatch[1] !== month || jsonBytes(candidate) > shardMaxBytes;
     if (!openEnvelope[itemKey].length) {
       shouldRoll = false;
@@ -2277,39 +2279,45 @@
 
     const paths = [];
     let targetPath = openPath;
-    if (shouldRoll) {
-      openEnvelope.open = false;
-      const frozenDescriptor = descriptorForEnvelope(openPath, openEnvelope, false, shardMaxBytes);
-      const descriptorIndex = (manifest[descriptorKey] || []).findIndex(function (item) { return item.path === openPath; });
-      if (descriptorIndex !== -1) {
-        manifest[descriptorKey][descriptorIndex] = frozenDescriptor;
-      }
-      paths.push(openPath);
-      targetPath = nextShardPath(manifest, kind, month, layout.basePath);
-      const nextEnvelope = buildShardEnvelope(kind, manifest.generation, true, clone(uniqueAdditions));
-      layout.files[targetPath] = nextEnvelope;
-      manifest[descriptorKey].push(descriptorForEnvelope(targetPath, nextEnvelope, true, shardMaxBytes));
-      manifest[openKey] = targetPath;
-      paths.push(targetPath);
-    } else {
-      openEnvelope[itemKey] = candidate[itemKey];
-      layout.files[openPath] = openEnvelope;
+    let targetEnvelope = openEnvelope;
+    const itemPathById = {};
+
+    function updateTargetDescriptor() {
       const descriptorIndex = (manifest[descriptorKey] || []).findIndex(function (item) {
-        return item.path === openPath;
+        return item.path === targetPath;
       });
-      const currentDescriptor = descriptorForEnvelope(openPath, openEnvelope, true, shardMaxBytes);
+      const descriptor = descriptorForEnvelope(targetPath, targetEnvelope, targetEnvelope.open, shardMaxBytes);
       if (descriptorIndex !== -1) {
-        manifest[descriptorKey][descriptorIndex] = currentDescriptor;
+        manifest[descriptorKey][descriptorIndex] = descriptor;
       } else {
-        manifest[descriptorKey].push(currentDescriptor);
+        manifest[descriptorKey].push(descriptor);
       }
-      paths.push(openPath);
+      paths.push(targetPath);
     }
 
-    const itemPathById = {};
+    function rollTarget() {
+      targetEnvelope.open = false;
+      updateTargetDescriptor();
+      targetPath = nextShardPath(manifest, kind, month, layout.basePath);
+      targetEnvelope = buildShardEnvelope(kind, manifest.generation, true, []);
+      layout.files[targetPath] = targetEnvelope;
+      manifest[openKey] = targetPath;
+    }
+
+    if (shouldRoll) {
+      rollTarget();
+    }
     uniqueAdditions.forEach(function (item) {
+      const candidate = Object.assign({}, targetEnvelope, { open: false });
+      candidate[itemKey] = targetEnvelope[itemKey].concat([item]);
+      // A single item may exceed the limit, but it must occupy its own shard.
+      if (targetEnvelope[itemKey].length && jsonBytes(candidate) > shardMaxBytes) {
+        rollTarget();
+      }
+      targetEnvelope[itemKey].push(clone(item));
       itemPathById[kind === "revisions" ? item.id : item.recordId] = targetPath;
     });
+    updateTargetDescriptor();
     return {
       paths: paths,
       itemPathById: itemPathById,

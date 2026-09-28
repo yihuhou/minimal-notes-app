@@ -15911,7 +15911,11 @@
 
       function extractTimePeriodLabel(text) {
         const match = text.match(/凌晨|今早|今晨|今午|今晚|今夜|明早|明晨|明午|明晚|明夜|早上|上午|中午|下午|傍晚|晚上/);
-        return match ? match[0] : "";
+        return match ? match[0] : (hasWeekdayEveningToken(text) ? "晚上" : "");
+      }
+
+      function hasWeekdayEveningToken(text) {
+        return /(?:周|星期)[一二三四五六日天]\s*晚/.test(String(text || ""));
       }
 
       function inferTimePeriodLabelByWords(text) {
@@ -15958,7 +15962,7 @@
         if (/傍晚/.test(text)) {
           return { hours: 18, minutes: 0 };
         }
-        if (/晚上|今晚|今夜|明晚|明夜|夜宵|宵夜/.test(text)) {
+        if (/晚上|今晚|今夜|明晚|明夜|夜宵|宵夜/.test(text) || hasWeekdayEveningToken(text)) {
           return { hours: 20, minutes: 0 };
         }
         return null;

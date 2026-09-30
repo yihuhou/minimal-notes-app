@@ -3445,6 +3445,10 @@
       const journalCumulativeMilestoneNotified = new Set();
       let journalStreakMilestoneReached = false;
       let journalAchievementPendingBefore = null;
+      const journalAchievementBadgeNotified = new Set();
+      let journalAchievementNoticeScope = "";
+      let journalAchievementCheckpoint = null;
+      let journalAchievementCatchupTimer = 0;
       const journalBottomJump = document.getElementById("journalBottomJump");
       const statusText = document.getElementById("statusText");
       const healthSummary = document.getElementById("healthSummary");
@@ -3695,6 +3699,8 @@
         window.addEventListener("blur", flushPendingRemoteWrite);
         window.addEventListener("pagehide", flushPendingRemoteWrite);
         document.addEventListener("visibilitychange", handleRemoteSyncVisibilityChange);
+        document.addEventListener("visibilitychange", scheduleSyncedJournalAchievementCheck);
+        window.addEventListener("focus", scheduleSyncedJournalAchievementCheck);
         document.addEventListener("click", handleGTeacherFeedbackOutsideClick);
 
         document.addEventListener("keydown", function (event) {
@@ -6943,6 +6949,10 @@
       }
 
       function resetRemoteSyncState() {
+        window.clearTimeout(journalAchievementCatchupTimer);
+        journalAchievementNoticeScope = "";
+        journalAchievementCheckpoint = null;
+        journalAchievementBadgeNotified.clear();
         journalAchievementPendingBefore = null;
         journalAchievementNewIds = [];
         journalPersonalRecordBreaks = [];
@@ -7189,6 +7199,7 @@
               render();
             }
             updateStorageStatus();
+            scheduleSyncedJournalAchievementCheck();
             if (!opts.silent) {
               setStatus("GitHub 已是最新。");
             }
@@ -10438,6 +10449,7 @@
           }
         }
         updateJournalBottomJump();
+        scheduleSyncedJournalAchievementCheck();
       }
 
       function getCurrentStatsForDisplay() {
@@ -10707,16 +10719,127 @@
         return window.MinimalNotesAchievements.compute(currentStats || getCurrentStatsForDisplay(), historical);
       }
 
-      function notifyJournalAchievementUnlocks(before, saved) {
+      function journalAchievementNoticeKey() {
+        const scope = state.remote.enabled
+          ? [state.remote.repo, state.remote.branch, state.remote.path].join("|") : "local";
+        return "minimal-notes-achievement-notices-v1:" + scope;
+      }
+
+      function loadJournalAchievementCheckpoint() {
+        const key = journalAchievementNoticeKey();
+        if (journalAchievementNoticeScope === key) return journalAchievementCheckpoint;
+        journalAchievementNoticeScope = key;
+        journalAchievementCheckpoint = null;
+        journalAchievementBadgeNotified.clear();
+        journalPersonalRecordNotified.clear();
+        journalWritingMilestoneNotified.clear();
+        journalCumulativeMilestoneNotified.clear();
+        try {
+          const value = JSON.parse(localStorage.getItem(key) || "null");
+          if (value && value.version === 1 && value.stats && value.historical) {
+            journalAchievementCheckpoint = value;
+            [[journalAchievementBadgeNotified, value.badges],
+              [journalPersonalRecordNotified, value.records],
+              [journalWritingMilestoneNotified, value.writing],
+              [journalCumulativeMilestoneNotified, value.cumulative]].forEach(function (pair) {
+              (Array.isArray(pair[1]) ? pair[1] : []).forEach(function (id) {
+                if (typeof id === "string") pair[0].add(id);
+              });
+            });
+          }
+        } catch (error) { /* Corrupt or unavailable local storage starts with a quiet baseline. */ }
+        return journalAchievementCheckpoint;
+      }
+
+      function journalAchievementCheckpointReady(model) {
+        return Boolean(model && model.datesComplete && model.dailyComplete
+          && !state.sessionOnly && !state.remote.temporary && !state.localSaveError
+          && (!state.remote.enabled || state.remote.checkedThisSession)
+          && (model.metrics.totalDays > 0 || model.metrics.totalCharacters > 0));
+      }
+
+      function saveJournalAchievementCheckpoint() {
+        const model = getJournalAchievementModel();
+        if (!journalAchievementCheckpointReady(model)) return;
+        const value = {
+          version: 1, day: model.today,
+          stats: getCurrentStatsForDisplay(),
+          historical: normalizeHistoricalJournalStats(state.journalStats && state.journalStats.historical) || {},
+          badges: Array.from(journalAchievementBadgeNotified),
+          records: Array.from(journalPersonalRecordNotified),
+          writing: Array.from(journalWritingMilestoneNotified),
+          cumulative: Array.from(journalCumulativeMilestoneNotified)
+        };
+        journalAchievementCheckpoint = JSON.parse(JSON.stringify(value));
+        try { localStorage.setItem(journalAchievementNoticeKey(), JSON.stringify(value)); }
+        catch (error) { console.warn("Achievement notice checkpoint could not be saved", error); }
+      }
+
+      function buildJournalAchievementCatchupPairs(checkpoint, stats, historical, today) {
+        function through(map, day) {
+          return Object.fromEntries(Object.entries(map || {}).filter(function (entry) {
+            return /^\d{4}-\d{2}-\d{2}$/.test(entry[0]) && entry[0] <= day;
+          }));
+        }
+        function at(current, archive, day) {
+          archive = archive || {};
+          const words = through(current.userJournalCharactersByDate, day);
+          const oldWords = through(archive.charactersByDate, day);
+          return window.MinimalNotesAchievements.compute({
+            userJournalByDate: through(current.userJournalByDate, day),
+            userJournalCharactersByDate: words,
+            userJournalCharacters: Object.values(words).reduce((sum, value) => sum + (Number(value) || 0), 0)
+          }, {
+            characters: Object.values(oldWords).reduce((sum, value) => sum + (Number(value) || 0), 0),
+            charactersByDate: oldWords
+          }, day + "T12:00:00+08:00");
+        }
+        const days = new Set([today]);
+        ["userJournalByDate", "userJournalCharactersByDate"].forEach(function (field) {
+          Object.keys(stats[field] || {}).forEach(function (day) {
+            if (day >= checkpoint.day && day <= today
+              && (stats[field] || {})[day] !== (checkpoint.stats[field] || {})[day]) days.add(day);
+          });
+        });
+        return Array.from(days).sort().map(function (day) {
+          return { before: at(checkpoint.stats, checkpoint.historical, day), after: at(stats, historical, day) };
+        });
+      }
+
+      function checkSyncedJournalAchievements() {
+        if (document.visibilityState === "hidden") return;
+        const model = getJournalAchievementModel();
+        if (!journalAchievementCheckpointReady(model)) return;
+        const previous = loadJournalAchievementCheckpoint();
+        if (previous) {
+          const stats = getCurrentStatsForDisplay();
+          const historical = normalizeHistoricalJournalStats(state.journalStats && state.journalStats.historical);
+          buildJournalAchievementCatchupPairs(previous, stats, historical, model.today).forEach(function (pair) {
+            notifyJournalAchievementUnlocks(pair.before, true, pair.after);
+          });
+        }
+        model.badges.filter(badge => badge.unlocked).forEach(badge => journalAchievementBadgeNotified.add(badge.id));
+        saveJournalAchievementCheckpoint();
+      }
+
+      function scheduleSyncedJournalAchievementCheck() {
+        window.clearTimeout(journalAchievementCatchupTimer);
+        journalAchievementCatchupTimer = window.setTimeout(checkSyncedJournalAchievements, 0);
+      }
+
+      function notifyJournalAchievementUnlocks(before, saved, catchupModel) {
         if (!before) return;
         if (!saved) {
           journalAchievementPendingBefore = journalAchievementPendingBefore || before;
           return;
         }
+        loadJournalAchievementCheckpoint();
         const baseline = journalAchievementPendingBefore || before;
         journalAchievementPendingBefore = null;
-        const model = getJournalAchievementModel();
-        const unlocked = window.MinimalNotesAchievements.newlyUnlocked(baseline, model);
+        const model = catchupModel || getJournalAchievementModel();
+        if (!model) return;
+        const unlocked = window.MinimalNotesAchievements.newlyUnlocked(baseline, model)
+          .filter(badge => !journalAchievementBadgeNotified.has(badge.id));
         const broken = window.MinimalNotesAchievements.newlyBrokenRecords(baseline, model).filter(function (record) {
           return !journalPersonalRecordNotified.has(record.id + ":" + record.period);
         });
@@ -10736,7 +10859,13 @@
           });
         cumulativeCrossings.forEach(milestone => journalCumulativeMilestoneNotified.add(
           milestone.id + ":" + milestone.period + ":" + milestone.target));
-        if (!unlocked.length && !broken.length && !milestones.length && !cumulative.length) return;
+        if (!unlocked.length && !broken.length && !milestones.length && !cumulative.length) {
+          if (!catchupModel) saveJournalAchievementCheckpoint();
+          return;
+        }
+        unlocked.forEach(badge => journalAchievementBadgeNotified.add(badge.id));
+        broken.forEach(record => { record.noticeDay = model.today; });
+        milestones.forEach(milestone => { milestone.noticeDay = model.today; });
         const toast = document.getElementById("journalAchievementToast");
         journalStreakMilestoneReached = (!toast.hidden && journalStreakMilestoneReached)
           || cumulativeCrossings.some(milestone => milestone.id === "currentStreak");
@@ -10786,7 +10915,9 @@
             value.textContent = formatSummaryNumber(record.value) + " " + record.unit;
             const previous = document.createElement("strong");
             previous.textContent = formatSummaryNumber(record.previousBest) + " " + record.unit;
-            line.append(streakLabels[record.streakKey] || record.name.replace(/纪录$/, "") + "：",
+            line.append((record.noticeDay && record.noticeDay !== getJournalAchievementModel().today
+              ? record.noticeDay + " · " : "")
+              + (streakLabels[record.streakKey] || record.name.replace(/纪录$/, "") + "："),
               value, "，超过原纪录 ", previous, "。");
             section.appendChild(line);
           });
@@ -10799,7 +10930,10 @@
             const line = document.createElement("p");
             const target = document.createElement("strong");
             target.textContent = formatSummaryNumber(milestone.target) + "字";
-            line.append((periodLabels[milestone.id] || "") + "已写", target, "。");
+            const periodLabel = milestone.noticeDay && milestone.noticeDay !== getJournalAchievementModel().today
+              ? milestone.name.replace(/纪录$/, "") + "（截至" + milestone.noticeDay + "）"
+              : (periodLabels[milestone.id] || "");
+            line.append(periodLabel + "已写", target, "。");
             section.appendChild(line);
           });
           journalCumulativeMilestones.forEach(function (milestone) {
@@ -10819,6 +10953,7 @@
         toast.hidden = false;
         document.getElementById("journalAchievementToastText").replaceChildren(content);
         renderJournalAchievements(getCurrentStatsForDisplay());
+        if (!catchupModel) saveJournalAchievementCheckpoint();
       }
 
       function showNewJournalAchievements() {
@@ -11241,6 +11376,11 @@
         return RECORDS_STORE.countTextCharacters(text);
       }
 
+      function isDotRecordedJournal(record) {
+        return Boolean(record && record.type === "journal"
+          && typeof record.id === "string" && record.id.startsWith("dot-diary-"));
+      }
+
       function isGTeacherRecord(record) {
         if (!record || typeof record !== "object") {
           return false;
@@ -11490,6 +11630,9 @@
         }
         if (record.type === "journal") {
           parts.push('<span class="code-token token-muted">' + escapeHtml(formatJournalDateToken(record)) + "</span>");
+          if (isDotRecordedJournal(record)) {
+            parts.push('<span class="code-token token-muted token-dot-author" title="由 dot 根据你提供的内容代记；标签不计入字符统计">dot 代记</span>');
+          }
           if (readOnly) {
             parts.push('<span class="code-token token-muted">只读</span>');
           }
@@ -17088,3 +17231,4 @@
   </script>
 </body>
 </html>
+

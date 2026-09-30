@@ -410,6 +410,39 @@
       line-height: 1.45;
     }
 
+    .health-calendar-navigation {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .health-calendar-navigation button {
+      min-height: 44px;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: #fff;
+      color: var(--text-soft);
+      font-size: 12px;
+      line-height: 1.3;
+      touch-action: manipulation;
+    }
+
+    .health-calendar-navigation button:not(:disabled):hover {
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .health-calendar-navigation button:focus-visible {
+      outline: 2px solid var(--text-soft);
+      outline-offset: 2px;
+    }
+
+    .health-calendar-navigation button:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
     .health-calendar-legend {
       display: flex;
       flex-wrap: wrap;
@@ -2816,20 +2849,25 @@
           <h1 id="todayHeading">今天</h1>
           <p>像记事本一样记下待办、日程、截止、想法和日记。打开就能写。</p>
         </div>
-        <button id="healthCalendarToggle" class="counter" type="button" aria-live="polite" aria-expanded="false" aria-controls="healthCalendarPanel" title="展开本月健康月历">
+        <button id="healthCalendarToggle" class="counter" type="button" aria-live="polite" aria-expanded="false" aria-controls="healthCalendarPanel" title="展开健康月历">
           <strong id="openCount">0</strong>
           <span>未完成事项 · 不含想法/日记</span>
         </button>
       </header>
 
-      <section id="healthCalendarPanel" class="health-calendar-panel" aria-label="本月健康月历" hidden>
+      <section id="healthCalendarPanel" class="health-calendar-panel" aria-labelledby="healthCalendarTitle" hidden>
         <div class="health-calendar-head">
           <div>
             <span class="health-calendar-kicker">COROS health calendar</span>
-            <h2 id="healthCalendarTitle" class="health-calendar-title">本月健康月历</h2>
+            <h2 id="healthCalendarTitle" class="health-calendar-title" aria-live="polite">健康月历</h2>
             <p id="healthCalendarMeta" class="health-calendar-meta">正在读取健康历史...</p>
           </div>
           <div id="healthCalendarLegend" class="health-calendar-legend" aria-label="状态图例"></div>
+        </div>
+        <div class="health-calendar-navigation" role="group" aria-label="切换健康月历月份">
+          <button id="healthCalendarPrevious" type="button" aria-label="查看上一个月" aria-controls="healthCalendarGrid" disabled>‹ 上个月</button>
+          <button id="healthCalendarNext" type="button" aria-label="查看下一个月" aria-controls="healthCalendarGrid" disabled>下个月 ›</button>
+          <button id="healthCalendarLatest" type="button" aria-controls="healthCalendarGrid" disabled>回到最新</button>
         </div>
         <div id="healthCalendarGrid" class="health-calendar-grid" aria-live="polite"></div>
         <p id="healthCalendarNote" class="health-calendar-note"></p>
@@ -3353,6 +3391,7 @@
         },
         healthCalendar: {
           open: false,
+          selectedMonth: "",
           loading: false,
           loaded: false,
           cached: false,
@@ -3385,6 +3424,9 @@
       const healthCalendarLegend = document.getElementById("healthCalendarLegend");
       const healthCalendarGrid = document.getElementById("healthCalendarGrid");
       const healthCalendarNote = document.getElementById("healthCalendarNote");
+      const healthCalendarPrevious = document.getElementById("healthCalendarPrevious");
+      const healthCalendarNext = document.getElementById("healthCalendarNext");
+      const healthCalendarLatest = document.getElementById("healthCalendarLatest");
       const openCount = document.getElementById("openCount");
       const summaryText = document.getElementById("summaryText");
       const journalMilestone = document.getElementById("journalMilestone");
@@ -3531,6 +3573,15 @@
         addButton.addEventListener("click", addRecord);
         if (healthCalendarToggle) {
           healthCalendarToggle.addEventListener("click", toggleHealthCalendar);
+        }
+        if (healthCalendarPrevious) {
+          healthCalendarPrevious.addEventListener("click", function () { changeHealthCalendarMonth(-1); });
+        }
+        if (healthCalendarNext) {
+          healthCalendarNext.addEventListener("click", function () { changeHealthCalendarMonth(1); });
+        }
+        if (healthCalendarLatest) {
+          healthCalendarLatest.addEventListener("click", function () { changeHealthCalendarMonth(0); });
         }
         syncActionButton.addEventListener("click", handleSyncAction);
         backupAuthButton.addEventListener("click", handleBackupAuthAction);
@@ -3716,7 +3767,7 @@
 
         healthCalendarPanel.hidden = !state.healthCalendar.open;
         healthCalendarToggle.setAttribute("aria-expanded", String(state.healthCalendar.open));
-        healthCalendarToggle.title = state.healthCalendar.open ? "收起本月健康月历" : "展开本月健康月历";
+        healthCalendarToggle.title = state.healthCalendar.open ? "收起健康月历" : "展开健康月历";
 
         if (opening && !state.healthCalendar.loading) {
           if (!state.healthCalendar.payload) {
@@ -3873,6 +3924,7 @@
       }
 
       function renderHealthCalendarEmpty(message) {
+        updateHealthCalendarNavigation(null);
         const now = new Date();
         if (healthCalendarTitle) {
           healthCalendarTitle.textContent = (now.getFullYear()) + "年" + (now.getMonth() + 1) + "月健康月历";
@@ -3895,20 +3947,68 @@
       }
 
       function renderHealthCalendar(payload) {
-        const model = buildHealthCalendarModel(payload, new Date());
-        if (!model.daysWithData) {
-          renderHealthCalendarEmpty("本月暂时没有 COROS 健康数据。");
+        const range = getHealthCalendarMonthRange(payload);
+        if (!range) {
+          renderHealthCalendarEmpty("暂时没有 COROS 健康数据。");
           return;
         }
+        const selectedMonth = state.healthCalendar.selectedMonth;
+        if (!isHealthCalendarMonthKey(selectedMonth) || selectedMonth < range.first || selectedMonth > range.latest) {
+          state.healthCalendar.selectedMonth = range.latest;
+        }
+        const model = buildHealthCalendarModel(payload, new Date(), state.healthCalendar.selectedMonth);
 
         healthCalendarTitle.textContent = model.title;
         if (healthCalendarMeta) {
-          healthCalendarMeta.textContent = "";
-          healthCalendarMeta.hidden = true;
+          healthCalendarMeta.textContent = model.daysWithData ? "" : "这个月暂时没有 COROS 健康数据，可以继续切换月份。";
+          healthCalendarMeta.hidden = Boolean(model.daysWithData);
         }
+        updateHealthCalendarNavigation(range);
         renderHealthCalendarLegend(model.counts);
         renderHealthCalendarGrid(model);
         healthCalendarNote.textContent = model.note;
+      }
+
+      function isHealthCalendarMonthKey(value) {
+        return typeof value === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
+      }
+
+      function getHealthCalendarMonthRange(payload) {
+        const months = getHealthCalendarEntries(payload).filter(function (entry) {
+          if (!entry || typeof entry.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) {
+            return false;
+          }
+          const parts = entry.date.split("-").map(Number);
+          return isHealthCalendarMonthKey(entry.date.slice(0, 7))
+            && parts[2] >= 1 && parts[2] <= daysInMonth(parts[0], parts[1] - 1);
+        }).map(function (entry) { return entry.date.slice(0, 7); });
+        return months.length ? { first: months[0], latest: months[months.length - 1] } : null;
+      }
+
+      function updateHealthCalendarNavigation(range) {
+        const selectedMonth = state.healthCalendar.selectedMonth;
+        if (healthCalendarPrevious) {
+          healthCalendarPrevious.disabled = !range || selectedMonth <= range.first;
+        }
+        if (healthCalendarNext) {
+          healthCalendarNext.disabled = !range || selectedMonth >= range.latest;
+        }
+        if (healthCalendarLatest) {
+          healthCalendarLatest.disabled = !range || selectedMonth === range.latest;
+        }
+      }
+
+      function changeHealthCalendarMonth(offset) {
+        const payload = state.healthCalendar.payload;
+        const range = getHealthCalendarMonthRange(payload);
+        if (!range) { return; }
+        const selectedMonth = state.healthCalendar.selectedMonth || range.latest;
+        const parts = selectedMonth.split("-").map(Number);
+        const nextMonth = offset === 0 ? range.latest
+          : formatLocalDayKey(new Date(parts[0], parts[1] - 1 + offset, 1)).slice(0, 7);
+        if (nextMonth < range.first || nextMonth > range.latest) { return; }
+        state.healthCalendar.selectedMonth = nextMonth;
+        renderHealthCalendar(payload);
       }
 
       function renderHealthCalendarLegend(counts) {
@@ -3988,10 +4088,11 @@
         return cell;
       }
 
-      function buildHealthCalendarModel(payload, referenceDate) {
+      function buildHealthCalendarModel(payload, referenceDate, selectedMonth) {
         const now = isValidDate(referenceDate) ? new Date(referenceDate) : new Date();
-        const year = now.getFullYear();
-        const monthIndex = now.getMonth();
+        const monthParts = isHealthCalendarMonthKey(selectedMonth) ? selectedMonth.split("-").map(Number) : null;
+        const year = monthParts ? monthParts[0] : now.getFullYear();
+        const monthIndex = monthParts ? monthParts[1] - 1 : now.getMonth();
         const todayKey = formatLocalDayKey(now);
         const monthStartKey = formatLocalDayKey(new Date(year, monthIndex, 1));
         const monthEndKey = formatLocalDayKey(new Date(year, monthIndex, daysInMonth(year, monthIndex)));

@@ -1446,6 +1446,23 @@
       min-width: 0;
     }
 
+    .journal-date-attribution {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    @media (min-width: 981px) {
+      .journal-date-attribution {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+      }
+      .item.dot-recorded .item-tags {
+        align-items: flex-start;
+      }
+    }
+
     .item-line:hover .item-text {
       color: #111111;
     }
@@ -11562,6 +11579,7 @@
           "item",
           record.type,
           isGTeacherRecord(record) ? "g-teacher" : "",
+          isDotRecordedJournal(record) ? "dot-recorded" : "",
           readOnly ? "readonly" : "",
           isPrepared(record) ? "prepared" : "",
           isVisuallyCompleted(record) ? "completed" : "",
@@ -11629,9 +11647,11 @@
           parts.push('<button type="button" class="code-token token-action" data-action="confirm-auto-complete" data-id="' + escapeHtml(record.id) + '" title="确认自动完成">确认</button>');
         }
         if (record.type === "journal") {
+          if (isDotRecordedJournal(record)) parts.push('<span class="journal-date-attribution">');
           parts.push('<span class="code-token token-muted">' + escapeHtml(formatJournalDateToken(record)) + "</span>");
           if (isDotRecordedJournal(record)) {
             parts.push('<span class="code-token token-muted token-dot-author" title="由 dot 根据你提供的内容代记；标签不计入字符统计">dot 代记</span>');
+            parts.push("</span>");
           }
           if (readOnly) {
             parts.push('<span class="code-token token-muted">只读</span>');

@@ -3085,7 +3085,7 @@
     </div>
   </div>
 
-  <script src="minimal-notes-store.js?v=20260926-batch-shards"></script>
+  <script src="minimal-notes-store.js?v=20261001-dot-attribution"></script>
   <script src="minimal-notes-cache.js?v=20260924-journal-stats"></script>
   <script src="minimal-notes-achievements.js?v=20260925-cumulative-milestones"></script>
   <script>
@@ -3100,6 +3100,10 @@
       if (!RECORDS_STORE.computeCurrentStats([]).userJournalCharactersByDate
         || typeof RECORDS_STORE.countTextCharacters !== "function") {
         throw new Error("Minimal Notes journal statistics helper is outdated. Refresh the page.");
+      }
+
+      if (RECORDS_STORE.DOT_RECORDED_SUPPORTED !== true) {
+        throw new Error("Minimal Notes diary attribution helper is outdated. Refresh the page.");
       }
 
       const STORAGE_KEY = "minimal-record-tool-v1";
@@ -9091,6 +9095,67 @@
         return Array.from(ids).sort();
       }
 
+      function getAttributionTrashRecordIds(hot, pendingPayload) {
+        const tombstones = new Map((hot.tombstones || []).map(function (entry) {
+          return [entry.recordId, entry];
+        }));
+        const ids = new Set();
+        (pendingPayload.records || []).forEach(function (record) {
+          const deleted = tombstones.get(record.id);
+          if (deleted && !deleted.purged && record.dotRecorded !== true
+            && getRecordMergeTimestamp(record) > new Date(deleted.deletedAt).getTime()) {
+            ids.add(record.id);
+          }
+        });
+        (pendingPayload.deletedRecords || []).forEach(function (entry) {
+          const deleted = tombstones.get(entry.recordId);
+          if (deleted && !deleted.purged && !entry.purged && entry.record
+            && entry.record.dotRecorded !== true
+            && new Date(entry.deletedAt).getTime() > new Date(deleted.deletedAt).getTime()) {
+            ids.add(entry.recordId);
+          }
+        });
+        return Array.from(ids);
+      }
+
+      async function loadAttributionTrashBases(manifest, hot, pendingPayload, files, ref) {
+        const sessionId = state.remote.sessionId;
+        const ids = getAttributionTrashRecordIds(hot, pendingPayload);
+        if (!ids.length) {
+          return;
+        }
+        const index = RECORDS_STORE.collectRecordIndexFromFiles(manifest, files, { requireComplete: false });
+        const descriptors = new Map((manifest.trash || []).map(function (descriptor) {
+          return [descriptor.path, descriptor];
+        }));
+        const paths = new Set();
+        ids.forEach(function (id) {
+          const entry = index[id];
+          if (!entry || !descriptors.has(entry.location)) {
+            throw new Error("已删除记录的来源分片索引不完整：" + id);
+          }
+          paths.add(entry.location);
+        });
+        for (const pathValue of paths) {
+          if (!files[pathValue]) {
+            const result = await fetchRemoteJsonFile(pathValue, { conditional: false, ref: ref });
+            assertRemoteSession(sessionId);
+            if (result.missing) {
+              throw new Error("已删除记录的来源分片不存在");
+            }
+            files[pathValue] = result.value;
+          }
+          const envelope = files[pathValue], descriptor = descriptors.get(pathValue);
+          const text = RECORDS_STORE.jsonText(envelope);
+          if (!envelope || envelope.version !== 4 || envelope.kind !== "trash"
+            || envelope.generation !== manifest.generation || !Array.isArray(envelope.entries)
+            || RECORDS_STORE.sha256(text) !== descriptor.contentHash
+            || new TextEncoder().encode(text).length !== descriptor.bytes) {
+            throw new Error("已删除记录的来源分片校验失败");
+          }
+        }
+      }
+
       async function fetchRemoteV4CommitLayout() {
         const sessionId = state.remote.sessionId;
         const pendingPayload = arguments.length ? arguments[0] : getRecordsPayloadSnapshot();
@@ -9132,7 +9197,8 @@
         applyRecordIndexManifest(manifest);
         const indexFiles = await loadRecordIndexEntries(
           manifest,
-          getRecordIndexIdsForV4Commit(manifest, hot, pendingPayload, new Date().toISOString()),
+          Array.from(new Set(getRecordIndexIdsForV4Commit(manifest, hot, pendingPayload, new Date().toISOString())
+            .concat(getAttributionTrashRecordIds(hot, pendingPayload)))),
           { ref: expectedHeadOid }
         );
         assertRemoteSession(sessionId);
@@ -9153,6 +9219,8 @@
         Object.keys(indexFiles).forEach(function (pathValue) {
           files[pathValue] = indexFiles[pathValue];
         });
+        await loadAttributionTrashBases(manifest, hot, pendingPayload, files, expectedHeadOid);
+        assertRemoteSession(sessionId);
         return {
           layout: RECORDS_STORE.layoutFromFiles(state.remote.path, manifest, files),
           payload: Object.assign({}, payload, {
@@ -9633,6 +9701,13 @@
 
         mergeRecordListIntoMap(localPayload && localPayload.records, recordsById, recordOrder, false);
         mergeRecordListIntoMap(incomingPayload && incomingPayload.records, recordsById, recordOrder, true);
+        deletedRecords.forEach(function (entry) {
+          const record = recordsById.get(entry.recordId);
+          if (record && entry.record && (record.dotRecorded === true || entry.record.dotRecorded === true)) {
+            record.dotRecorded = true;
+            entry.record.dotRecorded = true;
+          }
+        });
 
         const records = recordOrder
           .map(function (id) {
@@ -9725,6 +9800,9 @@
           ? right
           : left;
         const merged = cloneRecordForMerge(winner);
+        if (left.dotRecorded === true || right.dotRecorded === true) {
+          merged.dotRecorded = true;
+        }
         merged.history = mergeHistoryEntryLists(left.history, right.history, merged);
         merged.recurrenceCompletions = mergeRecurrenceCompletionEntries(
           left.recurrenceCompletions,
@@ -9748,7 +9826,8 @@
             entry.eventAt,
             entry.recurrence,
             entry.prepared,
-            entry.completed
+            entry.completed,
+            entry.dotRecorded === true
           ]), entry);
         });
         return Array.from(entriesByKey.values()).sort(function (a, b) {
@@ -9774,7 +9853,12 @@
             || new Date(entry.deletedAt).getTime() > new Date(existing.deletedAt).getTime()
             || (entry.deletedAt === existing.deletedAt
               && getRecordMergeTimestamp(entry.record) >= getRecordMergeTimestamp(existing.record))) {
+            if (entry.record && existing && existing.record && existing.record.dotRecorded === true) {
+              entry.record.dotRecorded = true;
+            }
             entriesById.set(entry.recordId, entry);
+          } else if (existing.record && entry.record && entry.record.dotRecorded === true) {
+            existing.record.dotRecorded = true;
           }
         });
         return Array.from(entriesById.values()).sort(function (a, b) {
@@ -11385,7 +11469,8 @@
 
       function isDotRecordedJournal(record) {
         return Boolean(record && record.type === "journal"
-          && typeof record.id === "string" && record.id.startsWith("dot-diary-"));
+          && (record.dotRecorded === true
+            || (typeof record.id === "string" && record.id.startsWith("dot-diary-"))));
       }
 
       function isGTeacherRecord(record) {
@@ -16567,7 +16652,8 @@
           eventAt: normalizeDateTime(record && record.eventAt),
           recurrence: normalizeRecurrenceInfo(record && record.recurrence),
           prepared: Boolean(record && record.prepared),
-          completed: Boolean(record && record.completed)
+          completed: Boolean(record && record.completed),
+          ...(record && record.dotRecorded === true ? { dotRecorded: true } : {})
         };
       }
 
@@ -16586,7 +16672,8 @@
               eventAt: normalizeDateTime(entry.eventAt),
               recurrence: normalizeRecurrenceInfo(entry.recurrence),
               prepared: Boolean(entry.prepared),
-              completed: Boolean(entry.completed)
+              completed: Boolean(entry.completed),
+              ...(entry.dotRecorded === true ? { dotRecorded: true } : {})
             };
           }).filter(function (entry) {
             return entry && !isSyntheticMergeOnlyHistoryAction(entry.action);
@@ -16753,13 +16840,17 @@
             prepared: type === "meeting" ? Boolean(record.prepared) && !Boolean(record.completed) : false,
             completed: type === "journal" ? false : Boolean(record.completed),
             completedAt: completedAt,
-            updatedAt: updatedAt
+            updatedAt: updatedAt,
+            ...(record.dotRecorded === true ? { dotRecorded: true } : {})
           }),
           recurrenceCompletions: recurrenceCompletions,
           prepared: type === "meeting" ? Boolean(record.prepared) && !Boolean(record.completed) : false,
           completed: type === "journal" ? false : Boolean(record.completed),
           updatedAt: updatedAt
         };
+        if (record.dotRecorded === true) {
+          normalizedRecord.dotRecorded = true;
+        }
         if (typeLock) {
           normalizedRecord.typeLock = typeLock;
         }

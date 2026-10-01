@@ -164,7 +164,9 @@
       completed: Boolean(record.completed),
       ignoredConflictKeys: normalizeStringList(record.ignoredConflictKeys),
       recurrenceCompletions: normalizeRecurrenceCompletions(record.recurrenceCompletions),
-      createdAt: createdAt
+      createdAt: createdAt,
+      // Absence stays absent so existing v4 state hashes and revision IDs remain stable.
+      ...(record.dotRecorded === true ? { dotRecorded: true } : {})
     };
   }
 
@@ -794,7 +796,9 @@
       recurrenceCompletions: normalizeRecurrenceCompletions(record.recurrenceCompletions).filter(function (completion) {
         return !at || new Date(completion.completedAt).getTime() <= new Date(at).getTime();
       }),
-      createdAt: record.createdAt
+      createdAt: record.createdAt,
+      // Attribution belongs to this historical state, never backfill older revisions.
+      ...(entry && entry.dotRecorded === true ? { dotRecorded: true } : {})
     });
   }
 
@@ -829,7 +833,8 @@
       eventAt: record && record.eventAt,
       recurrence: record && record.recurrence,
       prepared: record && record.prepared,
-      completed: record && record.completed
+      completed: record && record.completed,
+      ...(record && record.dotRecorded === true ? { dotRecorded: true } : {})
     }];
   }
 
@@ -2014,7 +2019,8 @@
       eventAt: record.eventAt || "",
       recurrence: clone(record.recurrence),
       prepared: Boolean(record.prepared),
-      completed: Boolean(record.completed)
+      completed: Boolean(record.completed),
+      ...(record.dotRecorded === true ? { dotRecorded: true } : {})
     };
   }
 
@@ -2048,6 +2054,9 @@
     };
     if (canonical.typeLock) {
       result.typeLock = canonical.typeLock;
+    }
+    if (canonical.dotRecorded === true) {
+      result.dotRecorded = true;
     }
     return result;
   }
@@ -2356,6 +2365,34 @@
       }
     });
     const currentTombstones = new Map((hot.tombstones || []).map(function (item) { return [item.recordId, item]; }));
+    function currentTrashRecord(recordId) {
+      const tombstone = currentTombstones.get(recordId);
+      if (!tombstone || tombstone.purged) {
+        return null;
+      }
+      const indexEntry = recordIndex[recordId];
+      const descriptor = indexEntry && (manifest.trash || []).find(function (item) {
+        return item.path === indexEntry.location;
+      });
+      const envelope = descriptor && next.files[descriptor.path];
+      if (!envelope) {
+        throw new Error("Trash base record is required before reconciling " + recordId + ".");
+      }
+      const text = jsonText(envelope);
+      if (envelope.kind !== "trash" || envelope.version !== SCHEMA_VERSION
+        || envelope.generation !== manifest.generation || !Array.isArray(envelope.entries)
+        || sha256(text) !== descriptor.contentHash || utf8Bytes(text).length !== descriptor.bytes) {
+        throw new Error("Trash base record metadata is invalid for " + recordId + ".");
+      }
+      const archived = envelope.entries.find(function (entry) {
+        return entry.recordId === recordId && entry.headRevisionId === indexEntry.headRevisionId;
+      });
+      if (!archived || !archived.record || archived.record.id !== recordId) {
+        throw new Error("Trash base record head is missing for " + recordId + ".");
+      }
+      return archived.record;
+    }
+
     const incomingRecords = Array.isArray(payload && payload.records) ? payload.records : [];
     const incomingDeleted = Array.isArray(payload && payload.deletedRecords) ? payload.deletedRecords : [];
     const newRevisions = [];
@@ -2370,25 +2407,48 @@
         return;
       }
       const existing = currentRecords.get(canonical.id) || baseRecords.get(canonical.id);
+      // Participation is sticky when a subsequent manual/imported edit omits it.
+      if (existing && existing.dotRecorded === true) {
+        canonical.dotRecorded = true;
+      }
       const indexEntry = recordIndex[canonical.id];
       if (!existing && indexEntry && snapshotPaths.has(indexEntry.location)) {
         throw new Error("Snapshot base record is required before reconciling " + canonical.id + ".");
       }
       const metadata = recordChangeMetadata(record, now, !existing);
+      const existingCanonical = existing ? canonicalizeRecord(existing) : null;
+      const withoutAttribution = Object.assign({}, canonical);
+      delete withoutAttribution.dotRecorded;
+      // A merged participation flag is a causal update to the selected body,
+      // not another body candidate for the equal-time revision-ID tiebreak.
+      const attributionOnly = Boolean(existingCanonical && canonical.dotRecorded === true
+        && existingCanonical.dotRecorded !== true
+        && stableStringify(existingCanonical) === stableStringify(withoutAttribution));
+      if (attributionOnly) {
+        metadata.at = latestIso([metadata.at, existing.headRevisionAt], metadata.at);
+      }
       const tombstone = currentTombstones.get(canonical.id);
       if (tombstone && new Date(tombstone.deletedAt).getTime() >= new Date(metadata.at).getTime()) {
         return;
       }
       if (tombstone) {
+        if (canonical.dotRecorded !== true) {
+          const archived = currentTrashRecord(canonical.id);
+          if (archived && archived.dotRecorded === true) {
+            canonical.dotRecorded = true;
+          }
+        }
         currentTombstones.delete(canonical.id);
       }
       if (existing && stableStringify(canonicalizeRecord(existing)) === stableStringify(canonical)) {
         return;
       }
       touchedRecordIds.add(canonical.id);
-      const parentRevisionId = typeof record.headRevisionId === "string" && record.headRevisionId
-        ? record.headRevisionId
-        : (opts.baseHeadByRecord && opts.baseHeadByRecord[canonical.id]) || (existing && existing.headRevisionId) || "";
+      const parentRevisionId = attributionOnly && existing.headRevisionId
+        ? existing.headRevisionId
+        : (typeof record.headRevisionId === "string" && record.headRevisionId
+          ? record.headRevisionId
+          : (opts.baseHeadByRecord && opts.baseHeadByRecord[canonical.id]) || (existing && existing.headRevisionId) || "");
       const revision = createFullRevision({
         record: canonical,
         action: metadata.action,
@@ -2401,7 +2461,7 @@
         id: existing.headRevisionId || "",
         at: normalizeIso(existing.headRevisionAt, existing.createdAt)
       } : null;
-      if (!existing || compareRevisionHeads(revision, currentHead) >= 0) {
+      if (!existing || attributionOnly || compareRevisionHeads(revision, currentHead) >= 0) {
         currentRecords.set(canonical.id, Object.assign({}, canonical, {
           headRevisionId: revision.id,
           headRevisionAt: revision.at
@@ -2410,6 +2470,7 @@
     });
 
     const trashEntries = [];
+    const preparedTrashById = new Map();
     incomingDeleted.forEach(function (entry) {
       const tombstone = normalizeTombstone(entry);
       if (!tombstone) {
@@ -2434,6 +2495,16 @@
       const archivedSource = !entry.purged && entry.record ? entry.record : existingRecord;
       if (!entry.purged && archivedSource) {
         const canonical = canonicalizeRecord(archivedSource);
+        if (existingRecord && existingRecord.dotRecorded === true) {
+          canonical.dotRecorded = true;
+        }
+        if (canonical.dotRecorded !== true && existingTombstone) {
+          const archived = preparedTrashById.get(tombstone.recordId)
+            || (!existingRecord ? currentTrashRecord(tombstone.recordId) : null);
+          if (archived && archived.dotRecorded === true) {
+            canonical.dotRecorded = true;
+          }
+        }
         const parentRevisionId = typeof archivedSource.headRevisionId === "string" && archivedSource.headRevisionId
           ? archivedSource.headRevisionId
           : (existingRecord && existingRecord.headRevisionId) || "";
@@ -2446,6 +2517,7 @@
         });
         newRevisions.push(revision);
         recordForRevision.set(revision.id, canonical);
+        preparedTrashById.set(tombstone.recordId, canonical);
         trashEntries.push({
           recordId: tombstone.recordId,
           deletedAt: tombstone.deletedAt,
@@ -2790,6 +2862,7 @@
   }
 
   return {
+    DOT_RECORDED_SUPPORTED: true,
     DEFAULT_RECORD_INDEX_LAYOUT: clone(DEFAULT_RECORD_INDEX_LAYOUT),
     DEFAULT_SNAPSHOT_POLICY: clone(DEFAULT_SNAPSHOT_POLICY),
     RECORD_TYPES: RECORD_TYPES.slice(),

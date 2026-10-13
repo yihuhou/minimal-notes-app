@@ -2443,6 +2443,9 @@
       if (existing && stableStringify(canonicalizeRecord(existing)) === stableStringify(canonical)) {
         return;
       }
+      if (existing && !currentRecords.has(canonical.id) && !indexEntry) {
+        throw new Error("Record index entry is required before reconciling " + canonical.id + ".");
+      }
       touchedRecordIds.add(canonical.id);
       const parentRevisionId = attributionOnly && existing.headRevisionId
         ? existing.headRevisionId
@@ -2490,6 +2493,9 @@
         && new Date(existingTombstone.deletedAt).getTime() === new Date(tombstone.deletedAt).getTime()
         && Boolean(existingTombstone.purged) === Boolean(tombstone.purged)) {
         return;
+      }
+      if (existingRecord && !currentRecords.has(tombstone.recordId) && !indexEntry) {
+        throw new Error("Record index entry is required before deleting " + tombstone.recordId + ".");
       }
       touchedRecordIds.add(tombstone.recordId);
       const archivedSource = !entry.purged && entry.record ? entry.record : existingRecord;
@@ -2637,9 +2643,14 @@
         if (previous) {
           adjustCurrentStats(currentStats, previous, -1);
         }
-        const current = currentRecords.get(recordId);
         const indexEntry = recordIndex[recordId];
-        if (current && indexEntry && indexEntry.location === manifest.hot.path) {
+        // A losing incoming revision changes history, not the active snapshot
+        // record. Resolve the selected location instead of treating hot as the
+        // entire active set; trash and purged locations must not be added back.
+        const current = indexEntry && indexEntry.location === manifest.hot.path
+          ? currentRecords.get(recordId)
+          : (indexEntry && snapshotPaths.has(indexEntry.location) ? baseRecords.get(recordId) : null);
+        if (current && !currentTombstones.has(recordId)) {
           adjustCurrentStats(currentStats, current, 1);
         }
       });

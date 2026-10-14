@@ -873,7 +873,15 @@
     .minutes-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .minutes-actions .ghost { max-width: 100%; overflow-wrap: anywhere; text-align: left; }
     .minutes-title { display: block; margin-bottom: 8px; color: var(--text); }
-    .minutes-body { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .minutes-body { display: block; overflow-wrap: anywhere; }
+    .minutes-body p { margin: 0 0 10px; white-space: pre-wrap; }
+    .minutes-body :is(h3, h4, h5, h6) { margin: 14px 0 6px; font-size: inherit; line-height: 1.65; }
+    .minutes-body > :first-child { margin-top: 0; }
+    .minutes-body :is(ol, ul) { margin: 6px 0 12px; padding-left: 1.7em; }
+    .minutes-body li { margin: 4px 0; }
+    .minutes-body li > :is(ol, ul) { margin: 4px 0 0; }
+    .minutes-body a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+    .minutes-body code { padding: 1px 4px; background: var(--panel-soft); border-radius: 4px; }
     .item.minutes { grid-template-columns: minmax(0, 1fr) auto; }
     .item.minutes .toggle { display: none; }
     .item.minutes .item-main { display: block; }
@@ -5476,7 +5484,17 @@
         const rawDuration = valueFor("录音总时长秒");
         const duration = /^(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(rawDuration) ? Number(rawDuration) : NaN;
         const durationSeconds = Number.isFinite(duration) && duration >= 0 ? duration : null;
-        return { occurrenceAt: occurrenceAt, durationSeconds: durationSeconds };
+        const precisionKey = "发生时间精度", approximateKey = "发生时间约数";
+        const countFor = function (key) { return parts.filter(function (part) { return part.startsWith(key + "="); }).length; };
+        const rawPrecision = valueFor(precisionKey), rawApproximate = valueFor(approximateKey);
+        const sourcePrecision = occurrenceAt ? (time[4] === undefined ? "minute" : "second") : "date";
+        const occurrencePrecision = countFor(precisionKey) === 1 && ["date", "minute", "second"].includes(rawPrecision)
+          && rawPrecision === sourcePrecision ? rawPrecision : null;
+        const occurrenceApproximate = countFor(approximateKey) === 1 && ["true", "false"].includes(rawApproximate)
+          ? rawApproximate === "true" : null;
+        if ((countFor(precisionKey) > 0 && occurrencePrecision === null)
+          || (countFor(approximateKey) > 0 && occurrenceApproximate === null)) { occurrenceAt = null; }
+        return { occurrenceAt: occurrenceAt, durationSeconds: durationSeconds, occurrencePrecision: occurrencePrecision, occurrenceApproximate: occurrenceApproximate };
       }
 
       function parseMinutesRecord(record) {
@@ -5495,18 +5513,108 @@
           + String(getDisplayText(record) || "日程").replace(/\s+/g, " ").slice(0, 100);
       }
 
+      function isMinutesTranscriptUrl(value) {
+        try {
+          const url = new URL(value.replace(/[。，；;、]+$/, ""));
+          const path = decodeURIComponent(url.pathname);
+          return url.protocol === "https:" && url.hostname === "github.com"
+            && /^\/yihuhou\/minimal-notes\/blob\/[^/]+\/private-data\/recording-minutes\/.+\.md$/i.test(path);
+        } catch (error) { return false; }
+      }
+
       function getMinutesDisplayBody(body) {
-        // Presentation only: keep the linked full transcript in the stored record.
-        return String(body || "").replace(
-          /(?:\n\s*)+完整校订稿[：:]\s*https:\/\/github\.com\/yihuhou\/minimal-notes\/blob\/[^/\s]+\/private-data\/recording-minutes\/published\/[^\s]+\s*$/, ""
-        ).trim();
+        // Hide dedicated transcript references in the view; never edit source text.
+        const paragraphs = String(body || "").replace(/\r\n/g, "\n").split(/\n\s*\n/);
+        const label = /^(?:#{1,6}\s+)?(?:\*\*)?(?:完整校订稿(?:\*\*)?(?=[：:\s]|$)[：:]?\s*|\[完整校订稿\](?=\())/;
+        const isReference = function (paragraph) {
+          const links = paragraph.match(/https?:\/\/[^\s)<>`]+/g) || [];
+          return links.length > 0 && links.every(isMinutesTranscriptUrl);
+        };
+        return paragraphs.filter(function (paragraph, index) {
+          const text = paragraph.trim();
+          if (label.test(text) && isReference(text)) { return false; }
+          if (label.test(text) && !text.replace(label, "") && isReference(paragraphs[index + 1] || "")) { return false; }
+          const previous = (paragraphs[index - 1] || "").trim();
+          if (label.test(previous) && !previous.replace(label, "") && isReference(text)) { return false; }
+          return true;
+        }).join("\n\n").trim();
+      }
+
+      function renderMinutesInline(text) {
+        const source = String(text || "");
+        const pattern = /\*\*([^*\n]+)\*\*|`([^`\n]+)`|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g;
+        const parts = [];
+        let previous = 0, match;
+        while ((match = pattern.exec(source))) {
+          parts.push(escapeHtml(source.slice(previous, match.index)));
+          if (match[1] !== undefined) {
+            parts.push("<strong>" + escapeHtml(match[1]) + "</strong>");
+          } else if (match[2] !== undefined) {
+            parts.push("<code>" + escapeHtml(match[2]) + "</code>");
+          } else {
+            try {
+              const url = new URL(match[4]);
+              if (url.protocol !== "https:" && url.protocol !== "http:") { throw new Error("Unsupported link"); }
+              parts.push('<a href="' + escapeHtml(url.href) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(match[3]) + "</a>");
+            } catch (error) { parts.push(escapeHtml(match[0])); }
+          }
+          previous = pattern.lastIndex;
+        }
+        parts.push(escapeHtml(source.slice(previous)));
+        return parts.join("");
+      }
+
+      function renderMinutesBodyHtml(body) {
+        const parts = [], lists = [], paragraph = [];
+        const flushParagraph = function () {
+          if (paragraph.length) { parts.push("<p>" + renderMinutesInline(paragraph.join("\n")) + "</p>"); paragraph.length = 0; }
+        };
+        const closeList = function () {
+          const list = lists.pop();
+          parts.push((list.itemOpen ? "</li>" : "") + "</" + list.tag + ">");
+        };
+        const closeLists = function () { while (lists.length) { closeList(); } };
+        getMinutesDisplayBody(body).split("\n").forEach(function (line) {
+          if (!line.trim()) { flushParagraph(); closeLists(); return; }
+          const heading = line.match(/^\s{0,3}(#{1,4})\s+(.+)$/);
+          if (heading) {
+            flushParagraph(); closeLists();
+            const tag = "h" + Math.min(6, heading[1].length + 2);
+            parts.push("<" + tag + ">" + renderMinutesInline(heading[2]) + "</" + tag + ">");
+            return;
+          }
+          const item = line.match(/^(\s*)(?:(\d+)[.)、]|([-*+]))\s+(.+)$/);
+          if (item) {
+            flushParagraph();
+            const indent = item[1].replace(/\t/g, "    ").length;
+            const tag = item[2] ? "ol" : "ul";
+            while (lists.length && (lists[lists.length - 1].indent > indent
+              || (lists[lists.length - 1].indent === indent && lists[lists.length - 1].tag !== tag))) { closeList(); }
+            let list = lists[lists.length - 1];
+            if (!list || list.indent < indent) {
+              parts.push("<" + tag + (tag === "ol" ? ' start="' + item[2] + '"' : "") + ">");
+              list = { indent: indent, tag: tag, itemOpen: false }; lists.push(list);
+            }
+            if (list.itemOpen) { parts.push("</li>"); }
+            parts.push("<li" + (tag === "ol" ? ' value="' + item[2] + '"' : "") + ">" + renderMinutesInline(item[4]));
+            list.itemOpen = true;
+            return;
+          }
+          if (lists.length && line.match(/^\s*/)[0].replace(/\t/g, "    ").length > lists[lists.length - 1].indent) {
+            parts.push("<br>" + renderMinutesInline(line.trim())); return;
+          }
+          closeLists(); paragraph.push(line);
+        });
+        flushParagraph(); closeLists();
+        return parts.join("");
       }
 
       function formatMinutesTiming(fields) {
         const parts = [];
         if (fields.occurrenceAt) {
-          parts.push(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
-            .format(new Date(fields.occurrenceAt)));
+          parts.push((fields.occurrenceApproximate === true ? "约" : "")
+            + new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+              .format(new Date(fields.occurrenceAt)));
         }
         if (Number.isFinite(fields.durationSeconds) && fields.durationSeconds >= 0) {
           // Round only for display; the source and reader retain fractional seconds.
@@ -5526,8 +5634,8 @@
         const meeting = state.records.find(function (item) { return item.id === fields.meetingId && item.type === "meeting"; });
         return '<div class="item-line">'
           + '<span class="item-tags"><span class="badge">纪要 · ' + fields.kind + '</span><span class="code-token token-time">' + fields.date + '</span>' + (timing ? '<span class="code-token token-time">' + escapeHtml(timing) + '</span>' : '') + '</span>'
-          + '<span class="item-text"><strong class="minutes-title">' + escapeHtml(fields.title) + '</strong>'
-          + '<span class="minutes-body">' + escapeHtml(getMinutesDisplayBody(fields.body)) + '</span></span></div>'
+          + '<div class="item-text"><strong class="minutes-title">' + escapeHtml(fields.title) + '</strong>'
+          + '<div class="minutes-body">' + renderMinutesBodyHtml(fields.body) + '</div></div></div>'
           + (fields.meetingId ? '<div class="minutes-actions"><button type="button" class="ghost" data-action="minutes-meeting" data-id="' + escapeHtml(fields.meetingId) + '">'
             + escapeHtml(meeting ? '日程：' + minutesMeetingLabel(meeting) : '查看原关联日程（已删除或尚未加载）') + '</button></div>' : '');
       }

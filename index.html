@@ -872,7 +872,12 @@
 
     .minutes-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .minutes-actions .ghost { max-width: 100%; overflow-wrap: anywhere; text-align: left; }
-    .minutes-title { display: block; margin-bottom: 8px; color: var(--text); }
+    .minutes-title { display: block; margin-bottom: 4px; color: var(--text); overflow-wrap: anywhere; }
+    .minutes-disclosure { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0; border-radius: 4px; text-align: left; }
+    .minutes-disclosure:focus-visible { outline: 2px solid rgba(17, 17, 17, 0.18); outline-offset: 2px; }
+    .minutes-summary { display: block; flex: 1; min-width: 0; }
+    .minutes-disclosure-label { flex-shrink: 0; color: var(--text-faint); font-size: 12px; }
+    .minutes-details { margin-top: 10px; }
     .minutes-body { display: block; overflow-wrap: anywhere; }
     .minutes-body p { margin: 0 0 10px; white-space: pre-wrap; }
     .minutes-body :is(h3, h4, h5, h6) { margin: 14px 0 6px; font-size: inherit; line-height: 1.65; }
@@ -886,7 +891,7 @@
     .item.minutes .toggle { display: none; }
     .item.minutes .item-main { display: block; }
     .item.minutes .item-line { display: block; cursor: default; }
-    .item.minutes .item-tags { margin-bottom: 10px; }
+    .item.minutes .item-tags { margin-bottom: 0; }
     .item.minutes .item-text {
       display: block; white-space: normal; overflow: visible; text-overflow: clip;
       -webkit-line-clamp: unset; -webkit-box-orient: initial; line-height: 1.65;
@@ -3537,6 +3542,7 @@
       let recordListQuery = "";
       let recordListVisible = [];
       let recordListNodes = new Map();
+      const expandedMinutesIds = new Set();
       let ideaPaneNodes = new Map();
       let healthSummaryLoadId = 0;
       let deleteDialogResolve = null;
@@ -4589,6 +4595,7 @@
         }
 
         if (action === "minutes-meeting") { showMinutesMeeting(id); return; }
+        if (action === "minutes-toggle") { toggleMinutes(id); return; }
 
         if (action === "toggle") {
           toggleRecord(id);
@@ -5631,13 +5638,37 @@
       function renderMinutesDisplay(record) {
         const fields = parseMinutesRecord(record);
         const timing = formatMinutesTiming(fields);
+        const expanded = expandedMinutesIds.has(record.id);
+        const detailsId = "minutes-details-" + record.id;
         const meeting = state.records.find(function (item) { return item.id === fields.meetingId && item.type === "meeting"; });
         return '<div class="item-line">'
-          + '<span class="item-tags"><span class="badge">纪要 · ' + fields.kind + '</span><span class="code-token token-time">' + fields.date + '</span>' + (timing ? '<span class="code-token token-time">' + escapeHtml(timing) + '</span>' : '') + '</span>'
-          + '<div class="item-text"><strong class="minutes-title">' + escapeHtml(fields.title) + '</strong>'
-          + '<div class="minutes-body">' + renderMinutesBodyHtml(fields.body) + '</div></div></div>'
+          + '<button type="button" class="minutes-disclosure" data-action="minutes-toggle" data-id="' + escapeHtml(record.id) + '" aria-expanded="' + expanded + '" aria-controls="' + escapeHtml(detailsId) + '">'
+          + '<span class="minutes-summary"><strong class="minutes-title">' + escapeHtml(fields.title) + '</strong>'
+          + '<span class="item-tags"><span class="badge">纪要 · ' + fields.kind + '</span><span class="code-token token-time">' + fields.date + '</span>' + (timing ? '<span class="code-token token-time">' + escapeHtml(timing) + '</span>' : '') + '</span></span>'
+          + '<span class="minutes-disclosure-label" data-role="minutes-toggle-label">' + (expanded ? '收起' : '展开') + '</span></button>'
+          + '<div class="minutes-details item-text" id="' + escapeHtml(detailsId) + '"' + (expanded ? '' : ' hidden') + '>'
+          + '<div class="minutes-body">' + renderMinutesBodyHtml(fields.body) + '</div>'
           + (fields.meetingId ? '<div class="minutes-actions"><button type="button" class="ghost" data-action="minutes-meeting" data-id="' + escapeHtml(fields.meetingId) + '">'
-            + escapeHtml(meeting ? '日程：' + minutesMeetingLabel(meeting) : '查看原关联日程（已删除或尚未加载）') + '</button></div>' : '');
+            + escapeHtml(meeting ? '日程：' + minutesMeetingLabel(meeting) : '查看原关联日程（已删除或尚未加载）') + '</button></div>' : '')
+          + '</div></div>';
+      }
+
+      function toggleMinutes(id) {
+        const record = state.records.find(function (item) { return item.id === id; });
+        const item = recordList.querySelector('.item[data-id="' + cssEscape(id) + '"]');
+        if (!record || !isMinutesRecord(record) || !item) { return; }
+        const button = item.querySelector('[data-action="minutes-toggle"]');
+        const details = item.querySelector('.minutes-details');
+        if (!button || !details) { return; }
+        const expanded = !expandedMinutesIds.has(id);
+        if (expanded) { expandedMinutesIds.add(id); }
+        else { expandedMinutesIds.delete(id); }
+        button.setAttribute("aria-expanded", String(expanded));
+        button.querySelector('[data-role="minutes-toggle-label"]').textContent = expanded ? "收起" : "展开";
+        details.hidden = !expanded;
+        // Keep the button and its focus alive during background list rendering.
+        const entry = recordListNodes.get(id);
+        if (entry) { entry.html = renderItem(record, []); }
       }
 
       async function showMinutesMeeting(id) {
@@ -7245,6 +7276,7 @@
         remoteSyncPanel.hidden = true;
         resetFileSyncState();
         state.records = [];
+        expandedMinutesIds.clear();
         resetSnapshotRecords();
         state.deletedRecords = [];
         state.recurrenceCompletionArchive = [];

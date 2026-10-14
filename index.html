@@ -5512,7 +5512,7 @@
       function parseMinutesRecord(record) {
         if (!record || record.type !== "idea") { return null; }
         const match = String(record.text || "").replace(/\r\n/g, "\n").match(
-          /^【纪要】([^\n]+)\n发生日期：(\d{4}-\d{2}-\d{2})\n纪要类型：(录音|谈话|日程)\n关联日程：([^\n]*)\n来源说明：([^\n]*)\n(?:核实状态：(未核实|已核实)\n)?\n([\s\S]+)$/
+          /^【纪要】([^\n]+)\n发生日期：(\d{4}-\d{2}-\d{2})\n纪要类型：(录音|谈话|日程|邮件)\n关联日程：([^\n]*)\n来源说明：([^\n]*)\n(?:核实状态：(未核实|已核实)\n)?\n([\s\S]+)$/
         );
         if (!match || !isMinutesDate(match[2])) { return null; }
         return { title: match[1], date: match[2], kind: match[3], meetingId: match[4], source: match[5], verification: match[6] || "未核实", body: match[7], ...parseMinutesTiming(match[5]) };

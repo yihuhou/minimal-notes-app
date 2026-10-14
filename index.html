@@ -870,25 +870,14 @@
       line-height: 1.58;
     }
 
-    .minutes-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
-    .minutes-fields label { display: grid; gap: 5px; min-width: 0; color: var(--text-soft); font-size: 12px; }
-    .minutes-fields .minutes-wide { grid-column: 1 / -1; }
-    .minutes-fields input, .minutes-fields select, .minutes-fields textarea {
-      width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--border);
-      border-radius: 12px; padding: 10px 12px; background: var(--panel-soft); color: var(--text); font-size: 16px;
-    }
-    .composer .minutes-fields textarea, .minutes-fields textarea { min-height: 160px; height: auto; resize: vertical; line-height: 1.58; }
-    .minutes-fields :is(input, select, textarea):focus { outline: 1px solid var(--border-strong); background: var(--panel); }
-    .composer-card.minutes-mode { display: block; }
-    .minutes-help { margin: 8px 0 0; color: var(--text-faint); font-size: 12px; line-height: 1.6; }
     .minutes-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .minutes-actions .ghost { max-width: 100%; overflow-wrap: anywhere; text-align: left; }
     .minutes-title { display: block; margin-bottom: 8px; color: var(--text); }
     .minutes-body { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
     .item.minutes { grid-template-columns: minmax(0, 1fr) auto; }
     .item.minutes .toggle { display: none; }
-    .item.minutes .item-main, .item.meeting .item-main { display: block; }
-    .item.minutes .item-line { display: block; }
+    .item.minutes .item-main { display: block; }
+    .item.minutes .item-line { display: block; cursor: default; }
     .item.minutes .item-tags { margin-bottom: 10px; }
     .item.minutes .item-text {
       display: block; white-space: normal; overflow: visible; text-overflow: clip;
@@ -2929,22 +2918,6 @@
         <div class="composer-card">
           <label class="sr-only" for="quickInput">记录内容</label>
           <textarea id="quickInput" placeholder="写下一件事、一场会，或一段日常。"></textarea>
-          <div id="minutesComposer" hidden>
-            <button id="minutesCreateButton" class="ghost" type="button" aria-expanded="false" aria-controls="minutesForm">新增纪要</button>
-            <div id="minutesForm" hidden>
-              <div class="minutes-fields">
-                <label class="minutes-wide">标题<input data-minutes-field="title" type="text" placeholder="这次录音或谈话的主题" autocomplete="off"></label>
-                <label>发生日期<input data-minutes-field="date" type="date"></label>
-                <label>类型<select data-minutes-field="kind"><option>录音</option><option>谈话</option><option>日程</option></select></label>
-                <label class="minutes-wide">关联日程（可选）<select data-minutes-field="meetingId"><option value="">不关联日程</option></select></label>
-                <label class="minutes-wide">核实状态<select data-minutes-field="verification"><option>未核实</option><option>已核实</option></select></label>
-                <label class="minutes-wide">来源说明（可选）<input data-minutes-field="source" type="text" placeholder="例如：GPT 根据完整转写整理，尚未核对原音频" autocomplete="off"></label>
-                <label class="minutes-wide">纪要正文<textarea data-minutes-field="body" placeholder="写下要点、结论和后续安排；也可以粘贴 GPT 整理的文字纪要。"></textarea></label>
-              </div>
-              <div class="minutes-actions"><button id="minutesLoadMeetings" class="ghost" type="button" hidden>加载更早日程</button></div>
-              <p class="minutes-help">点击 + 保存纪要 · Ctrl / ⌘ + Enter 保存</p>
-            </div>
-          </div>
           <div class="composer-bar">
             <div class="meta-note">
               <span id="quickInputHint">Enter 保存。默认自动识别时间和类型；需要时再展开手动选项。</span>
@@ -3003,9 +2976,9 @@
             <button type="button" data-filter="todo" aria-pressed="false">待办</button>
             <button type="button" data-filter="meeting" aria-pressed="false">日程</button>
             <button type="button" data-filter="deadline" aria-pressed="false">截止</button>
-            <button type="button" data-filter="idea" aria-pressed="false">想法</button>
-            <button type="button" data-filter="minutes" aria-pressed="false">纪要</button>
             <button type="button" data-filter="journal" aria-pressed="false">日记</button>
+            <button type="button" data-filter="minutes" aria-pressed="false">纪要</button>
+            <button type="button" data-filter="idea" aria-pressed="false">想法</button>
             <button type="button" data-filter="completed" aria-pressed="false">已完成</button>
           </div>
         </div>
@@ -3368,7 +3341,6 @@
         editingId: null,
         composing: false,
         composerExpanded: false,
-        minutesComposerOpen: false,
         sessionOnly: false,
         sync: {
           supported: SUPPORTS_FILE_SYNC,
@@ -3456,9 +3428,6 @@
       };
 
       const quickInput = document.getElementById("quickInput");
-      const minutesComposer = document.getElementById("minutesComposer");
-      const minutesLoadMeetings = document.getElementById("minutesLoadMeetings");
-      const minutesCreateButton = document.getElementById("minutesCreateButton");
       const quickType = document.getElementById("quickType");
       const quickEventAt = document.getElementById("quickEventAt");
       const addButton = document.getElementById("addButton");
@@ -3578,7 +3547,6 @@
       let todayHeadingTimer = 0;
       let autoCompletionTimer = 0;
       let inlineEditDraft = null;
-      let minutesEditDraft = null;
       const remoteRequestControllers = new Set();
       const cacheTransactions = new Set();
       let recordListRenderInProgress = false;
@@ -3613,8 +3581,7 @@
           if (state.filter === "journal") renderJournalAchievements(getCurrentStatsForDisplay());
         });
         window.addEventListener("beforeunload", function (event) {
-          if (state.localSaveError || (minutesEditDraft && minutesEditDraft.dirty)
-            || readMinutesFields(minutesComposer).body.trim() || readMinutesFields(minutesComposer).title.trim()) {
+          if (state.localSaveError) {
             event.preventDefault();
             event.returnValue = "";
           }
@@ -3635,17 +3602,6 @@
         });
 
         addButton.addEventListener("click", addRecord);
-        minutesComposer.addEventListener("keydown", function (event) {
-          if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.isComposing) {
-            event.preventDefault(); addMinutesRecord();
-          }
-        });
-        minutesLoadMeetings.addEventListener("click", loadEarlierMinutesMeetings);
-        minutesCreateButton.addEventListener("click", function () {
-          state.minutesComposerOpen = !state.minutesComposerOpen;
-          renderMinutesComposer();
-          if (state.minutesComposerOpen) { focusQuickInput(); }
-        });
         if (healthCalendarToggle) {
           healthCalendarToggle.addEventListener("click", toggleHealthCalendar);
         }
@@ -3712,7 +3668,6 @@
         recordList.addEventListener("click", handleListClick);
         recordList.addEventListener("keydown", handleListKeydown);
         recordList.addEventListener("input", handleListInput);
-        recordList.addEventListener("change", captureMinutesEditDraft);
         recordList.addEventListener("focusout", handleListFocusOut);
         recordList.addEventListener("pointerdown", handleGTeacherLongPressStart);
         recordList.addEventListener("pointermove", handleGTeacherLongPressMove);
@@ -4625,10 +4580,7 @@
           return;
         }
 
-        if (action === "minutes-new") { startMinutesForMeeting(id); return; }
         if (action === "minutes-meeting") { showMinutesMeeting(id); return; }
-        if (action === "minutes-save") { saveMinutesRecord(id); return; }
-        if (action === "minutes-cancel") { minutesEditDraft = null; state.editingId = null; render(); return; }
 
         if (action === "toggle") {
           toggleRecord(id);
@@ -4667,15 +4619,6 @@
       }
 
       function handleListKeydown(event) {
-        const minutesEditor = event.target.closest('[data-role="minutes-editor"]');
-        if (minutesEditor && !event.isComposing) {
-          if (event.key === "Escape") {
-            event.preventDefault(); minutesEditDraft = null; state.editingId = null; render();
-          } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-            event.preventDefault(); saveMinutesRecord(minutesEditor.dataset.id);
-          }
-          return;
-        }
         const feedbackTarget = event.target.closest("[data-g-teacher-feedback-target]");
         if (feedbackTarget && (
           event.key === "Enter"
@@ -4732,7 +4675,6 @@
       }
 
       function handleListInput(event) {
-        if (event.target.closest('[data-role="minutes-editor"]')) { captureMinutesEditDraft(); return; }
         const input = event.target.closest('[data-role="edit-inline-text"]');
         if (!input) {
           return;
@@ -5046,9 +4988,6 @@
       }
 
       function startEditingRecord(id) {
-        if (minutesEditDraft && minutesEditDraft.dirty && minutesEditDraft.id !== id) {
-          setStatus("请先保存或取消正在编辑的纪要。"); return;
-        }
         const record = state.records.find(function (item) {
           return item.id === id;
         });
@@ -5064,16 +5003,6 @@
         }
 
         state.editingId = id;
-        if (isMinutesRecord(record)) {
-          inlineEditDraft = null;
-          if (!minutesEditDraft || minutesEditDraft.id !== id) {
-            minutesEditDraft = { id: id, originalText: record.text, createdAt: record.createdAt, fields: parseMinutesRecord(record), dirty: false };
-          }
-          render();
-          const editor = recordList.querySelector('[data-role="minutes-editor"] textarea');
-          if (editor) { editor.focus(); }
-          return;
-        }
         const value = String(record.text || "");
         inlineEditDraft = {
           id: id,
@@ -5209,7 +5138,6 @@
           return entry.id === state.editingId;
         });
         if (!record || isRecordEditLocked(record)) {
-          if (minutesEditDraft && minutesEditDraft.id === state.editingId) { return; }
           state.editingId = null;
           inlineEditDraft = null;
         }
@@ -5527,198 +5455,81 @@
           && new Date(value + "T12:00:00Z").toISOString().slice(0, 10) === value;
       }
 
+      function parseMinutesTiming(source) {
+        const parts = String(source || "").split(/[;；]/).map(function (part) { return part.trim(); });
+        const valueFor = function (key) {
+          const values = parts.filter(function (part) { return part.startsWith(key + "="); })
+            .map(function (part) { return part.slice(key.length + 1).trim(); });
+          return values.length === 1 ? values[0] : "";
+        };
+        const rawAt = valueFor("精确发生时间");
+        const time = rawAt.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/);
+        let occurrenceAt = null;
+        if (time) {
+          const date = new Date(time[1] + "T12:00:00Z");
+          const zone = time[5];
+          const zoneValid = zone === "Z" || (Number(zone.slice(1, 3)) <= 23 && Number(zone.slice(4, 6)) <= 59);
+          if (!Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === time[1]
+            && Number(time[2]) <= 23 && Number(time[3]) <= 59 && Number(time[4] || 0) <= 59
+            && zoneValid && Number.isFinite(Date.parse(rawAt))) { occurrenceAt = rawAt; }
+        }
+        const rawDuration = valueFor("录音总时长秒");
+        const duration = /^(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(rawDuration) ? Number(rawDuration) : NaN;
+        const durationSeconds = Number.isFinite(duration) && duration >= 0 ? duration : null;
+        return { occurrenceAt: occurrenceAt, durationSeconds: durationSeconds };
+      }
+
       function parseMinutesRecord(record) {
         if (!record || record.type !== "idea") { return null; }
         const match = String(record.text || "").replace(/\r\n/g, "\n").match(
           /^【纪要】([^\n]+)\n发生日期：(\d{4}-\d{2}-\d{2})\n纪要类型：(录音|谈话|日程)\n关联日程：([^\n]*)\n来源说明：([^\n]*)\n(?:核实状态：(未核实|已核实)\n)?\n([\s\S]+)$/
         );
         if (!match || !isMinutesDate(match[2])) { return null; }
-        return { title: match[1], date: match[2], kind: match[3], meetingId: match[4], source: match[5], verification: match[6] || "未核实", body: match[7] };
+        return { title: match[1], date: match[2], kind: match[3], meetingId: match[4], source: match[5], verification: match[6] || "未核实", body: match[7], ...parseMinutesTiming(match[5]) };
       }
 
       function isMinutesRecord(record) { return Boolean(parseMinutesRecord(record)); }
-
-      function buildMinutesText(fields) {
-        const line = function (value) { return String(value || "").replace(/[\r\n]+/g, " ").trim(); };
-        const title = line(fields.title);
-        const body = String(fields.body || "").trim();
-        if (!title || !body || !isMinutesDate(fields.date) || !["录音", "谈话", "日程"].includes(fields.kind)) { return ""; }
-        return ["【纪要】" + title, "发生日期：" + fields.date, "纪要类型：" + fields.kind,
-          "关联日程：" + line(fields.meetingId), "来源说明：" + line(fields.source), "核实状态：" + (fields.verification === "已核实" ? "已核实" : "未核实"), "", body].join("\n");
-      }
-
-      function readMinutesFields(root) {
-        const fields = {};
-        ["title", "date", "kind", "meetingId", "source", "verification", "body"].forEach(function (key) {
-          const input = root && root.querySelector('[data-minutes-field="' + key + '"]');
-          fields[key] = input ? input.value : "";
-        });
-        return fields;
-      }
-
-      function writeMinutesFields(root, fields) {
-        Object.keys(fields).forEach(function (key) {
-          const input = root.querySelector('[data-minutes-field="' + key + '"]');
-          if (input) { input.value = fields[key]; }
-        });
-      }
 
       function minutesMeetingLabel(record) {
         return (record.eventAt ? formatCompactDateOnly(record.eventAt) + " · " : "")
           + String(getDisplayText(record) || "日程").replace(/\s+/g, " ").slice(0, 100);
       }
 
-      function minutesMeetingOptions(selectedId) {
-        const meetings = state.records.filter(function (record) { return record.type === "meeting"; }).sort(function (a, b) {
-          return String(b.eventAt || b.createdAt).localeCompare(String(a.eventAt || a.createdAt));
-        });
-        const options = ['<option value="">不关联日程</option>'];
-        if (selectedId && !meetings.some(function (record) { return record.id === selectedId; })) {
-          options.push('<option value="' + escapeHtml(selectedId) + '">原关联日程（已删除或尚未加载）</option>');
+      function getMinutesDisplayBody(body) {
+        // Presentation only: keep the linked full transcript in the stored record.
+        return String(body || "").replace(
+          /(?:\n\s*)+完整校订稿[：:]\s*https:\/\/github\.com\/yihuhou\/minimal-notes\/blob\/[^/\s]+\/private-data\/recording-minutes\/published\/[^\s]+\s*$/, ""
+        ).trim();
+      }
+
+      function formatMinutesTiming(fields) {
+        const parts = [];
+        if (fields.occurrenceAt) {
+          parts.push(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+            .format(new Date(fields.occurrenceAt)));
         }
-        meetings.forEach(function (record) {
-          options.push('<option value="' + escapeHtml(record.id) + '">' + escapeHtml(minutesMeetingLabel(record)) + '</option>');
-        });
-        return options.join("");
-      }
-
-      function renderMinutesComposer() {
-        const active = state.filter === "minutes";
-        minutesComposer.hidden = !active;
-        minutesComposer.closest(".composer-card").classList.toggle("minutes-mode", active);
-        document.getElementById("quickInputHint").hidden = active;
-        quickInput.hidden = active;
-        quickType.hidden = active;
-        quickEventAt.hidden = active;
-        const open = active && state.minutesComposerOpen;
-        document.getElementById("minutesForm").hidden = !open;
-        minutesCreateButton.textContent = open ? "收起表单" : "新增纪要";
-        minutesCreateButton.setAttribute("aria-expanded", String(open));
-        addButton.setAttribute("aria-label", active ? (open ? "保存纪要" : "新增纪要") : "新增记录");
-        addButton.title = active ? (open ? "保存纪要" : "新增纪要") : "新增记录";
-        if (!active) { return; }
-        const date = minutesComposer.querySelector('[data-minutes-field="date"]');
-        if (!date.value) { date.value = formatLocalDayKey(new Date()); }
-        const select = minutesComposer.querySelector('[data-minutes-field="meetingId"]');
-        const selectedId = select.value;
-        const options = minutesMeetingOptions(selectedId);
-        if (select.innerHTML !== options) { select.innerHTML = options; select.value = selectedId; }
-        minutesLoadMeetings.hidden = !getUnloadedRelevantSnapshots({ filter: "meeting" }).length;
-      }
-
-      async function loadEarlierMinutesMeetings() {
-        const descriptor = getUnloadedRelevantSnapshots({ filter: "meeting" })[0];
-        if (!descriptor || minutesLoadMeetings.disabled) { return; }
-        minutesLoadMeetings.disabled = true;
-        try {
-          await loadSnapshotDescriptor(descriptor);
-          render();
-          setStatus("已加载更早日程，可在关联日程中选择。");
-        } catch (error) { setStatus("更早日程加载失败，请重试。"); }
-        finally { minutesLoadMeetings.disabled = false; }
-      }
-
-      function addMinutesRecord() {
-        if (!state.minutesComposerOpen) { state.minutesComposerOpen = true; renderMinutesComposer(); focusQuickInput(); return; }
-        if (minutesEditDraft && minutesEditDraft.dirty) { setStatus("请先保存或取消正在编辑的纪要。"); return; }
-        const text = buildMinutesText(readMinutesFields(minutesComposer));
-        if (!text) { setStatus("请填写标题、有效发生日期和纪要正文。"); return; }
-        const now = new Date().toISOString();
-        const record = { id: createId(), text: text, type: "idea", typeLock: "idea", createdAt: now, updatedAt: now,
-          eventAt: "", recurrence: null, ignoredConflictKeys: [], history: [], recurrenceCompletions: [], prepared: false, completed: false };
-        pushHistory(record, "created", now);
-        state.records.unshift(record);
-        state.editingId = null;
-        minutesEditDraft = null;
-        persist();
-        writeMinutesFields(minutesComposer, { title: "", body: "", source: "", verification: "未核实", meetingId: "" });
-        state.minutesComposerOpen = false;
-        state.search = "";
-        searchInput.value = "";
-        render();
-        focusQuickInput();
-        setStatus("纪要已保存。");
-      }
-
-      function captureMinutesEditDraft() {
-        if (!minutesEditDraft) { return; }
-        const editor = recordList.querySelector('[data-role="minutes-editor"]');
-        if (!editor || editor.dataset.id !== minutesEditDraft.id) { return; }
-        minutesEditDraft.fields = readMinutesFields(editor);
-        minutesEditDraft.dirty = buildMinutesText(minutesEditDraft.fields) !== minutesEditDraft.originalText;
-      }
-
-      function renderMinutesEditor(record) {
-        const fields = minutesEditDraft && minutesEditDraft.id === record.id ? minutesEditDraft.fields : parseMinutesRecord(record);
-        return '<div data-role="minutes-editor" data-id="' + escapeHtml(record.id) + '"><div class="minutes-fields">'
-          + '<label class="minutes-wide">标题<input data-minutes-field="title" type="text" value="' + escapeHtml(fields.title) + '"></label>'
-          + '<label>发生日期<input data-minutes-field="date" type="date" value="' + escapeHtml(fields.date) + '"></label>'
-          + '<label>类型<select data-minutes-field="kind">' + ["录音", "谈话", "日程"].map(function (kind) {
-            return '<option' + (fields.kind === kind ? ' selected' : '') + '>' + kind + '</option>';
-          }).join("") + '</select></label>'
-          + '<label class="minutes-wide">关联日程（可选）<select data-minutes-field="meetingId">'
-          + minutesMeetingOptions(fields.meetingId).replace('value="' + escapeHtml(fields.meetingId) + '"', 'value="' + escapeHtml(fields.meetingId) + '" selected') + '</select></label>'
-          + '<label class="minutes-wide">核实状态<select data-minutes-field="verification">' + ["未核实", "已核实"].map(function (value) {
-            return '<option' + (fields.verification === value ? ' selected' : '') + '>' + value + '</option>';
-          }).join("") + '</select></label>'
-          + '<label class="minutes-wide">来源说明（可选）<input data-minutes-field="source" type="text" value="' + escapeHtml(fields.source) + '"></label>'
-          + '<label class="minutes-wide">纪要正文<textarea data-minutes-field="body">' + escapeHtml(fields.body) + '</textarea></label></div>'
-          + '<div class="minutes-actions"><button type="button" class="primary" data-action="minutes-save" data-id="' + escapeHtml(record.id) + '">保存</button>'
-          + '<button type="button" class="ghost" data-action="minutes-cancel" data-id="' + escapeHtml(record.id) + '">取消</button></div></div>';
-      }
-
-      function saveMinutesRecord(id) {
-        captureMinutesEditDraft();
-        const draft = minutesEditDraft;
-        const record = state.records.find(function (item) { return item.id === id; });
-        if (!draft || draft.id !== id) { return; }
-        if (!record || !isMinutesRecord(record) || record.text !== draft.originalText) {
-          setStatus("这条纪要已在另一端更改或删除，草稿仍保留；请复制草稿后取消编辑，再查看最新版本。");
-          return;
+        if (Number.isFinite(fields.durationSeconds) && fields.durationSeconds >= 0) {
+          // Round only for display; the source and reader retain fractional seconds.
+          const total = Math.round(fields.durationSeconds);
+          const hours = Math.floor(total / 3600);
+          const minutes = Math.floor(total % 3600 / 60);
+          const seconds = total % 60;
+          parts.push(hours ? hours + "小时" + minutes + "分" + seconds + "秒"
+            : (minutes ? minutes + "分" + seconds + "秒" : seconds + "秒"));
         }
-        const text = buildMinutesText(draft.fields);
-        if (!text) { setStatus("请填写标题、有效发生日期和纪要正文。"); return; }
-        if (text !== record.text) {
-          record.text = text;
-          const now = new Date().toISOString();
-          record.updatedAt = now;
-          pushHistory(record, "edited", now);
-          persist();
-        }
-        minutesEditDraft = null;
-        state.editingId = null;
-        render();
-        setStatus("纪要已更新。");
+        return parts.join(" · ");
       }
 
       function renderMinutesDisplay(record) {
         const fields = parseMinutesRecord(record);
+        const timing = formatMinutesTiming(fields);
         const meeting = state.records.find(function (item) { return item.id === fields.meetingId && item.type === "meeting"; });
-        return '<div class="item-line" data-action="open-edit" data-id="' + escapeHtml(record.id) + '" tabindex="0" title="编辑纪要">'
-          + '<span class="item-tags"><span class="badge">纪要 · ' + fields.kind + '</span><span class="code-token token-time">' + fields.date + '</span><span class="code-token token-muted">' + fields.verification + '</span></span>'
+        return '<div class="item-line">'
+          + '<span class="item-tags"><span class="badge">纪要 · ' + fields.kind + '</span><span class="code-token token-time">' + fields.date + '</span>' + (timing ? '<span class="code-token token-time">' + escapeHtml(timing) + '</span>' : '') + '</span>'
           + '<span class="item-text"><strong class="minutes-title">' + escapeHtml(fields.title) + '</strong>'
-          + '<span class="minutes-body">' + escapeHtml(fields.body) + '</span></span></div>'
-          + (fields.source ? '<p class="minutes-help">来源：' + escapeHtml(fields.source) + '</p>' : '')
+          + '<span class="minutes-body">' + escapeHtml(getMinutesDisplayBody(fields.body)) + '</span></span></div>'
           + (fields.meetingId ? '<div class="minutes-actions"><button type="button" class="ghost" data-action="minutes-meeting" data-id="' + escapeHtml(fields.meetingId) + '">'
             + escapeHtml(meeting ? '日程：' + minutesMeetingLabel(meeting) : '查看原关联日程（已删除或尚未加载）') + '</button></div>' : '');
-      }
-
-      function startMinutesForMeeting(id) {
-        const meeting = state.records.find(function (record) { return record.id === id && record.type === "meeting"; });
-        if (!meeting) { return; }
-        const draft = readMinutesFields(minutesComposer);
-        if (draft.title.trim() || draft.body.trim() || (minutesEditDraft && minutesEditDraft.dirty)) {
-          setStatus("请先保存已有纪要草稿，再为日程创建纪要。"); return;
-        }
-        state.filter = "minutes";
-        state.minutesComposerOpen = true;
-        state.search = "";
-        searchInput.value = "";
-        render();
-        // Only the new minutes form changes; the schedule record is untouched.
-        writeMinutesFields(minutesComposer, { title: String(getDisplayText(meeting)).split(/\r?\n/)[0], kind: "日程", meetingId: id,
-          date: meeting.eventAt ? formatLocalDayKey(new Date(meeting.eventAt)) : formatLocalDayKey(new Date()) });
-        focusQuickInput();
       }
 
       async function showMinutesMeeting(id) {
@@ -5740,8 +5551,6 @@
       }
 
       function addRecord() {
-        if (minutesEditDraft && minutesEditDraft.dirty) { setStatus("请先保存或取消正在编辑的纪要。"); return; }
-        if (state.filter === "minutes") { addMinutesRecord(); return; }
         const rawText = quickInput.value || "";
         const text = rawText.trim();
         const explicitEventAt = normalizeDateTime(quickEventAt.value);
@@ -5890,7 +5699,6 @@
         });
         if (state.editingId === id) {
           state.editingId = null;
-          if (minutesEditDraft && minutesEditDraft.id === id) { minutesEditDraft = null; }
         }
         persist();
         render();
@@ -7342,11 +7150,8 @@
         searchRenderTimer = null;
         searchComposing = false;
         state.editingId = null;
-        minutesEditDraft = null;
-        writeMinutesFields(minutesComposer, { title: "", body: "", source: "", meetingId: "", date: "", kind: "录音", verification: "未核实" });
         state.composing = false;
         state.composerExpanded = false;
-        state.minutesComposerOpen = false;
         state.sessionOnly = false;
         quickInput.value = "";
         quickEventAt.value = "";
@@ -10839,7 +10644,6 @@
           ? null : getVisibleJournalSummaryRect();
         scheduleAutoCompletionRefresh();
         const visible = getVisibleRecords();
-        renderMinutesComposer();
         renderFilters();
         renderSummary(visible);
         renderGTeacherPanel();
@@ -11814,7 +11618,6 @@
       }
 
       function renderList(visible) {
-        captureMinutesEditDraft();
         const activeInlineEditDraft = getActiveInlineEditDraft();
         const query = JSON.stringify([state.filter, state.search, state.journalViewMode]);
         if (recordListQuery !== query) {
@@ -11861,7 +11664,7 @@
             const existing = recordListNodes.get(record.id);
             // Keep the actual textarea alive while sync or archive results arrive.
             const editor = record.id === state.editingId && !isRecordEditLocked(record)
-              ? recordList.querySelector('.item[data-id="' + cssEscape(record.id) + '"] [data-role="edit-inline-text"], .item[data-id="' + cssEscape(record.id) + '"] [data-role="minutes-editor"]')
+              ? recordList.querySelector('.item[data-id="' + cssEscape(record.id) + '"] [data-role="edit-inline-text"]')
               : null;
             let entry;
             if (editor) {
@@ -11987,7 +11790,7 @@
           toggleMeta.symbol,
           "</button>",
           '<div class="item-main">',
-          editing ? (minutes ? renderMinutesEditor(record) : renderInlineEdit(record)) : renderDisplay(record, urgent, conflicts),
+          editing ? renderInlineEdit(record) : renderDisplay(record, urgent, conflicts),
           "</div>",
           '<div class="item-actions">',
           deleteLocked ? "" : '<button type="button" class="icon-btn danger" data-action="delete" data-id="' + escapeHtml(record.id) + '" aria-label="删除" title="删除">×</button>',
@@ -12054,9 +11857,6 @@
         parts.push("</span>");
         parts.push('<span class="item-text">' + renderDisplayTextHtml(record) + "</span>");
         parts.push("</div>");
-        if (record.type === "meeting") {
-          parts.push('<div class="minutes-actions"><button type="button" class="ghost" data-action="minutes-new" data-id="' + escapeHtml(record.id) + '">记纪要</button></div>');
-        }
         return parts.join("");
       }
 
@@ -12498,14 +12298,15 @@
       }
 
       function isRecordEditLocked(record) {
-        return isGTeacherRecord(record) || isRecordReadOnly(record);
+        return isMinutesRecord(record) || isGTeacherRecord(record) || isRecordReadOnly(record);
       }
 
       function isRecordDeleteLocked(record) {
-        return isRecordReadOnly(record);
+        return isMinutesRecord(record) || isRecordReadOnly(record);
       }
 
       function getRecordEditLockedMessage(record) {
+        if (isMinutesRecord(record)) { return "纪要在页面中只读，由整理流程更新。"; }
         if (isGTeacherRecord(record)) {
           return G_TEACHER_EDIT_LOCKED_MESSAGE;
         }
@@ -12513,6 +12314,7 @@
       }
 
       function getRecordReadOnlyMessage(record) {
+        if (isMinutesRecord(record)) { return "纪要在页面中只读，由整理流程更新。"; }
         return JOURNAL_READONLY_MESSAGE;
       }
 
@@ -13994,17 +13796,9 @@
       }
 
       function getVisibleRecords() {
-        let records = state.records;
-        // Keep an editable copy available after a remote deletion/type change.
-        // This projection is for the draft only and never enters persist().
-        if (state.filter === "minutes" && minutesEditDraft && state.editingId === minutesEditDraft.id
-          && !records.some(function (record) { return record.id === minutesEditDraft.id && isMinutesRecord(record); })) {
-          records = records.concat({ id: minutesEditDraft.id, text: minutesEditDraft.originalText, type: "idea",
-            createdAt: minutesEditDraft.createdAt, updatedAt: minutesEditDraft.createdAt });
-        }
         const keyword = state.search.toLowerCase();
         const hasGTeacherRecords = hasGTeacherJournalRecords();
-        return records
+        return state.records
           .filter(function (record) {
             if (isRecordHiddenByTemporaryPrivacy(record)) {
               return false;
@@ -17246,7 +17040,6 @@
       }
 
       function focusQuickInput() {
-        if (state.filter === "minutes") { (state.minutesComposerOpen ? minutesComposer.querySelector('[data-minutes-field="title"]') : minutesCreateButton).focus(); return; }
         quickInput.focus();
         quickInput.setSelectionRange(quickInput.value.length, quickInput.value.length);
       }

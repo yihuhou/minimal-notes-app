@@ -3033,6 +3033,43 @@
     .health-calendar-navigation { gap: 2px; flex-wrap: nowrap; }
     .health-calendar-navigation button { min-width: 36px; min-height: 36px; padding: 4px 7px; border: 0; background: transparent; font-size: 13px; }
     .health-calendar-legend { justify-content: flex-start; max-width: none; gap: 5px 12px; }
+
+    /* Project progress stays in the private repository, never in this shell. */
+    .project-dashboard { margin: 0 24px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+    .project-dashboard-empty { margin: 0; padding: 28px 22px; color: var(--text-soft); font-size: 13px; line-height: 1.7; }
+    .project-dashboard-empty button { padding: 0; margin-left: 10px; text-decoration: underline; text-underline-offset: 3px; }
+    .project-progress + .project-progress { border-top: 1px solid var(--border); }
+    .project-progress > summary { display: flex; align-items: center; gap: 14px; padding: 20px 22px; cursor: pointer; list-style: none; }
+    .project-progress > summary::-webkit-details-marker { display: none; }
+    .project-progress > summary::after { content: ''; width: 6px; height: 6px; border-right: 1px solid var(--text-faint); border-bottom: 1px solid var(--text-faint); transform: rotate(45deg); flex: 0 0 auto; margin-left: 2px; transition: transform .15s; }
+    .project-progress[open] > summary::after { transform: rotate(225deg); }
+    .project-progress-name { font-size: 15px; font-weight: 550; line-height: 1.55; flex: 1; overflow-wrap: anywhere; }
+    .project-progress-date { color: var(--text-faint); font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .project-progress-list { margin: 0 22px; padding: 0 0 5px; list-style: none; }
+    .project-progress-entry { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 16px; padding: 10px 0; }
+    .project-progress-entry + .project-progress-entry { border-top: 1px solid rgba(17,17,17,.04); }
+    .project-progress-entry time { color: var(--text-faint); font-size: 11px; line-height: 1.85; font-variant-numeric: tabular-nums; padding-top: 1px; }
+    .project-progress-entry p { margin: 0; font-size: 13px; line-height: 1.75; color: var(--text-soft); white-space: pre-wrap; overflow-wrap: anywhere; }
+    .project-progress-history { margin: 3px 22px 17px; padding: 4px 0; font-size: 11px; color: var(--text-faint); }
+    .project-progress-history:hover { color: var(--text); }
+    .project-progress > summary:focus-visible, .project-progress-history:focus-visible { outline: 2px solid var(--focus); outline-offset: -3px; }
+    @media (max-width: 760px) {
+      .project-dashboard { margin: 0 12px 12px; }
+    }
+    @media (max-width: 980px) and (orientation: landscape) {
+      .project-dashboard { margin-left: 12px; margin-right: 12px; }
+    }
+    @media (max-width: 700px) {
+      .project-dashboard { border-radius: 13px; }
+      .project-progress > summary { padding: 16px; gap: 10px; }
+      .project-progress-name { font-size: 14px; }
+      .project-progress-list { margin: 0 16px; }
+      .project-progress-entry { grid-template-columns: 68px minmax(0, 1fr); gap: 10px; padding: 9px 0; }
+      .project-progress-entry p { font-size: 13px; line-height: 1.7; }
+      .project-progress-entry time, .project-progress-date { font-size: 10px; }
+      .project-progress-history { margin-left: 16px; margin-bottom: 13px; }
+      .project-dashboard-empty { padding: 22px 16px; }
+    }
   </style>
 </head>
 <body>
@@ -3157,6 +3194,7 @@
             <button type="button" data-filter="meeting" aria-pressed="false">日程</button>
             <button type="button" data-filter="deadline" aria-pressed="false">截止</button>
             <button type="button" data-filter="journal" aria-pressed="false">日记</button>
+            <button type="button" data-filter="projects" aria-pressed="false">项目</button>
             <button type="button" data-filter="minutes" aria-pressed="false">纪要</button>
             <button type="button" data-filter="idea" aria-pressed="false">想法</button>
             <button type="button" data-filter="completed" aria-pressed="false">已完成</button>
@@ -3170,6 +3208,8 @@
           <input id="importFile" class="sr-only" type="file" accept="application/json,.json">
         </div>
       </section>
+
+      <section id="projectDashboard" class="project-dashboard" aria-label="项目进展" hidden></section>
 
       <section class="list-wrap">
         <div id="recordList" class="list" aria-live="polite"></div>
@@ -3596,6 +3636,7 @@
           signature: "",
           error: ""
         },
+        projectProgress: { payload: null, loading: false, loaded: false, error: "", sessionId: -1, openIds: new Set(), historyIds: new Set() },
         healthSummary: {
           payload: null,
           etag: ""
@@ -3619,6 +3660,7 @@
       const composerAdvanced = document.getElementById("composerAdvanced");
       const filters = document.getElementById("filters");
       const searchInput = document.getElementById("searchInput");
+      const projectDashboard = document.getElementById("projectDashboard");
       const recordList = document.getElementById("recordList");
       const snapshotLoadStatus = document.getElementById("snapshotLoadStatus");
       const gTeacherPanel = document.getElementById("gTeacherPanel");
@@ -3822,6 +3864,7 @@
           }
           state.filter = nextFilter;
           render();
+          if (nextFilter === "projects") { loadProjectProgress(); }
           if (state.search) {
             queueSnapshotSearch();
           }
@@ -7339,6 +7382,7 @@
       }
 
       function invalidateRemoteSession() {
+        resetProjectProgress();
         state.remote.sessionId += 1;
         healthSummaryLoadId += 1;
         state.healthCalendar.loading = false;
@@ -7397,6 +7441,7 @@
       }
 
       function resetRemoteSyncState() {
+        resetProjectProgress();
         window.clearTimeout(journalAchievementCatchupTimer);
         journalAchievementNoticeScope = "";
         journalAchievementCheckpoint = null;
@@ -7802,6 +7847,10 @@
           updateStorageStatus();
           if (opts.refreshHealthSummary !== false && state.remote.enabled) {
             await loadHealthSummary();
+            if (sessionId !== state.remote.sessionId) { return; }
+          }
+          if (state.remote.enabled && state.filter === "projects") {
+            await loadProjectProgress();
             if (sessionId !== state.remote.sessionId) { return; }
           }
           if (opts.refreshJournalPrivateHighlights !== false) {
@@ -10971,6 +11020,124 @@
         );
       }
 
+      function resetProjectProgress() {
+        state.projectProgress = { payload: null, loading: false, loaded: false, error: "", sessionId: -1, openIds: new Set(), historyIds: new Set() };
+        if (projectDashboard) { projectDashboard.replaceChildren(); }
+      }
+
+      function validateProjectProgressPayload(payload) {
+        const validDay = function (value) {
+          if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) { return false; }
+          const date = new Date(value + "T00:00:00Z");
+          return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+        };
+        if (!payload || payload.schemaVersion !== 1 || !validDay(payload.enabledFrom) || !Array.isArray(payload.projects)) { throw new Error("项目数据格式不正确"); }
+        const ids = new Set();
+        payload.projects.forEach(function (project) {
+          if (!project || typeof project.id !== "string" || !project.id.trim() || ids.has(project.id) || typeof project.name !== "string" || !project.name.trim() || !Array.isArray(project.entries)) { throw new Error("项目数据格式不正确"); }
+          ids.add(project.id);
+          const entries = new Set();
+          project.entries.forEach(function (entry) {
+            if (!entry || typeof entry.id !== "string" || !entry.id.trim() || entries.has(entry.id) || typeof entry.text !== "string" || !entry.text.trim() || !validDay(entry.date) || entry.date < payload.enabledFrom || !Array.isArray(entry.sourceRefs) || !entry.sourceRefs.length || entry.sourceRefs.some(function (ref) { return typeof ref !== "string" || !ref.trim(); })) { throw new Error("项目进展格式不正确"); }
+            entries.add(entry.id);
+          });
+        });
+        return payload;
+      }
+
+      async function loadProjectProgress() {
+        if (!state.remote.enabled || !state.remote.token || !state.remote.repo || state.remote.temporary) {
+          resetProjectProgress();
+          renderProjectDashboard();
+          return;
+        }
+        const sessionId = state.remote.sessionId;
+        if (state.projectProgress.sessionId !== sessionId) { resetProjectProgress(); }
+        const progress = state.projectProgress;
+        if (progress.loading) { return; }
+        progress.sessionId = sessionId;
+        progress.loading = true;
+        progress.error = "";
+        renderProjectDashboard();
+        try {
+          const response = await fetchForRemoteSession(getRemotePathContentsUrl("minimal-notes-project-progress.json", true), { headers: getRemoteHeaders(false), cache: "no-store" });
+          assertRemoteSession(sessionId);
+          if (response.status === 404) { progress.payload = { schemaVersion: 1, enabledFrom: "2026-10-15", projects: [] }; }
+          else {
+            if (!response.ok) { throw await createRemoteHttpError(response, "项目进展读取失败"); }
+            const file = await response.json();
+            let content = file.content;
+            if (!content && /^[a-f0-9]{40}$/.test(file.sha || "")) {
+              const blobResponse = await fetchForRemoteSession("https://api.github.com/repos/" + state.remote.repo + "/git/blobs/" + file.sha, { headers: getRemoteHeaders(false), cache: "no-store" });
+              if (!blobResponse.ok) { throw await createRemoteHttpError(blobResponse, "项目进展读取失败"); }
+              content = (await blobResponse.json()).content;
+            }
+            assertRemoteSession(sessionId);
+            progress.payload = validateProjectProgressPayload(JSON.parse(decodeBase64Utf8(String(content || ""))));
+          }
+          progress.loaded = true;
+        } catch (error) {
+          if (sessionId !== state.remote.sessionId) { return; }
+          progress.error = "暂时无法读取项目进展";
+        } finally {
+          if (sessionId === state.remote.sessionId) { progress.loading = false; renderProjectDashboard(); }
+        }
+      }
+
+      function renderProjectDashboard() {
+        const active = state.filter === "projects";
+        projectDashboard.hidden = !active;
+        recordList.closest(".list-wrap").hidden = active;
+        if (!active) { return; }
+        const progress = state.projectProgress;
+        if (!state.remote.enabled || !state.remote.token || state.remote.temporary) {
+          projectDashboard.innerHTML = '<p class="project-dashboard-empty">连接私库后查看项目进展。</p>';
+          return;
+        }
+        if (progress.sessionId !== state.remote.sessionId) {
+          projectDashboard.innerHTML = '<p class="project-dashboard-empty">正在读取…</p>';
+          return;
+        }
+        if (!progress.payload) {
+          projectDashboard.innerHTML = '<p class="project-dashboard-empty">' + (progress.error || '正在读取…') + (progress.error ? '<button type="button" data-project-retry>重试</button>' : '') + '</p>';
+          return;
+        }
+        const keyword = state.search.trim().toLowerCase();
+        const projects = progress.payload.projects.filter(function (project) {
+          return !keyword || project.name.toLowerCase().includes(keyword) || project.entries.some(function (entry) { return (entry.date + " " + entry.text).toLowerCase().includes(keyword); });
+        });
+        const html = projects.map(function (project) {
+          const entries = project.entries.map(function (entry, index) { return { entry: entry, index: index }; }).sort(function (a, b) { return b.entry.date.localeCompare(a.entry.date) || b.index - a.index; }).map(function (item) { return item.entry; });
+          const all = progress.historyIds.has(project.id);
+          const matchingEntries = keyword && !project.name.toLowerCase().includes(keyword)
+            ? entries.filter(function (entry) { return (entry.date + " " + entry.text).toLowerCase().includes(keyword); }) : null;
+          const shown = matchingEntries || (all ? entries : entries.slice(0, 3));
+          const rows = shown.map(function (entry) { return '<li class="project-progress-entry"><time datetime="' + escapeHtml(entry.date) + '">' + escapeHtml(entry.date) + '</time><p>' + escapeHtml(entry.text) + '</p></li>'; }).join("");
+          return '<details class="project-progress" data-project-id="' + escapeHtml(project.id) + '"' + (progress.openIds.has(project.id) || keyword ? ' open' : '') + '><summary><span class="project-progress-name">' + escapeHtml(project.name) + '</span><time class="project-progress-date">' + (entries.length ? escapeHtml(entries[0].date) : '') + '</time></summary>' + (rows ? '<ol class="project-progress-list">' + rows + '</ol>' : '<p class="project-dashboard-empty">还没有新的进展。</p>') + (!matchingEntries && entries.length > 3 ? '<button type="button" class="project-progress-history" data-project-history="' + escapeHtml(project.id) + '">' + (all ? '收起历史' : '查看全部 ' + entries.length + ' 条进展') + '</button>' : '') + '</details>';
+        }).join("");
+        const error = progress.error ? '<p class="project-dashboard-empty">更新暂未成功，以下为本次已读取的内容。<button type="button" data-project-retry>重试</button></p>' : '';
+        projectDashboard.innerHTML = error + (html || '<p class="project-dashboard-empty">' + (keyword ? '没有匹配的项目。' : '从这里开始，留下每一步进展。') + '</p>');
+        projectDashboard.querySelectorAll('details[data-project-id]').forEach(function (details) {
+          details.addEventListener("toggle", function () {
+            if (!details.isConnected) { return; }
+            if (details.open) { progress.openIds.add(details.dataset.projectId); }
+            else { progress.openIds.delete(details.dataset.projectId); }
+          });
+        });
+      }
+
+      projectDashboard.addEventListener("click", function (event) {
+        const retry = event.target.closest("[data-project-retry]");
+        if (retry) { loadProjectProgress(); return; }
+        const history = event.target.closest("[data-project-history]");
+        if (!history) { return; }
+        const id = history.dataset.projectHistory;
+        state.projectProgress.openIds.add(id);
+        if (state.projectProgress.historyIds.has(id)) { state.projectProgress.historyIds.delete(id); }
+        else { state.projectProgress.historyIds.add(id); }
+        renderProjectDashboard();
+      });
+
       function render(options) {
         // Background loads can finish between keystrokes or during IME composition.
         // The settled search renders their latest data in one pass.
@@ -10992,6 +11159,7 @@
         updateGTeacherTagAlignment();
         renderIdeaPane();
         renderSnapshotLoadStatus();
+        renderProjectDashboard();
         if (summaryAnchor) {
           const offset = getSummaryFooter().getBoundingClientRect().top - summaryAnchor.top;
           if (Math.abs(offset) > 1) {
@@ -11300,6 +11468,7 @@
         }
 
         summaryText.title = "";
+        if (state.filter === "projects") { summaryText.textContent = ""; return; }
         if (state.filter === "minutes") { summaryText.textContent = "当前显示 " + visible.length + " 条纪要"; return; }
         summaryText.textContent = "共 " + totalVisibleCount + " 条，当前显示 " + visible.length + " 条";
       }
@@ -17830,5 +17999,6 @@
   </script>
 </body>
 </html>
+
 
 

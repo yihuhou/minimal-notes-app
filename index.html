@@ -929,7 +929,8 @@
 
     .minutes-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .minutes-actions .ghost { max-width: 100%; overflow-wrap: anywhere; text-align: left; }
-    .minutes-title { display: block; margin-bottom: 8px; color: var(--text); overflow-wrap: anywhere; }
+    .minutes-title { display: block; font-weight: 500; margin-bottom: 8px; color: var(--text); overflow-wrap: anywhere; }
+    .minutes-disclosure[aria-expanded="true"] .minutes-title { font-weight: 600; }
     .minutes-disclosure { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 76px; padding: 16px 18px; border-radius: 13px; text-align: left; transition: background-color 0.15s ease; }
     .minutes-disclosure:hover { background: var(--panel-soft); }
     .minutes-disclosure[aria-expanded="true"] { background: var(--panel-soft); border-radius: 13px 13px 0 0; }

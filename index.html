@@ -11139,13 +11139,13 @@
           const latestDate = project.entries.reduce(function (latest, entry) { return entry.date > latest ? entry.date : latest; }, "");
           return { project: project, index: index, latestDate: latestDate };
         }).sort(function (a, b) { return b.latestDate.localeCompare(a.latestDate) || a.index - b.index; }).map(function (item) { return item.project; }).filter(function (project) {
-          return !keyword || project.name.toLowerCase().includes(keyword) || project.entries.some(function (entry) { return (entry.date + " " + entry.text).toLowerCase().includes(keyword); });
+          return !keyword || (!monthDaySearchParts(keyword) && searchTextMatches(project.name, keyword)) || project.entries.some(function (entry) { return projectEntryMatchesSearch(entry, keyword); });
         });
         const html = projects.map(function (project) {
           const entries = project.entries.map(function (entry, index) { return { entry: entry, index: index }; }).sort(function (a, b) { return b.entry.date.localeCompare(a.entry.date) || b.index - a.index; }).map(function (item) { return item.entry; });
           const all = progress.historyIds.has(project.id);
-          const matchingEntries = keyword && !project.name.toLowerCase().includes(keyword)
-            ? entries.filter(function (entry) { return (entry.date + " " + entry.text).toLowerCase().includes(keyword); }) : null;
+          const matchingEntries = keyword && (monthDaySearchParts(keyword) || !searchTextMatches(project.name, keyword))
+            ? entries.filter(function (entry) { return projectEntryMatchesSearch(entry, keyword); }) : null;
           const shown = matchingEntries || (all ? entries : entries.slice(0, 3));
           const rows = shown.map(function (entry) { return '<li class="project-progress-entry"><time datetime="' + escapeHtml(entry.date) + '">' + escapeHtml(entry.date) + '</time><div>' + (typeof entry.headline === "string" && entry.headline.trim() ? '<h3 class="project-progress-headline">' + escapeHtml(entry.headline) + '</h3>' : '') + '<p>' + escapeHtml(entry.text) + '</p></div></li>'; }).join("");
           const stage = projectStageDisplay(project);
@@ -14417,9 +14417,32 @@
           }).sort(sortVisibleRecords);
       }
 
+      function monthDaySearchParts(value) {
+        const match = String(value || "").trim().match(/^(\d{1,2})\.(\d{1,2})$/);
+        if (!match) { return null; }
+        const month = Number(match[1]); const day = Number(match[2]);
+        const date = new Date(2000, month - 1, day);
+        return month >= 1 && month <= 12 && day >= 1 && date.getMonth() === month - 1
+          ? { month: month, day: day } : null;
+      }
+
+      function searchTextMatches(value, keyword) {
+        const text = String(value || "").toLowerCase();
+        const parts = monthDaySearchParts(keyword);
+        if (!parts) { return text.includes(String(keyword || "").toLowerCase()); }
+        return new RegExp("(^|[^\\d])0?" + parts.month + "\\.0?" + parts.day + "(?!\\d)").test(text);
+      }
+
+      function projectEntryMatchesSearch(entry, keyword) {
+        return searchTextMatches(entry.date + " " + entry.text, keyword)
+          || getDateSearchTokens(entry.date + "T12:00:00", entry.date).some(function (token) {
+            return normalizeSearchToken(token) === normalizeSearchToken(keyword);
+          });
+      }
+
       function recordMatchesSearch(record, keyword) {
         const haystack = (record && typeof record.text === "string" ? record.text : "").toLowerCase();
-        if (haystack.includes(keyword)) {
+        if (searchTextMatches(haystack, keyword)) {
           return true;
         }
         return recordDateMatchesSearch(record, keyword);
@@ -14438,7 +14461,8 @@
       }
 
       function normalizeSearchToken(value) {
-        return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+        const parts = monthDaySearchParts(value);
+        return parts ? parts.month + "." + parts.day : String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
       }
 
       function getRecordDateSearchTokens(record) {
@@ -14469,7 +14493,8 @@
           };
         }
 
-        return null;
+        return record.createdAt && isValidDate(record.createdAt)
+          ? { value: record.createdAt, label: "" } : null;
       }
 
       function getDateSearchTokens(value, primaryLabel) {

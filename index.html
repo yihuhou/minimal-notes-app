@@ -3041,13 +3041,14 @@
     .project-dashboard-empty button { padding: 0; margin-left: 10px; text-decoration: underline; text-underline-offset: 3px; }
     .project-progress + .project-progress { border-top: 1px solid var(--border); }
     .project-progress > summary { display: flex; align-items: center; gap: 14px; padding: 20px 22px; cursor: pointer; list-style: none; transition: background-color .18s ease; }
-    .project-progress > summary::before { content: ""; width: 3px; height: 24px; border-radius: 3px; background: #afa994; flex: 0 0 auto; }
+    .project-progress > summary::before { content: ""; width: 3px; height: 24px; border-radius: 3px; background: var(--project-accent, #a7aaa6); flex: 0 0 auto; }
     .project-progress > summary:hover, .project-progress[open] > summary { background: #f7f7f3; }
-    .project-progress[open] > summary::before { background: #606b5b; }
     .project-progress > summary::-webkit-details-marker { display: none; }
     .project-progress > summary::after { content: ''; width: 6px; height: 6px; border-right: 1px solid var(--text-faint); border-bottom: 1px solid var(--text-faint); transform: rotate(45deg); flex: 0 0 auto; margin-left: 2px; transition: transform .15s; }
     .project-progress[open] > summary::after { transform: rotate(225deg); }
     .project-progress-name { font-size: 15px; font-weight: 500; line-height: 1.55; flex: 1; overflow-wrap: anywhere; }
+    .project-progress-headline { margin: 0 0 5px; font-size: 14px; line-height: 1.6; font-weight: 550; color: var(--text); overflow-wrap: anywhere; }
+    .project-progress-stage { display: block; margin-top: 4px; color: var(--text-faint); font-size: 10px; font-weight: 400; letter-spacing: .02em; }
     .project-progress-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: 0 0 auto; }
     .project-progress-date { color: var(--text-soft); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
     .project-progress-count { color: var(--text-faint); font-size: 10px; white-space: nowrap; }
@@ -11052,6 +11053,7 @@
           const entries = new Set();
           project.entries.forEach(function (entry) {
             if (!entry || typeof entry.id !== "string" || !entry.id.trim() || entries.has(entry.id) || typeof entry.text !== "string" || !entry.text.trim() || !validDay(entry.date) || entry.date < payload.enabledFrom || !Array.isArray(entry.sourceRefs) || !entry.sourceRefs.length || entry.sourceRefs.some(function (ref) { return typeof ref !== "string" || !ref.trim(); })) { throw new Error("项目进展格式不正确"); }
+            if (entry.headline != null && (typeof entry.headline !== "string" || !entry.headline.trim() || entry.headline.length > 80)) { throw new Error("项目重点格式不正确"); }
             entries.add(entry.id);
           });
         });
@@ -11097,6 +11099,12 @@
         }
       }
 
+      function projectStageDisplay(project) {
+        const stages = { exploring: ["#9987ad", "探索成形"], refining: ["#b49a67", "写作打磨"], discussing: ["#719990", "成稿交流"] };
+        const stage = Object.prototype.hasOwnProperty.call(stages, project.stage) ? stages[project.stage] : ["#a7aaa6", ""];
+        return { color: stage[0], label: stage[1] };
+      }
+
       function renderProjectDashboard() {
         const active = state.filter === "projects";
         projectDashboard.hidden = !active;
@@ -11128,8 +11136,9 @@
           const matchingEntries = keyword && !project.name.toLowerCase().includes(keyword)
             ? entries.filter(function (entry) { return (entry.date + " " + entry.text).toLowerCase().includes(keyword); }) : null;
           const shown = matchingEntries || (all ? entries : entries.slice(0, 3));
-          const rows = shown.map(function (entry) { return '<li class="project-progress-entry"><time datetime="' + escapeHtml(entry.date) + '">' + escapeHtml(entry.date) + '</time><p>' + escapeHtml(entry.text) + '</p></li>'; }).join("");
-          return '<details class="project-progress" data-project-id="' + escapeHtml(project.id) + '"' + (progress.openIds.has(project.id) || keyword ? ' open' : '') + '><summary><span class="project-progress-name">' + escapeHtml(project.name) + '</span><span class="project-progress-meta">' + (entries.length ? '<time class="project-progress-date" datetime="' + escapeHtml(entries[0].date) + '" title="' + escapeHtml(entries[0].date) + '">' + escapeHtml(entries[0].date.slice(5).replace('-', ' / ')) + '</time>' : '') + '<span class="project-progress-count">' + entries.length + ' 条进展</span></span></summary>' + (rows ? '<ol class="project-progress-list">' + rows + '</ol>' : '<p class="project-dashboard-empty">还没有新的进展。</p>') + (!matchingEntries && entries.length > 3 ? '<button type="button" class="project-progress-history" data-project-history="' + escapeHtml(project.id) + '">' + (all ? '收起历史' : '查看全部 ' + entries.length + ' 条进展') + '</button>' : '') + '</details>';
+          const rows = shown.map(function (entry) { return '<li class="project-progress-entry"><time datetime="' + escapeHtml(entry.date) + '">' + escapeHtml(entry.date) + '</time><div>' + (typeof entry.headline === "string" && entry.headline.trim() ? '<h3 class="project-progress-headline">' + escapeHtml(entry.headline) + '</h3>' : '') + '<p>' + escapeHtml(entry.text) + '</p></div></li>'; }).join("");
+          const stage = projectStageDisplay(project);
+          return '<details class="project-progress" style="--project-accent:' + stage.color + '" data-project-id="' + escapeHtml(project.id) + '"' + (progress.openIds.has(project.id) || keyword ? ' open' : '') + '><summary><span class="project-progress-name">' + escapeHtml(project.name) + (stage.label ? '<span class="project-progress-stage">' + escapeHtml(stage.label) + '</span>' : '') + '</span><span class="project-progress-meta">' + (entries.length ? '<time class="project-progress-date" datetime="' + escapeHtml(entries[0].date) + '" title="' + escapeHtml(entries[0].date) + '">' + escapeHtml(entries[0].date.slice(5).replace('-', ' / ')) + '</time>' : '') + '<span class="project-progress-count">' + entries.length + ' 条进展</span></span></summary>' + (rows ? '<ol class="project-progress-list">' + rows + '</ol>' : '<p class="project-dashboard-empty">还没有新的进展。</p>') + (!matchingEntries && entries.length > 3 ? '<button type="button" class="project-progress-history" data-project-history="' + escapeHtml(project.id) + '">' + (all ? '收起历史' : '查看全部 ' + entries.length + ' 条进展') + '</button>' : '') + '</details>';
         }).join("");
         const error = progress.error ? '<p class="project-dashboard-empty">更新暂未成功，以下为本次已读取的内容。<button type="button" data-project-retry>重试</button></p>' : '';
         projectDashboard.innerHTML = error + (html || '<p class="project-dashboard-empty">' + (keyword ? '没有匹配的项目。' : '从这里开始，留下每一步进展。') + '</p>');

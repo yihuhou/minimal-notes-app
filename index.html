@@ -2968,8 +2968,8 @@
     /* Quiet page chrome; daily content remains the visual focus. */
     .header { grid-template-columns: minmax(0, 1fr) auto; padding-left: 43px; padding-right: 43px; align-items: center; padding-top: 17px; padding-bottom: 13px; gap: 12px; border-bottom: 0; }
     .title-block h1 { font-family: inherit; font-size: 19px; line-height: 1.4; font-weight: 600; letter-spacing: -0.3px; }
-    button.counter { display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 8px 0 8px 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; }
-    .counter strong { display: inline; font-size: 12px; font-weight: 600; line-height: 1.5; }
+    button.counter { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 0; min-width: 0; padding: 8px 0 8px 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; }
+    .counter strong { display: inline; font-size: 20px; font-weight: 600; line-height: 1.5; }
     .counter span { display: inline; margin: 0; font-size: 12px; line-height: 1.5; }
     body.journal-focus .counter { background: transparent; }
     .health-summary { gap: 12px; margin-top: 0; padding: 17px 18px; border-radius: 12px; background: #fafaf7; }
@@ -2992,7 +2992,16 @@
     .composer-bar { margin-top: 8px; }
     .meta-note { display: flex; min-width: 0; flex: 1 1 120px; }
     .composer-actions { width: auto; }
-    #statusText { overflow-wrap: anywhere; }
+    .composer-bar .meta-note { height: 20px; min-height: 20px; max-height: 20px; overflow: hidden; }
+    .status-details-button { display: block; width: 100%; min-width: 0; height: 20px; min-height: 20px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: inherit; font: inherit; line-height: 20px; text-align: left; cursor: pointer; }
+    #statusText { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .status-details-button:hover { color: var(--text); }
+    .status-details-button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+    .status-details-dialog { width: min(460px, calc(100vw - 32px)); max-height: 75vh; padding: 22px; border: 1px solid var(--border); border-radius: 14px; color: var(--text); background: var(--panel-strong); }
+    .status-details-dialog::backdrop { background: rgba(0, 0, 0, 0.25); }
+    .status-details-dialog h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+    .status-details-dialog p { margin: 0 0 18px; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .status-details-dialog form { margin: 0; text-align: right; }
     .composer-advanced { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 9px; margin-top: 12px; }
     .composer-disclosure { grid-column: 1 / -1; border-top: 1px solid var(--border); }
     .composer-disclosure summary { display: flex; align-items: center; gap: 7px; width: fit-content; min-height: 40px; padding: 6px 0; color: var(--text-soft); font-size: 12px; cursor: pointer; list-style: none; }
@@ -3008,7 +3017,8 @@
       .header { padding: 12px 27px 11px; }
       .title-block h1 { font-size: 17px; }
       button.counter { padding: 8px 0 8px 7px; }
-      .counter strong, .counter span { font-size: 11px; }
+      .counter strong { font-size: 20px; }
+      .counter span { font-size: 10px; }
       .health-summary { margin-top: 0; padding: 13px 14px; gap: 10px; }
       .health-summary-text { font-size: 14px; line-height: 1.7; }
       .health-summary-metrics { column-gap: 15px; }
@@ -3028,7 +3038,7 @@
         </div>
         <button id="healthCalendarToggle" class="counter" type="button" aria-live="polite" aria-expanded="false" aria-controls="healthCalendarPanel" title="展开健康月历">
           <strong id="openCount">0</strong>
-          <span>未完成 · 健康月历</span>
+          <span>7天内</span>
         </button>
       </header>
 
@@ -3075,7 +3085,7 @@
           <textarea id="quickInput" placeholder="写下一件事、一场会，或一段日常。"></textarea>
           <div class="composer-bar">
             <div class="meta-note">
-              <span id="statusText" role="status" aria-live="polite">仅保存在当前浏览器。</span>
+              <button id="statusDetailsButton" class="status-details-button" type="button" aria-haspopup="dialog" aria-controls="statusDetailsDialog" title="查看完整状态"><span id="statusText" role="status" aria-live="polite">仅保存在当前浏览器。</span></button>
             </div>
             <div class="composer-actions">
               <button id="syncActionButton" class="ghost sync-action" type="button">连接同步</button>
@@ -3232,6 +3242,11 @@
     <aside id="ideaPane" class="idea-pane" aria-live="polite"></aside>
     </div>
   </main>
+  <dialog id="statusDetailsDialog" class="status-details-dialog" aria-labelledby="statusDetailsTitle">
+    <h2 id="statusDetailsTitle">同步状态</h2>
+    <p id="statusDetailsText"></p>
+    <form method="dialog"><button class="ghost" autofocus>关闭</button></form>
+  </dialog>
   <button id="journalBottomJump" class="journal-bottom-jump" type="button" aria-label="跳到日记底部查看勋章、写作里程碑与小红花统计" title="跳到写作统计与勋章" hidden>
     <svg class="journal-bottom-jump-arrow" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
       <path d="M16 7v17M9.25 18 16 24.75 22.75 18" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -3735,6 +3750,10 @@
       focusQuickInput();
 
       function bindEvents() {
+        document.getElementById("statusDetailsButton").addEventListener("click", function () {
+          document.getElementById("statusDetailsText").textContent = statusText.textContent;
+          document.getElementById("statusDetailsDialog").showModal();
+        });
         retryLocalSaveButton.addEventListener("click", retryLocalSave);
         document.getElementById("journalAchievementToastDismiss").addEventListener("click", function () {
           document.getElementById("journalAchievementToast").hidden = true;
@@ -3935,9 +3954,10 @@
       function scheduleTodayHeadingUpdate() {
         window.clearTimeout(todayHeadingTimer);
         const now = new Date();
-        const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
+        const nextDay = new Date((Math.floor((now.getTime() + 8 * 3600000) / 86400000) + 1) * 86400000 - 8 * 3600000 + 1000);
         todayHeadingTimer = window.setTimeout(function () {
           updateTodayHeading();
+          render();
           scheduleTodayHeadingUpdate();
         }, Math.max(1000, nextDay.getTime() - now.getTime()));
       }
@@ -11192,15 +11212,66 @@
         });
       }
 
+      function upcomingTaskTimestamp(value) {
+        const text = String(value || "").trim();
+        if (!text) { return NaN; }
+        if (/^\d{4}-\d{2}-\d{2}$/.test(text)) { return Date.parse(text + "T00:00:00+08:00"); }
+        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(text)) {
+          return Date.parse(text + "+08:00");
+        }
+        return Date.parse(text);
+      }
+
+      function countUpcomingTasks(records, now) {
+        const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(now || new Date());
+        const start = Date.parse(day + "T00:00:00+08:00");
+        const end = start + 7 * 24 * 60 * 60 * 1000;
+        return records.filter(function (record) {
+          if (!["todo", "meeting", "deadline"].includes(record.type) || record.completed) { return false; }
+          const at = upcomingTaskTimestamp(record.eventAt);
+          if (!Number.isFinite(at) || at >= end) { return false; }
+          if (at >= start) { return true; }
+          if (record.type !== "meeting") { return false; }
+          // Existing meeting range parsing uses wall-clock dates. Supply Shanghai wall time,
+          // then read it back as Shanghai time rather than the browser's time zone.
+          const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(new Date(at));
+          const values = Object.fromEntries(parts.map(function (part) { return [part.type, part.value]; }));
+          const wall = values.year + "-" + values.month + "-" + values.day + "T" + values.hour + ":" + values.minute + ":" + values.second;
+          const meetingEnd = getMeetingEndAt(record, wall);
+          if (!meetingEnd) { return false; }
+          const pad = function (value) { return String(value).padStart(2, "0"); };
+          const endWall = meetingEnd.getFullYear() + "-" + pad(meetingEnd.getMonth() + 1) + "-" + pad(meetingEnd.getDate()) + "T" + pad(meetingEnd.getHours()) + ":" + pad(meetingEnd.getMinutes()) + ":" + pad(meetingEnd.getSeconds());
+          return upcomingTaskTimestamp(endWall) > start;
+        }).length;
+      }
+
+      function getUpcomingTaskCountState() {
+        if (state.remote.enabled && !state.remote.checkedThisSession) { return { complete: false }; }
+        const missing = state.snapshots.descriptors.filter(function (descriptor) {
+          return isSnapshotDescriptorRelevant(descriptor, { filter: "all" })
+            && state.snapshots.loadedPaths[descriptor.path] !== String(descriptor.contentHash || "");
+        });
+        if (missing.length) {
+          if (!state.remote.temporary) {
+            missing.filter(function (descriptor) {
+              return !state.snapshots.loadingPaths[descriptor.path] && !state.snapshots.failedPaths[descriptor.path];
+            }).slice(0, 2).forEach(function (descriptor) {
+              loadSnapshotDescriptor(descriptor).catch(function () { /* Keep an incomplete count visibly pending. */ });
+            });
+          }
+          return { complete: false };
+        }
+        return { complete: true, count: countUpcomingTasks(state.records, new Date()) };
+      }
+
       function renderSummary(visible) {
         const currentStats = getCurrentStatsForDisplay();
-        const unfinishedCount = Math.max(0,
-          Number(currentStats.typeCounts.todo || 0)
-          + Number(currentStats.typeCounts.meeting || 0)
-          + Number(currentStats.typeCounts.deadline || 0)
-          - Number(currentStats.completedRecords || 0));
+        const upcoming = getUpcomingTaskCountState();
         const totalVisibleCount = Number(currentStats.activeRecords || 0);
-        openCount.textContent = String(unfinishedCount);
+        openCount.textContent = upcoming.complete ? String(upcoming.count) : "…";
+        healthCalendarToggle.setAttribute("aria-label", upcoming.complete
+          ? "未来7天未完成事项 " + upcoming.count + " 项，点击切换健康月历"
+          : "未来7天事项尚未完整加载，点击切换健康月历");
         renderJournalMilestone(currentStats);
         const journalAchievementModel = renderJournalAchievements(currentStats);
 

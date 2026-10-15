@@ -3040,15 +3040,23 @@
     .project-dashboard-empty { margin: 0; padding: 28px 22px; color: var(--text-soft); font-size: 13px; line-height: 1.7; }
     .project-dashboard-empty button { padding: 0; margin-left: 10px; text-decoration: underline; text-underline-offset: 3px; }
     .project-progress + .project-progress { border-top: 1px solid var(--border); }
-    .project-progress > summary { display: flex; align-items: center; gap: 14px; padding: 20px 22px; cursor: pointer; list-style: none; }
+    .project-progress > summary { display: flex; align-items: center; gap: 14px; padding: 20px 22px; cursor: pointer; list-style: none; transition: background-color .18s ease; }
+    .project-progress > summary::before { content: ""; width: 3px; height: 24px; border-radius: 3px; background: #afa994; flex: 0 0 auto; }
+    .project-progress > summary:hover, .project-progress[open] > summary { background: #f7f7f3; }
+    .project-progress[open] > summary::before { background: #606b5b; }
     .project-progress > summary::-webkit-details-marker { display: none; }
     .project-progress > summary::after { content: ''; width: 6px; height: 6px; border-right: 1px solid var(--text-faint); border-bottom: 1px solid var(--text-faint); transform: rotate(45deg); flex: 0 0 auto; margin-left: 2px; transition: transform .15s; }
     .project-progress[open] > summary::after { transform: rotate(225deg); }
-    .project-progress-name { font-size: 15px; font-weight: 550; line-height: 1.55; flex: 1; overflow-wrap: anywhere; }
-    .project-progress-date { color: var(--text-faint); font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-    .project-progress-list { margin: 0 22px; padding: 0 0 5px; list-style: none; }
-    .project-progress-entry { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 16px; padding: 10px 0; }
-    .project-progress-entry + .project-progress-entry { border-top: 1px solid rgba(17,17,17,.04); }
+    .project-progress-name { font-size: 15px; font-weight: 500; line-height: 1.55; flex: 1; overflow-wrap: anywhere; }
+    .project-progress-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: 0 0 auto; }
+    .project-progress-date { color: var(--text-soft); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+    .project-progress-count { color: var(--text-faint); font-size: 10px; white-space: nowrap; }
+    .project-progress-list { margin: 0 22px; padding: 9px 0 5px; list-style: none; }
+    .project-progress-entry { position: relative; display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 24px; padding: 10px 0; }
+    .project-progress-entry::before { content: ""; position: absolute; left: 85px; top: 0; bottom: 0; width: 1px; background: #e4e5dd; }
+    .project-progress-entry::after { content: ""; position: absolute; left: 83px; top: 18px; width: 5px; height: 5px; border-radius: 50%; background: #a4ac9c; }
+    .project-progress-entry:first-child::before { top: 18px; }
+    .project-progress-entry:last-child::before { bottom: calc(100% - 18px); }
     .project-progress-entry time { color: var(--text-faint); font-size: 11px; line-height: 1.85; font-variant-numeric: tabular-nums; padding-top: 1px; }
     .project-progress-entry p { margin: 0; font-size: 13px; line-height: 1.75; color: var(--text-soft); white-space: pre-wrap; overflow-wrap: anywhere; }
     .project-progress-history { margin: 3px 22px 17px; padding: 4px 0; font-size: 11px; color: var(--text-faint); }
@@ -3065,7 +3073,11 @@
       .project-progress > summary { padding: 16px; gap: 10px; }
       .project-progress-name { font-size: 14px; }
       .project-progress-list { margin: 0 16px; }
-      .project-progress-entry { grid-template-columns: 68px minmax(0, 1fr); gap: 10px; padding: 9px 0; }
+      .project-progress-entry { grid-template-columns: 62px minmax(0, 1fr); gap: 18px; padding: 9px 0; }
+      .project-progress-entry::before { left: 69px; }
+      .project-progress-entry::after { left: 67px; top: 17px; }
+      .project-progress-entry:first-child::before { top: 17px; }
+      .project-progress-entry:last-child::before { bottom: calc(100% - 17px); }
       .project-progress-entry p { font-size: 13px; line-height: 1.7; }
       .project-progress-entry time, .project-progress-date { font-size: 10px; }
       .project-progress-history { margin-left: 16px; margin-bottom: 13px; }
@@ -11104,7 +11116,10 @@
           return;
         }
         const keyword = state.search.trim().toLowerCase();
-        const projects = progress.payload.projects.filter(function (project) {
+        const projects = progress.payload.projects.map(function (project, index) {
+          const latestDate = project.entries.reduce(function (latest, entry) { return entry.date > latest ? entry.date : latest; }, "");
+          return { project: project, index: index, latestDate: latestDate };
+        }).sort(function (a, b) { return b.latestDate.localeCompare(a.latestDate) || a.index - b.index; }).map(function (item) { return item.project; }).filter(function (project) {
           return !keyword || project.name.toLowerCase().includes(keyword) || project.entries.some(function (entry) { return (entry.date + " " + entry.text).toLowerCase().includes(keyword); });
         });
         const html = projects.map(function (project) {
@@ -11114,7 +11129,7 @@
             ? entries.filter(function (entry) { return (entry.date + " " + entry.text).toLowerCase().includes(keyword); }) : null;
           const shown = matchingEntries || (all ? entries : entries.slice(0, 3));
           const rows = shown.map(function (entry) { return '<li class="project-progress-entry"><time datetime="' + escapeHtml(entry.date) + '">' + escapeHtml(entry.date) + '</time><p>' + escapeHtml(entry.text) + '</p></li>'; }).join("");
-          return '<details class="project-progress" data-project-id="' + escapeHtml(project.id) + '"' + (progress.openIds.has(project.id) || keyword ? ' open' : '') + '><summary><span class="project-progress-name">' + escapeHtml(project.name) + '</span><time class="project-progress-date">' + (entries.length ? escapeHtml(entries[0].date) : '') + '</time></summary>' + (rows ? '<ol class="project-progress-list">' + rows + '</ol>' : '<p class="project-dashboard-empty">还没有新的进展。</p>') + (!matchingEntries && entries.length > 3 ? '<button type="button" class="project-progress-history" data-project-history="' + escapeHtml(project.id) + '">' + (all ? '收起历史' : '查看全部 ' + entries.length + ' 条进展') + '</button>' : '') + '</details>';
+          return '<details class="project-progress" data-project-id="' + escapeHtml(project.id) + '"' + (progress.openIds.has(project.id) || keyword ? ' open' : '') + '><summary><span class="project-progress-name">' + escapeHtml(project.name) + '</span><span class="project-progress-meta">' + (entries.length ? '<time class="project-progress-date" datetime="' + escapeHtml(entries[0].date) + '" title="' + escapeHtml(entries[0].date) + '">' + escapeHtml(entries[0].date.slice(5).replace('-', ' / ')) + '</time>' : '') + '<span class="project-progress-count">' + entries.length + ' 条进展</span></span></summary>' + (rows ? '<ol class="project-progress-list">' + rows + '</ol>' : '<p class="project-dashboard-empty">还没有新的进展。</p>') + (!matchingEntries && entries.length > 3 ? '<button type="button" class="project-progress-history" data-project-history="' + escapeHtml(project.id) + '">' + (all ? '收起历史' : '查看全部 ' + entries.length + ' 条进展') + '</button>' : '') + '</details>';
         }).join("");
         const error = progress.error ? '<p class="project-dashboard-empty">更新暂未成功，以下为本次已读取的内容。<button type="button" data-project-retry>重试</button></p>' : '';
         projectDashboard.innerHTML = error + (html || '<p class="project-dashboard-empty">' + (keyword ? '没有匹配的项目。' : '从这里开始，留下每一步进展。') + '</p>');

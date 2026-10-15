@@ -5642,14 +5642,16 @@
 
       function renderMinutesDisplay(record) {
         const fields = parseMinutesRecord(record);
-        const timing = formatMinutesTiming(fields);
+        const time = formatMinutesTiming({ occurrenceAt: fields.occurrenceAt, occurrenceApproximate: fields.occurrenceApproximate });
+        const dateTime = fields.date + (time ? " " + time : "");
+        const duration = formatMinutesTiming({ durationSeconds: fields.durationSeconds });
         const expanded = expandedMinutesIds.has(record.id);
         const detailsId = "minutes-details-" + record.id;
         const meeting = state.records.find(function (item) { return item.id === fields.meetingId && item.type === "meeting"; });
         return '<div class="item-line">'
           + '<button type="button" class="minutes-disclosure" data-action="minutes-toggle" data-id="' + escapeHtml(record.id) + '" aria-expanded="' + expanded + '" aria-controls="' + escapeHtml(detailsId) + '">'
           + '<span class="minutes-summary"><strong class="minutes-title">' + escapeHtml(fields.title) + '</strong>'
-          + '<span class="item-tags"><span class="badge">纪要 · ' + fields.kind + '</span><span class="code-token token-time">' + fields.date + '</span>' + (timing ? '<span class="code-token token-time">' + escapeHtml(timing) + '</span>' : '') + '</span></span>'
+          + '<span class="item-tags"><span class="badge">纪要·' + fields.kind + '</span><span class="code-token token-time">' + escapeHtml(dateTime) + '</span>' + (duration ? '<span class="code-token token-time">' + escapeHtml(duration) + '</span>' : '') + '</span></span>'
           + '<svg class="minutes-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>'
           + '<div class="minutes-details item-text" id="' + escapeHtml(detailsId) + '"' + (expanded ? '' : ' hidden') + '>'
           + '<div class="minutes-body">' + renderMinutesBodyHtml(fields.body) + '</div>'
@@ -8852,6 +8854,14 @@
         }
       }
 
+      function formatHealthSummaryNoticeForDisplay(text) {
+        // Only omit routine missing-detail boilerplate, never regional limits,
+        // decision-relevant uncertainty, actual alerts, or the stored evidence.
+        return String(text || "").replace(
+          /(?:[；;。，,]\s*|^)(?:属全天预报[，,]\s*)?逐时体感(?:[及和与]即时预警)?未核实[。.]?$/u, ""
+        ).replace(/[；;]$/, "");
+      }
+
       function normalizeHealthSummaryPayload(value) {
         const entry = selectLatestHealthSummaryEntry(value);
         if (!entry) {
@@ -8874,7 +8884,7 @@
           trainingSuggestion: normalizeHealthSummaryTrainingSuggestion(entry.trainingSuggestion || value.trainingSuggestion),
           advice: normalizeHealthSummaryList(entry.advice || entry.suggestions).slice(0, 2),
           metrics: normalizeHealthSummaryMetrics(entry.metrics).slice(0, 3),
-          notices: normalizeHealthSummaryList(notices, 120).slice(0, 3)
+          notices: normalizeHealthSummaryList(notices, 120).map(formatHealthSummaryNoticeForDisplay).filter(Boolean).slice(0, 3)
         };
       }
 
@@ -17604,4 +17614,5 @@
   </script>
 </body>
 </html>
+
 

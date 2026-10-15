@@ -2966,7 +2966,7 @@
     }
 
     /* Quiet page chrome; daily content remains the visual focus. */
-    .header { align-items: center; padding-top: 17px; padding-bottom: 13px; gap: 12px; border-bottom: 0; }
+    .header { grid-template-columns: minmax(0, 1fr) auto; padding-left: 43px; padding-right: 43px; align-items: center; padding-top: 17px; padding-bottom: 13px; gap: 12px; border-bottom: 0; }
     .title-block h1 { font-family: inherit; font-size: 19px; line-height: 1.4; font-weight: 600; letter-spacing: -0.3px; }
     button.counter { display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 8px 0 8px 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; }
     .counter strong { display: inline; font-size: 12px; font-weight: 600; line-height: 1.5; }
@@ -2990,7 +2990,8 @@
     .composer-card { padding: 0; border: 0; border-radius: 0; background: transparent; }
     body.journal-focus .composer-card { background: transparent; }
     .composer-bar { margin-top: 8px; }
-    .meta-note { min-width: 0; }
+    .meta-note { display: flex; min-width: 0; flex: 1 1 120px; }
+    .composer-actions { width: auto; }
     #statusText { overflow-wrap: anywhere; }
     .composer-advanced { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 9px; margin-top: 12px; }
     .composer-disclosure { grid-column: 1 / -1; border-top: 1px solid var(--border); }
@@ -3004,7 +3005,7 @@
     .composer-help p { margin: 0 0 9px; color: var(--text-soft); font-size: 12px; line-height: 1.6; }
     #summaryText { margin-left: auto; }
     @media (max-width: 760px) {
-      .header { padding-top: 12px; padding-bottom: 11px; }
+      .header { padding: 12px 27px 11px; }
       .title-block h1 { font-size: 17px; }
       button.counter { padding: 8px 0 8px 7px; }
       .counter strong, .counter span { font-size: 11px; }
@@ -9113,6 +9114,18 @@
         return date.getTime();
       }
 
+      function formatHealthSummaryMetricForDisplay(metric) {
+        // Split only the known combined format. Unknown wording is preserved verbatim.
+        const value = /^([0-9]+(?:\.[0-9]+)?\s*ms)\s*·\s*RHR\s*([0-9]+(?:\.[0-9]+)?)(?:\s*(?:bpm|次\/分))?$/i.exec(String(metric.value || "").trim());
+        if (/^HRV\s*\/\s*RHR$/i.test(String(metric.label || "").trim()) && value) {
+          return [
+            { ...metric, label: "HRV", value: value[1] },
+            { ...metric, label: "静息心率", value: value[2] + " 次/分" }
+          ];
+        }
+        return [metric];
+      }
+
       function renderHealthSummary(summary) {
         healthSummaryLabel.textContent = summary.updatedText
           ? summary.label + " · " + summary.updatedText
@@ -9123,7 +9136,7 @@
         healthSummaryText.textContent = summary.summary;
 
         healthSummaryMetrics.innerHTML = "";
-        summary.metrics.forEach(function (metric) {
+        summary.metrics.flatMap(formatHealthSummaryMetricForDisplay).forEach(function (metric) {
           const item = document.createElement("span");
           const label = document.createElement("span");
           const value = document.createElement("strong");
@@ -9144,12 +9157,14 @@
         renderHealthSummaryTraining(summary.trainingSuggestion);
 
         healthSummaryAdvice.innerHTML = "";
-        summary.advice.forEach(function (text) {
+        const plan = summary.trainingSuggestion ? summary.trainingSuggestion.plan : [];
+        const advice = plan.concat(summary.advice);
+        advice.forEach(function (text) {
           const item = document.createElement("li");
           item.textContent = text;
           healthSummaryAdvice.appendChild(item);
         });
-        healthSummaryAdvice.hidden = !summary.advice.length;
+        healthSummaryAdvice.hidden = !advice.length;
 
         healthSummaryNotices.innerHTML = "";
         summary.notices.forEach(function (text) {
@@ -9186,12 +9201,8 @@
         healthSummaryTrainingMeta.textContent = formatHealthSummaryTrainingMeta(training);
         healthSummaryTrainingReason.textContent = training.reason || "";
 
-        training.plan.forEach(function (text) {
-          const item = document.createElement("li");
-          item.textContent = text;
-          healthSummaryTrainingPlan.appendChild(item);
-        });
-        healthSummaryTrainingPlan.hidden = !training.plan.length;
+        // Plan steps and daily advice share one visual list below the training context.
+        healthSummaryTrainingPlan.hidden = true;
         healthSummaryTraining.hidden = false;
       }
 

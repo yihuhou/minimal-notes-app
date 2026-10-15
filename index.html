@@ -2346,6 +2346,41 @@
         display: block;
       }
 
+      /* On single-column screens, ideas belong in the 想法 tab only. */
+      .workspace.has-ideas .idea-pane {
+        display: none;
+      }
+
+      .workspace.ideas-focus .item.idea:not(.minutes) .item-text {
+        display: block;
+        white-space: pre-wrap;
+        -webkit-line-clamp: unset;
+        -webkit-box-orient: initial;
+        overflow: visible;
+        text-overflow: clip;
+        line-height: 1.68;
+      }
+
+      .workspace.ideas-focus .item.idea:not(.minutes) {
+        grid-template-columns: 30px minmax(0, 1fr) 30px;
+        gap: 10px;
+        padding: 16px 12px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--panel);
+      }
+
+      .workspace.ideas-focus .item.idea:not(.minutes) .item-line {
+        row-gap: 12px;
+      }
+
+      .workspace.ideas-focus .item.idea:not(.minutes) .toggle {
+        width: 30px;
+        height: 30px;
+        margin-top: 0;
+        opacity: 0.65;
+      }
+
       .shell {
         width: 100%;
         max-width: none;
@@ -12031,6 +12066,7 @@
 
         document.body.classList.toggle("journal-focus", journalFocus);
         workspace.classList.toggle("journal-focus", journalFocus);
+        workspace.classList.toggle("ideas-focus", state.filter === "idea");
         workspace.classList.toggle("has-ideas", shouldShowIdeaPane);
         setIdeaPanePrivacyMode(journalFocus);
         if (keepActiveDraftEditor) {

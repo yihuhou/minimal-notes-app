@@ -3035,7 +3035,7 @@
     .health-calendar-navigation button { min-width: 36px; min-height: 36px; padding: 4px 7px; border: 0; background: transparent; font-size: 13px; }
     .health-calendar-legend { justify-content: flex-start; max-width: none; gap: 5px 12px; }
 
-    /* Compact controls retain the original small scale and warm neutral outline. */
+    /* Compact search wraps naturally without changing the original controls. */
     .toolbar { --control-height: 32px; flex-wrap: wrap; }
     .toolbar-main { min-width: 0; }
     .toolbar-side { flex: 1 1 200px; min-width: 0; }
@@ -3044,20 +3044,6 @@
     .toolbar .search input { height: var(--control-height); min-height: var(--control-height); padding: 3px 10px 3px 31px; border: 1px solid #dedbd5; border-radius: 6px; background: #fbfaf8; font-family: inherit; }
     .toolbar .search input:hover { border-color: #c9c5bd; }
     .toolbar .search input:focus { background: var(--panel-strong); border-color: #a49d91; box-shadow: 0 0 0 2px rgba(115, 107, 94, .1); }
-    .toolbar .segmented button { border-color: #dedbd5; }
-    .toolbar .segmented button.active { background: #efede8; border-color: #dedbd5; color: #565149; }
-    #addButton, #quickMoreButton { width: 32px; min-width: 32px; height: 32px; min-height: 32px; border-radius: 7px; border: 1px solid #dedbd5; box-shadow: none; }
-    .composer-actions { gap: 6px; }
-    .composer-actions .sync-action { height: 32px; min-height: 32px; padding: 0 10px; border-radius: 7px; border-color: #e4e1db; background: #fbfaf8; color: #777168; font-family: inherit; }
-    .composer-actions .sync-action:hover:not(:disabled) { background: #f2f0eb; color: #565149; }
-    .composer-actions .sync-action.attention { background: #f0ece3; color: #675b46; border-color: #c9bfaa; }
-    #addButton { background: #ede9e1; color: #565149; border-color: #d4cfc5; }
-    #addButton:hover { background: #e4ded3; }
-    #quickMoreButton { background: transparent; color: #8b857b; }
-    #quickMoreButton:hover, #quickMoreButton[aria-expanded="true"] { background: #efede8; color: #565149; }
-    #addButton svg, #quickMoreButton svg { width: 16px; height: 16px; pointer-events: none; }
-    #addButton svg { width: 14px; height: 14px; }
-    #addButton:focus-visible, #quickMoreButton:focus-visible { outline: 2px solid #a49d91; outline-offset: 2px; }
 
     /* Project progress stays in the private repository, never in this shell. */
     .project-dashboard { margin: 0 24px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
@@ -3172,8 +3158,8 @@
               <button id="syncActionButton" class="ghost sync-action" type="button">连接同步</button>
               <button id="retryLocalSaveButton" class="ghost sync-action" type="button" hidden>重试保存</button>
               <button id="backupAuthButton" class="ghost sync-action backup-auth-action" type="button" hidden>授权备份</button>
-              <button id="quickMoreButton" class="ghost icon-only" type="button" aria-label="更多选项" aria-controls="composerAdvanced" aria-expanded="false" title="更多选项"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
-              <button id="addButton" class="primary icon-only" type="button" aria-label="新增记录" title="新增记录"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+              <button id="quickMoreButton" class="ghost icon-only" type="button" aria-label="更多选项" aria-controls="composerAdvanced" aria-expanded="false" title="更多选项">⋯</button>
+              <button id="addButton" class="primary icon-only" type="button" aria-label="新增记录" title="新增记录">+</button>
             </div>
           </div>
           <div id="composerAdvanced" class="composer-advanced" hidden>

@@ -8857,9 +8857,11 @@
       function formatHealthSummaryNoticeForDisplay(text) {
         // Only omit routine missing-detail boilerplate, never regional limits,
         // decision-relevant uncertainty, actual alerts, or the stored evidence.
-        return String(text || "").replace(
+        const original = String(text || "");
+        const display = original.replace(
           /(?:[；;。，,]\s*|^)(?:属全天预报[，,]\s*)?逐时体感(?:[及和与]即时预警)?未核实[。.]?$/u, ""
-        ).replace(/[；;]$/, "");
+        ).replace(/[；;]$/, "").trimEnd();
+        return display && display !== original && !/[。！？.!?…]$/.test(display) ? display + "。" : display;
       }
 
       function normalizeHealthSummaryPayload(value) {

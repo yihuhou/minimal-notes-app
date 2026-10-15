@@ -3027,28 +3027,34 @@
     }
     @media (prefers-reduced-motion: reduce) { .composer-disclosure summary::before { transition: none; } }
 
-    /* A quiet calendar: compact navigation, readable dates, tap for full original details. */
-    .health-calendar-panel { gap: 12px; padding: 16px 18px; border: 0; border-radius: 12px; background: #fafbf9; }
+    /* Calendar as a compact month, rather than a wall of colored cards. */
+    .health-calendar-panel { box-sizing: border-box; width: calc(100% - 48px); max-width: 600px; gap: 10px; margin: 8px 24px 12px; padding: 8px 18px 10px; border: 0; border-radius: 0; background: transparent; }
     .health-calendar-head { align-items: center; gap: 8px; }
-    .health-calendar-title { font-size: 15px; font-weight: 650; letter-spacing: 0; }
+    .health-calendar-title { font-size: 14px; font-weight: 600; letter-spacing: 0; }
     .health-calendar-navigation { gap: 2px; flex-wrap: nowrap; }
-    .health-calendar-navigation button { min-width: 40px; min-height: 40px; padding: 5px 8px; border: 0; background: transparent; font-size: 14px; }
-    .health-calendar-grid { gap: 5px; grid-auto-rows: 64px; }
-    .health-calendar-day { appearance: none; font-family: inherit; cursor: pointer; grid-template-columns: minmax(0,1fr); grid-template-rows: 17px 14px 12px; justify-items: center; align-content: center; gap: 2px; padding: 5px 2px; border-radius: 8px; text-align: center; }
-    .health-calendar-day strong { grid-area: 1 / 1; font-size: 14px; font-weight: 650; }
-    .health-calendar-day > span { grid-area: 2 / 1; font-size: 10px; font-weight: 500; }
-    .health-calendar-day small.calendar-sleep-score { display: block; grid-area: 3 / 1; justify-self: center; font-family: inherit; font-size: 10px; line-height: 1.2; opacity: .8; }
+    .health-calendar-navigation button { min-width: 36px; min-height: 36px; padding: 4px 7px; border: 0; background: transparent; font-size: 13px; }
+    .health-calendar-grid { gap: 4px 6px; grid-template-rows: 20px; grid-auto-rows: 46px; }
+    .health-calendar-weekday { font-family: inherit; font-size: 11px; font-weight: 400; }
+    .health-calendar-day { appearance: none; font-family: inherit; cursor: pointer; grid-template-columns: minmax(0,1fr); grid-template-rows: 18px 12px; justify-items: center; align-content: center; gap: 2px; min-height: 0; padding: 3px 2px 4px; border: 0; border-bottom: 2px solid var(--calendar-stroke); border-radius: 4px 4px 0 0; background: color-mix(in srgb, var(--calendar-fill) 30%, white); color: #414742; text-align: center; }
+    .health-calendar-day strong { grid-area: 1 / 1; font-size: 13px; font-weight: 550; }
+    .health-calendar-day > span { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+    .health-calendar-day small.calendar-sleep-score { display: block; grid-area: 2 / 1; justify-self: center; font-family: inherit; font-size: 10px; line-height: 1.2; color: #747b76; opacity: 1; }
+    .health-calendar-day.future { background: transparent; border-color: transparent; opacity: 1; color: #bec3bf; }
+    .health-calendar-day.missing:not(.future) { background: transparent; border-color: #edf0ed; color: #a0a7a1; }
+    .health-calendar-day.partial::after { opacity: .45; }
     .health-calendar-day:focus-visible { outline: 2px solid #527563; outline-offset: 2px; }
-    .health-calendar-legend { justify-content: flex-start; max-width: none; gap: 6px 14px; }
-    .health-calendar-legend span { font-family: inherit; font-size: 11px; font-weight: 400; }
-    .health-calendar-note { margin: 0; font-size: 11px; }
+    .health-calendar-day:hover { filter: brightness(.97); }
+    .health-calendar-legend { justify-content: flex-start; max-width: none; gap: 4px 12px; }
+    .health-calendar-legend span { font-family: inherit; font-size: 10px; font-weight: 400; }
+    .health-calendar-legend span::before { width: 8px; height: 3px; border: 0; border-radius: 1px; }
+    .health-calendar-note { margin: 0; font-size: 10px; color: #929992; }
     #healthCalendarDayText { white-space: pre-wrap; line-height: 1.8; overflow-wrap: anywhere; }
     @media (max-width: 600px) {
-      .health-calendar-panel { margin: 10px 12px 0; padding: 14px 15px; }
-      .health-calendar-grid { gap: 4px; grid-auto-rows: 62px; }
-      .health-calendar-title { font-size: 14px; }
-      .health-calendar-navigation button { min-width: 34px; padding: 5px 6px; }
-      .health-calendar-legend { gap: 5px 10px; }
+      .health-calendar-panel { width: calc(100% - 24px); margin: 4px 12px 10px; padding: 4px 15px 8px; gap: 8px; }
+      .health-calendar-grid { gap: 3px 5px; grid-template-rows: 18px; grid-auto-rows: 44px; }
+      .health-calendar-title { font-size: 13px; }
+      .health-calendar-navigation button { min-width: 32px; padding: 4px 5px; }
+      .health-calendar-legend { gap: 4px 10px; }
     }
   </style>
 </head>
@@ -3062,7 +3068,7 @@
         </div>
         <button id="healthCalendarToggle" class="counter" type="button" aria-live="polite" aria-expanded="false" aria-controls="healthCalendarPanel" title="展开健康月历">
           <strong id="openCount">0</strong>
-          <span>7天内·含逾期</span>
+          <span>未完成</span>
         </button>
       </header>
 

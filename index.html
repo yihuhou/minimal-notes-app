@@ -274,12 +274,12 @@
     }
 
     @media (min-width: 981px) {
-      .workspace:not(.journal-focus) .idea-pane {
+      .workspace.has-ideas .idea-pane {
         padding: 6px 18px 0;
         gap: 0;
       }
 
-      .workspace:not(.journal-focus) .idea-pane::before {
+      .workspace.has-ideas .idea-pane::before {
         content: "想法";
         display: block;
         margin-bottom: 22px;
@@ -289,7 +289,7 @@
         letter-spacing: 0.08em;
       }
 
-      .workspace:not(.journal-focus) .idea-card {
+      .workspace.has-ideas .idea-card {
         padding: 0 0 22px;
         border: 0;
         border-radius: 0;
@@ -297,12 +297,12 @@
         box-shadow: none;
       }
 
-      .workspace:not(.journal-focus) .idea-card + .idea-card {
+      .workspace.has-ideas .idea-card + .idea-card {
         padding-top: 22px;
         border-top: 1px solid var(--border);
       }
 
-      .workspace:not(.journal-focus) .idea-card textarea {
+      .workspace.has-ideas .idea-card textarea {
         font-family: inherit;
         font-size: 14px;
         line-height: 1.7;
@@ -313,9 +313,13 @@
         transition: outline-color 0.15s ease;
       }
 
-      .workspace:not(.journal-focus) .idea-card textarea:focus-visible {
+      .workspace.has-ideas .idea-card textarea:focus-visible {
         outline-color: var(--border-strong);
       }
+
+      .workspace.journal-focus .idea-pane::before,
+      .workspace.journal-focus .idea-card-time { color: rgba(245, 246, 248, 0.28); }
+      .workspace.journal-focus .idea-card + .idea-card { border-color: rgba(255, 255, 255, 0.07); }
 
       .idea-card-time {
         display: block;
@@ -2960,6 +2964,57 @@
         -webkit-line-clamp: 2;
       }
     }
+
+    /* Quiet page chrome; daily content remains the visual focus. */
+    .header { align-items: center; padding-top: 17px; padding-bottom: 13px; gap: 12px; border-bottom: 0; }
+    .title-block h1 { font-family: inherit; font-size: 19px; line-height: 1.4; font-weight: 600; letter-spacing: -0.3px; }
+    button.counter { display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 8px 0 8px 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; }
+    .counter strong { display: inline; font-size: 12px; font-weight: 600; line-height: 1.5; }
+    .counter span { display: inline; margin: 0; font-size: 12px; line-height: 1.5; }
+    body.journal-focus .counter { background: transparent; }
+    .health-summary { gap: 12px; margin-top: 0; padding: 17px 18px; border-radius: 12px; background: #fafaf7; }
+    .health-summary-label { margin-bottom: 7px; font-size: 11px; line-height: 1.5; }
+    .health-summary-text { font-size: 14px; line-height: 1.75; overflow-wrap: anywhere; }
+    .health-summary-training { gap: 5px; padding-top: 0; border: 0; }
+    .health-summary-training-header { gap: 5px 9px; }
+    .health-summary-training-title { font-size: 13px; line-height: 1.6; font-weight: 600; }
+    .health-summary-training-meta, .health-summary-training-reason { font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
+    .health-summary-training-plan, .health-summary-advice { display: grid; gap: 5px; margin: 0; padding: 0; border: 0; }
+    .health-summary-training-plan li, .health-summary-advice li { font-size: 13px; line-height: 1.7; padding-left: 12px; overflow-wrap: anywhere; }
+    .health-summary-metrics { gap: 8px 20px; padding-top: 11px; border-top: 1px solid var(--border); }
+    .health-summary-metric { gap: 6px; flex-wrap: wrap; }
+    .health-summary-metric-label, .health-summary-metric-value { font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+    .health-summary-metric-label::after { content: none; }
+    .health-summary-notices { padding: 2px 0 2px 10px; border: 0; border-left: 2px solid #c8ae71; border-radius: 0; background: transparent; gap: 5px; }
+    .health-summary-notices li { line-height: 1.65; overflow-wrap: anywhere; }
+    .composer-card { padding: 0; border: 0; border-radius: 0; background: transparent; }
+    body.journal-focus .composer-card { background: transparent; }
+    .composer-bar { margin-top: 8px; }
+    .meta-note { min-width: 0; }
+    #statusText { overflow-wrap: anywhere; }
+    .composer-advanced { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 9px; margin-top: 12px; }
+    .composer-disclosure { grid-column: 1 / -1; border-top: 1px solid var(--border); }
+    .composer-disclosure summary { display: flex; align-items: center; gap: 7px; width: fit-content; min-height: 40px; padding: 6px 0; color: var(--text-soft); font-size: 12px; cursor: pointer; list-style: none; }
+    .composer-disclosure summary::-webkit-details-marker { display: none; }
+    .composer-disclosure summary::before { content: "›"; font-size: 17px; line-height: 1; transition: transform 0.15s ease; }
+    .composer-disclosure[open] > summary::before { transform: rotate(90deg); }
+    .composer-disclosure summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+    .composer-settings-actions { display: flex; flex-wrap: wrap; gap: 7px; padding: 2px 0 12px; }
+    .composer-settings-actions .remote-sync-panel { flex-basis: 100%; }
+    .composer-help p { margin: 0 0 9px; color: var(--text-soft); font-size: 12px; line-height: 1.6; }
+    #summaryText { margin-left: auto; }
+    @media (max-width: 760px) {
+      .header { padding-top: 12px; padding-bottom: 11px; }
+      .title-block h1 { font-size: 17px; }
+      button.counter { padding: 8px 0 8px 7px; }
+      .counter strong, .counter span { font-size: 11px; }
+      .health-summary { margin-top: 0; padding: 13px 14px; gap: 10px; }
+      .health-summary-text { font-size: 14px; line-height: 1.7; }
+      .health-summary-metrics { column-gap: 15px; }
+      .composer-advanced { grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); }
+      .composer-settings-actions .ghost { flex: 0 1 auto; min-width: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) { .composer-disclosure summary::before { transition: none; } }
   </style>
 </head>
 <body>
@@ -2968,12 +3023,11 @@
     <section class="shell" aria-label="极简个人记录工具">
       <header class="header">
         <div class="title-block">
-          <h1 id="todayHeading">今天</h1>
-          <p>像记事本一样记下待办、日程、截止、想法、纪要和日记。打开就能写。</p>
+          <h1 id="todayHeading">Minimal Notes</h1>
         </div>
         <button id="healthCalendarToggle" class="counter" type="button" aria-live="polite" aria-expanded="false" aria-controls="healthCalendarPanel" title="展开健康月历">
           <strong id="openCount">0</strong>
-          <span>未完成事项 · 不含想法/日记</span>
+          <span>未完成 · 健康月历</span>
         </button>
       </header>
 
@@ -3000,7 +3054,6 @@
           <span id="healthSummaryLabel" class="health-summary-label">健康小结</span>
           <p id="healthSummaryText" class="health-summary-text"></p>
         </div>
-        <div id="healthSummaryMetrics" class="health-summary-metrics" aria-label="健康指标" hidden></div>
         <div id="healthSummaryTraining" class="health-summary-training" aria-label="今日训练建议" hidden>
           <div class="health-summary-training-header">
             <span id="healthSummaryTrainingLabel" class="health-summary-training-label">今日训练</span>
@@ -3011,6 +3064,7 @@
           <ul id="healthSummaryTrainingPlan" class="health-summary-training-plan" hidden></ul>
         </div>
         <ul id="healthSummaryAdvice" class="health-summary-advice" aria-label="健康建议" hidden></ul>
+        <div id="healthSummaryMetrics" class="health-summary-metrics" aria-label="健康指标" hidden></div>
         <ul id="healthSummaryNotices" class="health-summary-notices" aria-label="健康状态提示" hidden></ul>
       </section>
 
@@ -3020,14 +3074,13 @@
           <textarea id="quickInput" placeholder="写下一件事、一场会，或一段日常。"></textarea>
           <div class="composer-bar">
             <div class="meta-note">
-              <span id="quickInputHint">Enter 保存。默认自动识别时间和类型；需要时再展开手动选项。</span>
-              <span id="statusText">仅保存在当前浏览器。</span>
+              <span id="statusText" role="status" aria-live="polite">仅保存在当前浏览器。</span>
             </div>
             <div class="composer-actions">
               <button id="syncActionButton" class="ghost sync-action" type="button">连接同步</button>
               <button id="retryLocalSaveButton" class="ghost sync-action" type="button" hidden>重试保存</button>
               <button id="backupAuthButton" class="ghost sync-action backup-auth-action" type="button" hidden>授权备份</button>
-              <button id="quickMoreButton" class="ghost icon-only" type="button" aria-label="展开手动选项" aria-expanded="false" title="展开手动选项">⋯</button>
+              <button id="quickMoreButton" class="ghost icon-only" type="button" aria-label="更多选项" aria-controls="composerAdvanced" aria-expanded="false" title="更多选项">⋯</button>
               <button id="addButton" class="primary icon-only" type="button" aria-label="新增记录" title="新增记录">+</button>
             </div>
           </div>
@@ -3043,6 +3096,9 @@
             </select>
             <label class="sr-only" for="quickEventAt">事件时间</label>
             <input id="quickEventAt" class="manual-datetime-input" type="datetime-local" autocomplete="off" title="事件时间">
+            <details id="composerSettings" class="composer-disclosure">
+              <summary>同步与备份</summary>
+              <div class="composer-settings-actions">
             <button id="exportButton" class="ghost" type="button">导出 JSON</button>
             <button id="importButton" class="ghost" type="button">导入 JSON</button>
             <button id="createSyncButton" class="ghost" type="button">新建同步文件</button>
@@ -3065,6 +3121,13 @@
                 <button id="secureExitButton" class="ghost" type="button">安全退出</button>
               </div>
             </div>
+              </div>
+            </details>
+            <details class="composer-disclosure composer-help">
+              <summary>输入帮助</summary>
+              <p id="quickInputHint">Enter 保存，Shift + Enter 换行。自动识别类型和时间，也可在上方手动选择。</p>
+              <p>GitHub 为主同步；云盘文件用于备份。导出和导入不会改变同步设置。</p>
+            </details>
           </div>
         </div>
       </section>
@@ -3162,7 +3225,6 @@
             </details>
           </details>
         </section>
-        <span>GitHub 用作主同步；云盘 JSON 仅作为电脑端备份。</span>
         <span id="summaryText">0 条记录</span>
       </footer>
     </section>
@@ -3865,7 +3927,7 @@
         }
 
         const now = new Date();
-        todayHeading.textContent = formatTodayHeading(now);
+        todayHeading.textContent = "Minimal Notes";
         todayHeading.title = "今天是 " + formatTodayHeading(now);
       }
 
@@ -7062,6 +7124,10 @@
       function toggleRemoteSyncPanel(forceOpen) {
         state.remote.panelOpen = typeof forceOpen === "boolean" ? forceOpen : !state.remote.panelOpen;
         remoteSyncPanel.hidden = !state.remote.panelOpen;
+        if (state.remote.panelOpen) {
+          toggleComposerAdvanced(true);
+          document.getElementById("composerSettings").open = true;
+        }
         populateRemoteSyncPanel();
       }
 

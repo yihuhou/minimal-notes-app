@@ -3026,6 +3026,30 @@
       .composer-settings-actions .ghost { flex: 0 1 auto; min-width: 0; }
     }
     @media (prefers-reduced-motion: reduce) { .composer-disclosure summary::before { transition: none; } }
+
+    /* A quiet calendar: compact navigation, readable dates, tap for full original details. */
+    .health-calendar-panel { gap: 12px; padding: 16px 18px; border: 0; border-radius: 12px; background: #fafbf9; }
+    .health-calendar-head { align-items: center; gap: 8px; }
+    .health-calendar-title { font-size: 15px; font-weight: 650; letter-spacing: 0; }
+    .health-calendar-navigation { gap: 2px; flex-wrap: nowrap; }
+    .health-calendar-navigation button { min-width: 40px; min-height: 40px; padding: 5px 8px; border: 0; background: transparent; font-size: 14px; }
+    .health-calendar-grid { gap: 5px; grid-auto-rows: 64px; }
+    .health-calendar-day { appearance: none; font-family: inherit; cursor: pointer; grid-template-columns: minmax(0,1fr); grid-template-rows: 17px 14px 12px; justify-items: center; align-content: center; gap: 2px; padding: 5px 2px; border-radius: 8px; text-align: center; }
+    .health-calendar-day strong { grid-area: 1 / 1; font-size: 14px; font-weight: 650; }
+    .health-calendar-day > span { grid-area: 2 / 1; font-size: 10px; font-weight: 500; }
+    .health-calendar-day small.calendar-sleep-score { display: block; grid-area: 3 / 1; justify-self: center; font-family: inherit; font-size: 10px; line-height: 1.2; opacity: .8; }
+    .health-calendar-day:focus-visible { outline: 2px solid #527563; outline-offset: 2px; }
+    .health-calendar-legend { justify-content: flex-start; max-width: none; gap: 6px 14px; }
+    .health-calendar-legend span { font-family: inherit; font-size: 11px; font-weight: 400; }
+    .health-calendar-note { margin: 0; font-size: 11px; }
+    #healthCalendarDayText { white-space: pre-wrap; line-height: 1.8; overflow-wrap: anywhere; }
+    @media (max-width: 600px) {
+      .health-calendar-panel { margin: 10px 12px 0; padding: 14px 15px; }
+      .health-calendar-grid { gap: 4px; grid-auto-rows: 62px; }
+      .health-calendar-title { font-size: 14px; }
+      .health-calendar-navigation button { min-width: 34px; padding: 5px 6px; }
+      .health-calendar-legend { gap: 5px 10px; }
+    }
   </style>
 </head>
 <body>
@@ -3038,25 +3062,24 @@
         </div>
         <button id="healthCalendarToggle" class="counter" type="button" aria-live="polite" aria-expanded="false" aria-controls="healthCalendarPanel" title="展开健康月历">
           <strong id="openCount">0</strong>
-          <span>7天内</span>
+          <span>7天内·含逾期</span>
         </button>
       </header>
 
       <section id="healthCalendarPanel" class="health-calendar-panel" aria-labelledby="healthCalendarTitle" hidden>
         <div class="health-calendar-head">
           <div>
-            <span class="health-calendar-kicker">COROS health calendar</span>
             <h2 id="healthCalendarTitle" class="health-calendar-title" aria-live="polite">健康月历</h2>
             <p id="healthCalendarMeta" class="health-calendar-meta">正在读取健康历史...</p>
           </div>
-          <div id="healthCalendarLegend" class="health-calendar-legend" aria-label="状态图例"></div>
+          <div class="health-calendar-navigation" role="group" aria-label="切换健康月历月份">
+          <button id="healthCalendarPrevious" type="button" aria-label="查看上一个月" aria-controls="healthCalendarGrid" disabled>‹</button>
+          <button id="healthCalendarNext" type="button" aria-label="查看下一个月" aria-controls="healthCalendarGrid" disabled>›</button>
+          <button id="healthCalendarLatest" type="button" aria-controls="healthCalendarGrid" disabled>最新</button>
         </div>
-        <div class="health-calendar-navigation" role="group" aria-label="切换健康月历月份">
-          <button id="healthCalendarPrevious" type="button" aria-label="查看上一个月" aria-controls="healthCalendarGrid" disabled>‹ 上个月</button>
-          <button id="healthCalendarNext" type="button" aria-label="查看下一个月" aria-controls="healthCalendarGrid" disabled>下个月 ›</button>
-          <button id="healthCalendarLatest" type="button" aria-controls="healthCalendarGrid" disabled>回到最新</button>
         </div>
         <div id="healthCalendarGrid" class="health-calendar-grid" aria-live="polite"></div>
+        <div id="healthCalendarLegend" class="health-calendar-legend" aria-label="状态图例"></div>
         <p id="healthCalendarNote" class="health-calendar-note"></p>
       </section>
 
@@ -3242,6 +3265,12 @@
     <aside id="ideaPane" class="idea-pane" aria-live="polite"></aside>
     </div>
   </main>
+  <dialog id="healthCalendarDayDialog" class="status-details-dialog" aria-labelledby="healthCalendarDayTitle">
+    <h2 id="healthCalendarDayTitle">日期详情</h2>
+    <p id="healthCalendarDayText"></p>
+    <form method="dialog"><button class="ghost" autofocus>关闭</button></form>
+  </dialog>
+
   <dialog id="statusDetailsDialog" class="status-details-dialog" aria-labelledby="statusDetailsTitle">
     <h2 id="statusDetailsTitle">同步状态</h2>
     <p id="statusDetailsText"></p>
@@ -4264,7 +4293,8 @@
       }
 
       function createHealthCalendarDayCell(day) {
-        const cell = document.createElement("div");
+        const cell = document.createElement("button");
+        cell.type = "button";
         cell.className = [
           "health-calendar-day",
           day.statusKey,
@@ -4272,6 +4302,14 @@
           day.future ? "future" : ""
         ].filter(Boolean).join(" ");
         cell.title = day.tooltip;
+        cell.setAttribute("aria-label", day.tooltip + "，查看详情");
+        cell.setAttribute("aria-haspopup", "dialog");
+        cell.setAttribute("aria-controls", "healthCalendarDayDialog");
+        cell.addEventListener("click", function () {
+          document.getElementById("healthCalendarDayTitle").textContent = day.date + " · 健康详情";
+          document.getElementById("healthCalendarDayText").textContent = day.tooltip;
+          document.getElementById("healthCalendarDayDialog").showModal();
+        });
 
         const number = document.createElement("strong");
         number.textContent = String(day.dayNumber);
@@ -4281,26 +4319,15 @@
         label.textContent = day.shortLabel;
         cell.appendChild(label);
 
-        day.details.forEach(function (item) {
-          const detail = document.createElement("small");
-          if (item.className) {
-            detail.className = item.className;
-          }
-          if (Array.isArray(item.parts)) {
-            item.parts.forEach(function (part) {
-              if (part.label) {
-                detail.appendChild(document.createTextNode(part.label));
-              }
-              const value = document.createElement("span");
-              value.className = "health-calendar-metric-value";
-              value.textContent = part.value;
-              detail.appendChild(value);
-            });
-          } else {
-            detail.textContent = item.text;
-          }
-          cell.appendChild(detail);
-        });
+        // Keep the existing sleep score visible; all original metrics remain in the day dialog.
+        const sleepPart = day.details.flatMap(function (item) { return item.parts || []; })
+          .find(function (part) { return part.label === "睡"; });
+        if (sleepPart) {
+          const score = document.createElement("small");
+          score.className = "calendar-sleep-score";
+          score.textContent = "睡 " + sleepPart.value;
+          cell.appendChild(score);
+        }
 
         return cell;
       }
@@ -11230,18 +11257,7 @@
           if (!["todo", "meeting", "deadline"].includes(record.type) || record.completed) { return false; }
           const at = upcomingTaskTimestamp(record.eventAt);
           if (!Number.isFinite(at) || at >= end) { return false; }
-          if (at >= start) { return true; }
-          if (record.type !== "meeting") { return false; }
-          // Existing meeting range parsing uses wall-clock dates. Supply Shanghai wall time,
-          // then read it back as Shanghai time rather than the browser's time zone.
-          const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(new Date(at));
-          const values = Object.fromEntries(parts.map(function (part) { return [part.type, part.value]; }));
-          const wall = values.year + "-" + values.month + "-" + values.day + "T" + values.hour + ":" + values.minute + ":" + values.second;
-          const meetingEnd = getMeetingEndAt(record, wall);
-          if (!meetingEnd) { return false; }
-          const pad = function (value) { return String(value).padStart(2, "0"); };
-          const endWall = meetingEnd.getFullYear() + "-" + pad(meetingEnd.getMonth() + 1) + "-" + pad(meetingEnd.getDate()) + "T" + pad(meetingEnd.getHours()) + ":" + pad(meetingEnd.getMinutes()) + ":" + pad(meetingEnd.getSeconds());
-          return upcomingTaskTimestamp(endWall) > start;
+          return true; // Include every overdue unfinished dated task.
         }).length;
       }
 
@@ -11270,8 +11286,8 @@
         const totalVisibleCount = Number(currentStats.activeRecords || 0);
         openCount.textContent = upcoming.complete ? String(upcoming.count) : "…";
         healthCalendarToggle.setAttribute("aria-label", upcoming.complete
-          ? "未来7天未完成事项 " + upcoming.count + " 项，点击切换健康月历"
-          : "未来7天事项尚未完整加载，点击切换健康月历");
+          ? "7天内及逾期未完成事项 " + upcoming.count + " 项，点击切换健康月历"
+          : "7天内及逾期事项尚未完整加载，点击切换健康月历");
         renderJournalMilestone(currentStats);
         const journalAchievementModel = renderJournalAchievements(currentStats);
 

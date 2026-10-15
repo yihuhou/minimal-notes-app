@@ -382,7 +382,7 @@
     }
 
     button.counter:hover {
-      background: #f7f7f4;
+      background: transparent;
       border-color: var(--border-strong);
     }
 
@@ -392,7 +392,7 @@
     }
 
     button.counter[aria-expanded="true"] {
-      background: var(--accent-soft);
+      background: transparent;
       border-color: var(--border-strong);
     }
 
@@ -2968,7 +2968,7 @@
     /* Quiet page chrome; daily content remains the visual focus. */
     .header { grid-template-columns: minmax(0, 1fr) auto; padding-left: 43px; padding-right: 43px; align-items: center; padding-top: 17px; padding-bottom: 13px; gap: 12px; border-bottom: 0; }
     .title-block h1 { font-family: inherit; font-size: 19px; line-height: 1.4; font-weight: 600; letter-spacing: -0.3px; }
-    button.counter { display: inline-flex; flex-direction: column; align-items: center; gap: 0; min-width: 0; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; }
+    button.counter { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 0; min-width: 0; padding: 8px 0 8px 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; }
     .counter strong { display: inline; font-size: 20px; font-weight: 600; line-height: 1.5; }
     .counter span { display: inline; margin: 0; font-size: 12px; line-height: 1.5; }
     body.journal-focus .counter { background: transparent; }
@@ -3016,7 +3016,7 @@
     @media (max-width: 760px) {
       .header { padding: 12px 27px 11px; }
       .title-block h1 { font-size: 17px; }
-      button.counter { padding: 8px 7px; }
+      button.counter { padding: 8px 0 8px 7px; }
       .counter strong { font-size: 20px; }
       .counter span { font-size: 10px; }
       .health-summary { margin-top: 0; padding: 13px 14px; gap: 10px; }

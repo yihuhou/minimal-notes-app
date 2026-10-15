@@ -3035,6 +3035,25 @@
     .health-calendar-navigation button { min-width: 36px; min-height: 36px; padding: 4px 7px; border: 0; background: transparent; font-size: 13px; }
     .health-calendar-legend { justify-content: flex-start; max-width: none; gap: 5px 12px; }
 
+    /* Quiet, elastic controls: a wrapped search fills its own row. */
+    .toolbar { flex-wrap: wrap; }
+    .toolbar-main { min-width: 0; }
+    .toolbar-side { flex: 1 1 200px; min-width: 0; }
+    .toolbar .search { position: relative; width: 100%; min-width: 0; flex: 1 1 200px; }
+    .toolbar .search-icon { position: absolute; left: 12px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--text-faint); pointer-events: none; }
+    .toolbar .search input { min-height: 44px; padding: 10px 12px 10px 37px; border: 1px solid transparent; border-bottom-color: var(--border); border-radius: 6px; background: #f5f5f1; font-family: inherit; }
+    .toolbar .search input:hover { background: #f0f1eb; }
+    .toolbar .search input:focus { background: var(--panel-strong); border-color: #919e8d; box-shadow: 0 0 0 2px rgba(115, 133, 107, .12); }
+    .toolbar .segmented button { min-height: 40px; border-color: transparent; font-family: inherit; }
+    .toolbar .segmented button.active { background: #eeefe8; border-color: transparent; color: #414c3c; }
+    #addButton, #quickMoreButton { width: 44px; min-width: 44px; min-height: 44px; border-radius: 10px; border: 1px solid transparent; box-shadow: none; }
+    #addButton { background: #e8ece1; color: #43543b; }
+    #addButton:hover { background: #dce4d3; }
+    #quickMoreButton { background: transparent; color: #858b7d; }
+    #quickMoreButton:hover, #quickMoreButton[aria-expanded="true"] { background: #eeefe8; color: #43543b; }
+    #addButton svg, #quickMoreButton svg { width: 20px; height: 20px; pointer-events: none; }
+    #addButton:focus-visible, #quickMoreButton:focus-visible { outline: 2px solid #87977c; outline-offset: 2px; }
+
     /* Project progress stays in the private repository, never in this shell. */
     .project-dashboard { margin: 0 24px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
     .project-dashboard-empty { margin: 0; padding: 28px 22px; color: var(--text-soft); font-size: 13px; line-height: 1.7; }
@@ -3148,8 +3167,8 @@
               <button id="syncActionButton" class="ghost sync-action" type="button">连接同步</button>
               <button id="retryLocalSaveButton" class="ghost sync-action" type="button" hidden>重试保存</button>
               <button id="backupAuthButton" class="ghost sync-action backup-auth-action" type="button" hidden>授权备份</button>
-              <button id="quickMoreButton" class="ghost icon-only" type="button" aria-label="更多选项" aria-controls="composerAdvanced" aria-expanded="false" title="更多选项">⋯</button>
-              <button id="addButton" class="primary icon-only" type="button" aria-label="新增记录" title="新增记录">+</button>
+              <button id="quickMoreButton" class="ghost icon-only" type="button" aria-label="更多选项" aria-controls="composerAdvanced" aria-expanded="false" title="更多选项"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+              <button id="addButton" class="primary icon-only" type="button" aria-label="新增记录" title="新增记录"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
             </div>
           </div>
           <div id="composerAdvanced" class="composer-advanced" hidden>
@@ -3216,6 +3235,7 @@
         </div>
         <div class="toolbar-side">
           <div class="search">
+            <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg>
             <label class="sr-only" for="searchInput">搜索</label>
             <input id="searchInput" type="search" placeholder="搜索内容">
           </div>

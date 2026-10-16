@@ -11187,7 +11187,8 @@
       function projectStageDisplay(project) {
         const stages = { exploring: ["#9987ad", "探索成形"], refining: ["#b49a67", "写作打磨"], discussing: ["#719990", "成稿交流"] };
         const stage = Object.prototype.hasOwnProperty.call(stages, project.stage) ? stages[project.stage] : ["#a7aaa6", ""];
-        return { color: stage[0], label: stage[1] };
+        const categoryLabel = typeof project.categoryLabel === "string" ? project.categoryLabel.trim() : "";
+        return { color: stage[0], label: categoryLabel && categoryLabel.length <= 40 ? categoryLabel : stage[1] };
       }
 
       function renderProjectDashboard() {

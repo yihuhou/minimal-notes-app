@@ -3387,6 +3387,8 @@
       const DEFAULT_REMOTE_PATH = "minimal-notes-sync/manifest.json";
       const LEGACY_REMOTE_PATH = "minimal-notes-records.json";
       const HEALTH_SUMMARY_PATH = "minimal-notes-health-summary.json";
+      const UPCOMING_TASKS_CACHE_KEY = "minimal-notes-upcoming-task-sources-v1";
+      const PROJECT_PROGRESS_CACHE_KEY = "minimal-notes-project-progress-cache-v1";
       const HEALTH_SUMMARY_CACHE_KEY = "minimal-notes-health-summary-cache-v1";
       const HEALTH_SUMMARY_ETAG_KEY = "minimal-notes-health-summary-etag-v1";
       const HEALTH_CALENDAR_PATH = "minimal-notes-health-calendar.json";
@@ -3661,7 +3663,8 @@
           signature: "",
           error: ""
         },
-        projectProgress: { payload: null, loading: false, loaded: false, error: "", sessionId: -1, openIds: new Set(), historyIds: new Set() },
+        upcomingTaskCache: { records: null, sessionId: -1, signature: "", writeId: 0 },
+        projectProgress: { payload: null, loading: false, loaded: false, cached: false, error: "", sessionId: -1, openIds: new Set(), historyIds: new Set() },
         healthSummary: {
           payload: null,
           etag: ""
@@ -3810,6 +3813,8 @@
       populateRemoteSyncPanel();
       loadCachedJournalPrivateHighlights();
       loadCachedHealthSummary();
+      loadCachedProjectProgress();
+      loadCachedUpcomingTasks();
       render();
       updateStorageStatus();
       if (!state.remote.enabled) {
@@ -7407,6 +7412,8 @@
       }
 
       function invalidateRemoteSession() {
+        clearUpcomingTasksCache();
+        clearProjectProgressCache();
         resetProjectProgress();
         state.remote.sessionId += 1;
         healthSummaryLoadId += 1;
@@ -11046,8 +11053,57 @@
       }
 
       function resetProjectProgress() {
-        state.projectProgress = { payload: null, loading: false, loaded: false, error: "", sessionId: -1, openIds: new Set(), historyIds: new Set() };
+        state.projectProgress = { payload: null, loading: false, loaded: false, cached: false, error: "", sessionId: -1, openIds: new Set(), historyIds: new Set() };
         if (projectDashboard) { projectDashboard.replaceChildren(); }
+      }
+
+      function clearProjectProgressCache() {
+        try { localStorage.removeItem(PROJECT_PROGRESS_CACHE_KEY); }
+        catch (error) { console.warn("Project progress cache cleanup failed", error); }
+      }
+
+      async function projectProgressCacheScope() {
+        if (state.sessionOnly || state.remote.temporary || !state.remote.enabled || !state.remote.token || !state.remote.repo) { return ""; }
+        // Bind private cached data to this authorization and repository without
+        // duplicating a credential in the cache. Missing Web Crypto disables
+        // this optional cache, not the ordinary authenticated network read.
+        try {
+          const identity = JSON.stringify([state.remote.repo, state.remote.branch || "", state.remote.path || "", state.remote.token]);
+          const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(identity));
+          return Array.from(new Uint8Array(hash), function (byte) { return byte.toString(16).padStart(2, "0"); }).join("");
+        } catch (error) { return ""; }
+      }
+
+      async function loadCachedProjectProgress() {
+        const sessionId = state.remote.sessionId;
+        const scope = await projectProgressCacheScope();
+        if (!scope || sessionId !== state.remote.sessionId) { return false; }
+        const progress = state.projectProgress;
+        if (progress.payload || progress.loaded) { return false; }
+        try {
+          const raw = localStorage.getItem(PROJECT_PROGRESS_CACHE_KEY);
+          if (!raw) { return false; }
+          const cached = JSON.parse(raw);
+          if (!cached || cached.schemaVersion !== 1 || cached.scope !== scope) { return false; }
+          const payload = validateProjectProgressPayload(cached.payload);
+          progress.payload = payload;
+          progress.cached = true;
+          progress.sessionId = sessionId;
+          renderProjectDashboard();
+          return true;
+        } catch (error) {
+          console.warn("Cached project progress unavailable", error);
+          clearProjectProgressCache();
+          return false;
+        }
+      }
+
+      async function saveProjectProgressCache(payload, sessionId) {
+        const scope = await projectProgressCacheScope();
+        if (!scope || sessionId !== state.remote.sessionId) { return; }
+        try {
+          localStorage.setItem(PROJECT_PROGRESS_CACHE_KEY, JSON.stringify({ schemaVersion: 1, scope: scope, payload: payload }));
+        } catch (error) { console.warn("Project progress cache unavailable", error); }
       }
 
       function validateProjectProgressPayload(payload) {
@@ -11086,9 +11142,25 @@
         progress.error = "";
         renderProjectDashboard();
         try {
+          await loadCachedProjectProgress();
+          assertRemoteSession(sessionId);
           const response = await fetchForRemoteSession(getRemotePathContentsUrl("minimal-notes-project-progress.json", true), { headers: getRemoteHeaders(false), cache: "no-store" });
           assertRemoteSession(sessionId);
-          if (response.status === 404) { progress.payload = { schemaVersion: 1, enabledFrom: "2026-10-15", projects: [] }; }
+          if (response.status === 404) {
+            // GitHub also returns 404 for lost private-repository access. Never
+            // turn that ambiguous failure into a deletion of known projects.
+            {
+              const directoryResponse = await fetchForRemoteSession(getRemotePathContentsUrl("", true), { headers: getRemoteHeaders(false), cache: "no-store" });
+              if (!directoryResponse.ok) { throw new Error("项目进展暂不可用"); }
+              const directory = await directoryResponse.json();
+              assertRemoteSession(sessionId);
+              if (!Array.isArray(directory) || directory.length >= 1000 || directory.some(function (file) { return !file || typeof file.path !== "string" || file.path === "minimal-notes-project-progress.json"; })) {
+                throw new Error("项目进展暂不可用");
+              }
+              clearProjectProgressCache();
+            }
+            progress.payload = { schemaVersion: 1, enabledFrom: "2026-10-15", projects: [] };
+          }
           else {
             if (!response.ok) { throw await createRemoteHttpError(response, "项目进展读取失败"); }
             const file = await response.json();
@@ -11102,6 +11174,8 @@
             progress.payload = validateProjectProgressPayload(JSON.parse(decodeBase64Utf8(String(content || ""))));
           }
           progress.loaded = true;
+          progress.cached = false;
+          if (response.ok) { await saveProjectProgressCache(progress.payload, sessionId); }
         } catch (error) {
           if (sessionId !== state.remote.sessionId) { return; }
           progress.error = "暂时无法读取项目进展";
@@ -11151,8 +11225,9 @@
           const stage = projectStageDisplay(project);
           return '<details class="project-progress" style="--project-accent:' + stage.color + '" data-project-id="' + escapeHtml(project.id) + '"' + (progress.openIds.has(project.id) || keyword ? ' open' : '') + '><summary><span class="project-progress-name">' + escapeHtml(project.name) + (stage.label ? '<span class="project-progress-stage">' + escapeHtml(stage.label) + '</span>' : '') + '</span><span class="project-progress-meta">' + (entries.length ? '<time class="project-progress-date" datetime="' + escapeHtml(entries[0].date) + '" title="' + escapeHtml(entries[0].date) + '">' + escapeHtml(entries[0].date.slice(5).replace('-', ' / ')) + '</time>' : '') + '<span class="project-progress-count">' + entries.length + ' 条进展</span></span></summary>' + (rows ? '<ol class="project-progress-list">' + rows + '</ol>' : '<p class="project-dashboard-empty">还没有新的进展。</p>') + (!matchingEntries && entries.length > 3 ? '<button type="button" class="project-progress-history" data-project-history="' + escapeHtml(project.id) + '">' + (all ? '收起历史' : '查看全部 ' + entries.length + ' 条进展') + '</button>' : '') + '</details>';
         }).join("");
-        const error = progress.error ? '<p class="project-dashboard-empty">更新暂未成功，以下为本次已读取的内容。<button type="button" data-project-retry>重试</button></p>' : '';
-        projectDashboard.innerHTML = error + (html || '<p class="project-dashboard-empty">' + (keyword ? '没有匹配的项目。' : '从这里开始，留下每一步进展。') + '</p>');
+        const error = progress.error ? '<p class="project-dashboard-empty">更新暂未成功，显示上次保存的内容。<button type="button" data-project-retry>重试</button></p>' : '';
+        const cachedNotice = !progress.error && progress.cached ? '<p class="project-dashboard-empty">显示上次保存的内容' + (progress.loading ? '，正在更新…' : '。') + '</p>' : '';
+        projectDashboard.innerHTML = error + cachedNotice + (html || '<p class="project-dashboard-empty">' + (keyword ? '没有匹配的项目。' : '从这里开始，留下每一步进展。') + '</p>');
         projectDashboard.querySelectorAll('details[data-project-id]').forEach(function (details) {
           details.addEventListener("toggle", function () {
             if (!details.isConnected) { return; }
@@ -11444,8 +11519,83 @@
         }).length;
       }
 
+      function clearUpcomingTasksCache() {
+        state.upcomingTaskCache = { records: null, sessionId: -1, signature: "", writeId: 0 };
+        try { localStorage.removeItem(UPCOMING_TASKS_CACHE_KEY); }
+        catch (error) { console.warn("Upcoming task cache cleanup failed", error); }
+      }
+
+      function upcomingTaskSource(record) {
+        return { id: record.id, type: record.type, eventAt: String(record.eventAt || ""), completed: Boolean(record.completed),
+          mergeAt: Number.isFinite(record.mergeAt) ? record.mergeAt : getRecordMergeTimestamp(record),
+          headRevisionId: String(record.headRevisionId || "") };
+      }
+
+      async function loadCachedUpcomingTasks() {
+        const sessionId = state.remote.sessionId;
+        const scope = await projectProgressCacheScope();
+        if (!scope || sessionId !== state.remote.sessionId || state.upcomingTaskCache.records) { return; }
+        try {
+          const raw = localStorage.getItem(UPCOMING_TASKS_CACHE_KEY);
+          if (!raw) { return; }
+          const cached = JSON.parse(raw);
+          if (!cached || cached.schemaVersion !== 1 || cached.scope !== scope || cached.complete !== true || !Array.isArray(cached.records)) { return; }
+          const ids = new Set();
+          const valid = cached.records.every(function (record) {
+            if (!record || typeof record.id !== "string" || !record.id || ids.has(record.id)
+              || !["todo", "meeting", "deadline"].includes(record.type) || typeof record.eventAt !== "string"
+              || typeof record.completed !== "boolean" || !Number.isFinite(record.mergeAt) || record.mergeAt < 0
+              || typeof record.headRevisionId !== "string") { return false; }
+            ids.add(record.id); return true;
+          });
+          if (!valid) { return; }
+          state.upcomingTaskCache.records = cached.records;
+          state.upcomingTaskCache.sessionId = sessionId;
+          state.upcomingTaskCache.signature = JSON.stringify(cached.records);
+          render();
+        } catch (error) { console.warn("Cached upcoming tasks unavailable", error); }
+      }
+
+      function saveUpcomingTaskSources(records) {
+        if (!state.remote.enabled || state.remote.temporary || state.sessionOnly || !state.upcomingTaskCache) { return; }
+        const sources = records.filter(function (record) { return ["todo", "meeting", "deadline"].includes(record.type); }).map(upcomingTaskSource);
+        const signature = JSON.stringify(sources);
+        const cache = state.upcomingTaskCache;
+        if (cache.sessionId === state.remote.sessionId && cache.signature === signature) { return; }
+        cache.records = sources;
+        cache.sessionId = state.remote.sessionId;
+        cache.signature = signature;
+        const sessionId = state.remote.sessionId, writeId = ++cache.writeId;
+        projectProgressCacheScope().then(function (scope) {
+          if (!scope || sessionId !== state.remote.sessionId || cache !== state.upcomingTaskCache || writeId !== cache.writeId) { return; }
+          try { localStorage.setItem(UPCOMING_TASKS_CACHE_KEY, JSON.stringify({ schemaVersion: 1, scope: scope, complete: true, records: sources })); }
+          catch (error) { console.warn("Upcoming task cache unavailable", error); }
+        });
+      }
+
+      function getCachedUpcomingTaskCountState() {
+        const cache = state.upcomingTaskCache;
+        if (!cache || !cache.records || cache.sessionId !== state.remote.sessionId || state.remote.temporary || state.sessionOnly) { return { complete: false }; }
+        // The base is a previously complete logical task set, not merely hot.
+        // Overlay edits by the existing merge timestamp/revision precedence;
+        // absence from hot is never a deletion of a snapshot record.
+        const sources = new Map(cache.records.map(function (record) { return [record.id, record]; }));
+        state.records.forEach(function (record) {
+          const candidate = upcomingTaskSource(record), previous = sources.get(record.id);
+          if (!previous || candidate.mergeAt > previous.mergeAt || (candidate.mergeAt === previous.mergeAt
+            && candidate.headRevisionId && candidate.headRevisionId !== previous.headRevisionId)) { sources.set(record.id, candidate); }
+        });
+        (state.deletedRecords || []).concat(state.remote.hot && state.remote.hot.tombstones || []).forEach(function (entry) {
+          const previous = sources.get(entry.recordId);
+          if (previous && Date.parse(entry.deletedAt) >= previous.mergeAt) { sources.delete(entry.recordId); }
+        });
+        const records = Array.from(sources.values());
+        saveUpcomingTaskSources(records);
+        return { complete: true, cached: true, count: countUpcomingTasks(records, new Date()) };
+      }
+
       function getUpcomingTaskCountState() {
-        if (state.remote.enabled && !state.remote.checkedThisSession) { return { complete: false }; }
+        if (state.remote.enabled && !state.remote.checkedThisSession) { return getCachedUpcomingTaskCountState(); }
         const missing = state.snapshots.descriptors.filter(function (descriptor) {
           return isSnapshotDescriptorRelevant(descriptor, { filter: "all" })
             && state.snapshots.loadedPaths[descriptor.path] !== String(descriptor.contentHash || "");
@@ -11458,8 +11608,9 @@
               loadSnapshotDescriptor(descriptor).catch(function () { /* Keep an incomplete count visibly pending. */ });
             });
           }
-          return { complete: false };
+          return getCachedUpcomingTaskCountState();
         }
+        saveUpcomingTaskSources(state.records);
         return { complete: true, count: countUpcomingTasks(state.records, new Date()) };
       }
 
@@ -11468,8 +11619,9 @@
         const upcoming = getUpcomingTaskCountState();
         const totalVisibleCount = Number(currentStats.activeRecords || 0);
         openCount.textContent = upcoming.complete ? String(upcoming.count) : "…";
+        openCount.title = upcoming.cached ? "根据已缓存事项按今天重算，等待同步确认" : "";
         healthCalendarToggle.setAttribute("aria-label", upcoming.complete
-          ? "7天内及逾期未完成事项 " + upcoming.count + " 项，点击切换健康月历"
+          ? "7天内及逾期未完成事项 " + upcoming.count + " 项" + (upcoming.cached ? "（缓存，待同步）" : "") + "，点击切换健康月历"
           : "7天内及逾期事项尚未完整加载，点击切换健康月历");
         renderJournalMilestone(currentStats);
         const journalAchievementModel = renderJournalAchievements(currentStats);

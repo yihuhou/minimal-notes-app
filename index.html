@@ -11267,10 +11267,11 @@
         renderSummary(visible);
         renderGTeacherPanel();
         renderList(visible);
-        updateGTeacherTagAlignment();
         renderIdeaPane();
         renderSnapshotLoadStatus();
         renderProjectDashboard();
+        // Finalize list visibility and layout before measuring inline tags.
+        updateGTeacherTagAlignment();
         if (summaryAnchor) {
           const offset = getSummaryFooter().getBoundingClientRect().top - summaryAnchor.top;
           if (Math.abs(offset) > 1) {

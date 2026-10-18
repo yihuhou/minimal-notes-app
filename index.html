@@ -14726,7 +14726,20 @@
       function sortVisibleRecords(a, b) {
         if (state.filter === "minutes") {
           const left = parseMinutesRecord(a); const right = parseMinutesRecord(b);
-          if (left && right) { return right.date.localeCompare(left.date) || sortRecords(a, b); }
+          if (left && right) {
+            const dateComparison = right.date.localeCompare(left.date);
+            if (dateComparison !== 0) { return dateComparison; }
+            const leftTime = left.occurrenceAt ? new Date(left.occurrenceAt).getTime() : null;
+            const rightTime = right.occurrenceAt ? new Date(right.occurrenceAt).getTime() : null;
+            if (leftTime !== null && rightTime !== null && leftTime !== rightTime) {
+              return rightTime - leftTime;
+            }
+            // Keep same-day timed minutes ahead of date-only minutes consistently.
+            if ((leftTime === null) !== (rightTime === null)) {
+              return leftTime === null ? 1 : -1;
+            }
+            return sortRecords(a, b);
+          }
         }
         return sortRecords(a, b);
       }

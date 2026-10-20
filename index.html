@@ -2996,14 +2996,6 @@
     .health-summary-metric-label::after { content: none; }
     .health-summary-notices { padding: 2px 0 2px 10px; border: 0; border-left: 2px solid #c8ae71; border-radius: 0; background: transparent; gap: 5px; }
     .health-summary-notices li { line-height: 1.65; overflow-wrap: anywhere; }
-    /* One quiet emphasis color; desktop stays lighter than the compact view. */
-    .health-summary-emphasis,
-    em.health-summary-emphasis { color: #49685b; font-weight: 500; font-size: inherit; font-style: normal; }
-    .health-summary-notices .health-summary-emphasis { color: inherit; }
-    @media (max-width: 760px) {
-      .health-summary-emphasis,
-      em.health-summary-emphasis { font-weight: 600; }
-    }
     .composer-card { padding: 0; border: 0; border-radius: 0; background: transparent; }
     body.journal-focus .composer-card { background: transparent; }
     .composer-bar { margin-top: 8px; }
@@ -9336,33 +9328,6 @@
         return [metric];
       }
 
-      function renderHealthSummaryProse(text, plainText) {
-        const source = String(text == null ? "" : text);
-        const escape = plainText ? String : escapeHtml;
-        // Only explicit, balanced, non-nested *em* / **strong** are supported.
-        // Invalid markup remains literal; never interpret HTML or link syntax.
-        if (/\*{3}|[\r\n]/.test(source)) return escape(source);
-        const pattern = /\*\*([^*\n]+)\*\*|\*([^*\n]+)\*/g;
-        const parts = [];
-        let cursor = 0;
-        let count = 0;
-        let match;
-        while ((match = pattern.exec(source)) !== null) {
-          const plain = source.slice(cursor, match.index);
-          const body = match[1] == null ? match[2] : match[1];
-          if (plain.includes("*") || !body.trim() || body !== body.trim()) return escape(source);
-          parts.push(escape(plain));
-          const tag = match[1] == null ? "em" : "strong";
-          parts.push(plainText ? body : "<" + tag + ' class="health-summary-emphasis tone-' + (count % 3) + '">' + escape(body) + "</" + tag + ">");
-          cursor = pattern.lastIndex;
-          count += 1;
-        }
-        const tail = source.slice(cursor);
-        if (tail.includes("*")) return escape(source);
-        parts.push(escape(tail));
-        return parts.join("");
-      }
-
       function renderHealthSummary(summary) {
         healthSummaryLabel.textContent = summary.updatedText
           ? summary.label + " · " + summary.updatedText
@@ -9370,7 +9335,7 @@
         healthSummaryLabel.title = summary.updatedTitle
           ? "更新时间：" + summary.updatedTitle
           : "";
-        healthSummaryText.innerHTML = renderHealthSummaryProse(summary.summary);
+        healthSummaryText.textContent = summary.summary;
 
         healthSummaryMetrics.innerHTML = "";
         summary.metrics.flatMap(formatHealthSummaryMetricForDisplay).forEach(function (metric) {
@@ -9379,7 +9344,7 @@
           const value = document.createElement("strong");
           item.className = "health-summary-metric";
           if (metric.note) {
-            item.title = renderHealthSummaryProse(metric.note, true);
+            item.title = metric.note;
           }
           label.className = "health-summary-metric-label";
           label.textContent = metric.label;
@@ -9398,7 +9363,7 @@
         const advice = plan.concat(summary.advice);
         advice.forEach(function (text) {
           const item = document.createElement("li");
-          item.innerHTML = renderHealthSummaryProse(text);
+          item.textContent = text;
           healthSummaryAdvice.appendChild(item);
         });
         healthSummaryAdvice.hidden = !advice.length;
@@ -9406,7 +9371,7 @@
         healthSummaryNotices.innerHTML = "";
         summary.notices.forEach(function (text) {
           const item = document.createElement("li");
-          item.innerHTML = renderHealthSummaryProse(text);
+          item.textContent = text;
           healthSummaryNotices.appendChild(item);
         });
         healthSummaryNotices.hidden = !summary.notices.length;
@@ -9434,9 +9399,9 @@
         }
 
         healthSummaryTrainingLabel.textContent = training.label || "今日训练";
-        healthSummaryTrainingTitle.innerHTML = renderHealthSummaryProse(training.title || "");
+        healthSummaryTrainingTitle.textContent = training.title || "";
         healthSummaryTrainingMeta.textContent = formatHealthSummaryTrainingMeta(training);
-        healthSummaryTrainingReason.innerHTML = renderHealthSummaryProse(training.reason || "");
+        healthSummaryTrainingReason.textContent = training.reason || "";
 
         // Plan steps and daily advice share one visual list below the training context.
         healthSummaryTrainingPlan.hidden = true;

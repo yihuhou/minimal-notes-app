@@ -929,9 +929,13 @@
 
     .minutes-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .minutes-actions .ghost { max-width: 100%; overflow-wrap: anywhere; text-align: left; }
-    .minutes-copy-toolbar { margin: 0 0 12px; align-items: center; }
-    .minutes-copy-toolbar .ghost { min-height: 44px; }
-    .minutes-copy-feedback { color: var(--text-muted); font-size: 12px; }
+    .minutes-copy-toolbar { float: right; margin: -12px -10px 0 10px; }
+    .minutes-copy-button { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 8px; background: transparent; box-shadow: none; color: var(--text-soft); cursor: pointer; }
+    .minutes-copy-button svg { width: 16px; height: 16px; pointer-events: none; }
+    .minutes-copy-button:hover { color: var(--text); background: var(--panel-soft); }
+    .minutes-copy-button:focus-visible { outline: 2px solid var(--text-soft); outline-offset: -4px; }
+    .minutes-copy-feedback { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .item.minutes .minutes-details::after { content: ""; display: block; clear: both; }
     .minutes-copy-text { width: 100%; min-height: 220px; max-height: 45vh; resize: vertical; font: inherit; line-height: 1.6; margin-bottom: 12px; }
     .minutes-title { display: block; font-weight: 500; margin-bottom: 8px; color: var(--text); overflow-wrap: anywhere; }
     .minutes-disclosure[aria-expanded="true"] .minutes-title { font-weight: 500; }
@@ -5988,7 +5992,7 @@
           + '<span class="item-tags"><span class="badge">纪要·' + fields.kind + '</span><span class="code-token token-time">' + escapeHtml(dateTime) + '</span>' + (duration ? '<span class="code-token token-time">' + escapeHtml(duration) + '</span>' : '') + '</span></span>'
           + '<svg class="minutes-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>'
           + '<div class="minutes-details item-text" id="' + escapeHtml(detailsId) + '"' + (expanded ? '' : ' hidden') + '>'
-          + '<div class="minutes-actions minutes-copy-toolbar"><button type="button" class="ghost" data-action="minutes-copy" data-id="' + escapeHtml(record.id) + '">复制纪要</button><span class="minutes-copy-feedback" role="status" aria-live="polite"></span></div>'
+          + '<div class="minutes-copy-toolbar"><button type="button" class="minutes-copy-button" data-action="minutes-copy" data-id="' + escapeHtml(record.id) + '" aria-label="复制纪要" title="复制纪要"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg></button><span class="minutes-copy-feedback" role="status" aria-live="polite"></span></div>'
           + '<div class="minutes-body">' + renderMinutesBodyHtml(fields.body) + '</div>'
           + (fields.meetingId ? '<div class="minutes-actions"><button type="button" class="ghost" data-action="minutes-meeting" data-id="' + escapeHtml(fields.meetingId) + '">'
             + escapeHtml(meeting ? '日程：' + minutesMeetingLabel(meeting) : '查看原关联日程（已删除或尚未加载）') + '</button></div>' : '')

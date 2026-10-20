@@ -929,6 +929,10 @@
 
     .minutes-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .minutes-actions .ghost { max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+    .minutes-copy-toolbar { margin: 0 0 12px; align-items: center; }
+    .minutes-copy-toolbar .ghost { min-height: 44px; }
+    .minutes-copy-feedback { color: var(--text-muted); font-size: 12px; }
+    .minutes-copy-text { width: 100%; min-height: 220px; max-height: 45vh; resize: vertical; font: inherit; line-height: 1.6; margin-bottom: 12px; }
     .minutes-title { display: block; font-weight: 500; margin-bottom: 8px; color: var(--text); overflow-wrap: anywhere; }
     .minutes-disclosure[aria-expanded="true"] .minutes-title { font-weight: 500; }
     .minutes-disclosure { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 76px; padding: 16px 18px; border-radius: 13px; text-align: left; transition: background-color 0.15s ease; }
@@ -3318,6 +3322,12 @@
     <p id="statusDetailsText"></p>
     <form method="dialog"><button class="ghost" autofocus>关闭</button></form>
   </dialog>
+  <dialog id="minutesCopyDialog" class="status-details-dialog" aria-labelledby="minutesCopyTitle">
+    <h2 id="minutesCopyTitle">手动复制纪要</h2>
+    <p>浏览器未能自动复制。请复制下方已选中的文字。</p>
+    <textarea id="minutesCopyText" class="minutes-copy-text" readonly aria-label="纪要标题和正文"></textarea>
+    <form method="dialog"><button class="ghost">关闭</button></form>
+  </dialog>
   <button id="journalBottomJump" class="journal-bottom-jump" type="button" aria-label="跳到日记底部查看勋章、写作里程碑与小红花统计" title="跳到写作统计与勋章" hidden>
     <svg class="journal-bottom-jump-arrow" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
       <path d="M16 7v17M9.25 18 16 24.75 22.75 18" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -4843,6 +4853,12 @@
           return;
         }
 
+        if (action === "minutes-copy") {
+          event.preventDefault();
+          event.stopPropagation();
+          void copyMinutes(id, actionTarget);
+          return;
+        }
         if (action === "minutes-meeting") { showMinutesMeeting(id); return; }
         if (action === "minutes-toggle") { toggleMinutes(id); return; }
 
@@ -5796,6 +5812,80 @@
         }).join("\n\n").trim();
       }
 
+      function getMinutesCopyText(record) {
+        const fields = parseMinutesRecord(record);
+        if (!fields) { return ""; }
+        // Match the supported display formatting without copying generated HTML or metadata.
+        const body = getMinutesDisplayBody(fields.body)
+          .replace(/^[ \t]{0,3}#{1,4}[ \t]+/gm, "")
+          .replace(/\*\*([^*\n]+)\*\*|`([^`\n]+)`|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,
+            function (match, strong, code, label, url) {
+              if (strong !== undefined) { return strong; }
+              if (code !== undefined) { return code; }
+              return label === url ? url : label + "（" + url + "）";
+            });
+        return fields.title + "\n\n" + body;
+      }
+
+      async function copyMinutes(id, button) {
+        if (button.dataset.copying === "true") { return; }
+        const record = state.records.find(function (item) { return item.id === id; });
+        const text = getMinutesCopyText(record);
+        if (!text) { setStatus("纪要已不可用，请刷新后重试。"); return; }
+        const feedback = button.parentElement.querySelector(".minutes-copy-feedback");
+        const report = function (message) {
+          if (feedback) { feedback.textContent = message; }
+          setStatus(message);
+        };
+        button.dataset.copying = "true";
+        button.setAttribute("aria-busy", "true");
+        if (feedback) { feedback.textContent = "正在复制…"; }
+        let copied = false;
+        try {
+          try {
+            if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+              await navigator.clipboard.writeText(text);
+              copied = true;
+            }
+          } catch (error) { /* Try the browser's selection-based copy below. */ }
+          if (!copied) {
+            const active = document.activeElement;
+            const selection = window.getSelection();
+            const ranges = [];
+            if (selection) {
+              for (let i = 0; i < selection.rangeCount; i += 1) { ranges.push(selection.getRangeAt(i).cloneRange()); }
+            }
+            const textarea = document.createElement("textarea");
+            textarea.value = text;
+            textarea.readOnly = true;
+            textarea.style.cssText = "position:fixed;left:-9999px;top:0;font-size:16px";
+            document.body.appendChild(textarea);
+            try {
+              textarea.focus({ preventScroll: true });
+              textarea.select();
+              copied = document.execCommand("copy") === true;
+            } catch (error) { copied = false; }
+            finally {
+              textarea.remove();
+              try { if (active && active.isConnected) { active.focus({ preventScroll: true }); } } catch (error) {}
+              try { if (selection) { selection.removeAllRanges(); ranges.forEach(function (range) { selection.addRange(range); }); } } catch (error) {}
+            }
+          }
+        } catch (error) { /* Selection APIs may also be unavailable. Offer manual copy below. */ }
+        finally {
+          delete button.dataset.copying;
+          button.removeAttribute("aria-busy");
+        }
+        if (copied) { report("纪要已复制。"); return; }
+        report("自动复制失败，请手动复制。");
+        const dialog = document.getElementById("minutesCopyDialog");
+        const textarea = document.getElementById("minutesCopyText");
+        textarea.value = text;
+        if (!dialog.open) { dialog.showModal(); }
+        textarea.focus();
+        textarea.select();
+      }
+
       function renderMinutesInline(text) {
         const source = String(text || "");
         const pattern = /\*\*([^*\n]+)\*\*|`([^`\n]+)`|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g;
@@ -5898,6 +5988,7 @@
           + '<span class="item-tags"><span class="badge">纪要·' + fields.kind + '</span><span class="code-token token-time">' + escapeHtml(dateTime) + '</span>' + (duration ? '<span class="code-token token-time">' + escapeHtml(duration) + '</span>' : '') + '</span></span>'
           + '<svg class="minutes-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>'
           + '<div class="minutes-details item-text" id="' + escapeHtml(detailsId) + '"' + (expanded ? '' : ' hidden') + '>'
+          + '<div class="minutes-actions minutes-copy-toolbar"><button type="button" class="ghost" data-action="minutes-copy" data-id="' + escapeHtml(record.id) + '">复制纪要</button><span class="minutes-copy-feedback" role="status" aria-live="polite"></span></div>'
           + '<div class="minutes-body">' + renderMinutesBodyHtml(fields.body) + '</div>'
           + (fields.meetingId ? '<div class="minutes-actions"><button type="button" class="ghost" data-action="minutes-meeting" data-id="' + escapeHtml(fields.meetingId) + '">'
             + escapeHtml(meeting ? '日程：' + minutesMeetingLabel(meeting) : '查看原关联日程（已删除或尚未加载）') + '</button></div>' : '')

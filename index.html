@@ -2996,11 +2996,14 @@
     .health-summary-metric-label::after { content: none; }
     .health-summary-notices { padding: 2px 0 2px 10px; border: 0; border-left: 2px solid #c8ae71; border-radius: 0; background: transparent; gap: 5px; }
     .health-summary-notices li { line-height: 1.65; overflow-wrap: anywhere; }
-    /* Explicit prose emphasis; tones distinguish phrases, not medical severity. */
-    .health-summary-emphasis { color: #426657; font-weight: 650; font-size: 1.03em; }
-    em.health-summary-emphasis { font-weight: 500; font-size: inherit; font-style: italic; }
-    .health-summary-emphasis.tone-1 { color: #52648a; }
-    .health-summary-emphasis.tone-2 { color: #84604e; }
+    /* One quiet emphasis color; desktop stays lighter than the compact view. */
+    .health-summary-emphasis,
+    em.health-summary-emphasis { color: #49685b; font-weight: 500; font-size: inherit; font-style: normal; }
+    .health-summary-notices .health-summary-emphasis { color: inherit; }
+    @media (max-width: 760px) {
+      .health-summary-emphasis,
+      em.health-summary-emphasis { font-weight: 600; }
+    }
     .composer-card { padding: 0; border: 0; border-radius: 0; background: transparent; }
     body.journal-focus .composer-card { background: transparent; }
     .composer-bar { margin-top: 8px; }

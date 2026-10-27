@@ -3405,6 +3405,9 @@
       const PROJECT_PROGRESS_CACHE_KEY = "minimal-notes-project-progress-cache-v1";
       const HEALTH_SUMMARY_CACHE_KEY = "minimal-notes-health-summary-cache-v1";
       const HEALTH_SUMMARY_ETAG_KEY = "minimal-notes-health-summary-etag-v1";
+      const HEALTH_SUMMARY_REFRESH_INTERVAL = 60 * 1000;
+      const HEALTH_SUMMARY_REQUEST_TIMEOUT = 15 * 1000;
+      const HEALTH_SUMMARY_EVENT_INTERVAL = 1000;
       const HEALTH_CALENDAR_PATH = "minimal-notes-health-calendar.json";
       const HEALTH_CALENDAR_CACHE_KEY = "minimal-notes-health-calendar-cache-v1";
       const HEALTH_HISTORY_PATH = "minimal-notes-health-history.json";
@@ -3800,6 +3803,9 @@
       const expandedMinutesIds = new Set();
       let ideaPaneNodes = new Map();
       let healthSummaryLoadId = 0;
+      let healthSummaryRequest = null;
+      let healthSummaryRefreshTimer = null;
+      let healthSummaryLastStartedAt = null;
       let deleteDialogResolve = null;
       let deleteDialogPreviousFocus = null;
       let journalBottomJumpFrame = 0;
@@ -3834,10 +3840,9 @@
       if (!state.remote.enabled) {
         loadJournalPrivateHighlights();
       }
+      loadHealthSummary();
       restoreStoredSyncFile({ readRecords: !state.remote.enabled }).then(function () {
-        startRemoteSync(true).then(function () {
-          loadHealthSummary();
-        });
+        startRemoteSync(true);
       });
       focusQuickInput();
 
@@ -3997,6 +4002,10 @@
         window.addEventListener("resize", closeGTeacherFeedbackMenu);
         window.addEventListener("resize", scheduleGTeacherTagAlignmentUpdate);
         window.addEventListener("resize", syncIdeaPaneHeights);
+        window.addEventListener("pageshow", handleHealthSummaryResume);
+        window.addEventListener("focus", handleHealthSummaryResume);
+        window.addEventListener("online", handleHealthSummaryResume);
+        document.addEventListener("visibilitychange", handleHealthSummaryVisibilityChange);
         window.addEventListener("focus", handleRemoteSyncFocus);
         window.addEventListener("online", handleRemoteSyncFocus);
         window.addEventListener("blur", flushPendingRemoteWrite);
@@ -4768,6 +4777,7 @@
 
       async function handleSyncAction() {
         if (state.remote.enabled) {
+          loadHealthSummary();
           await syncRemoteRecords();
           return;
         }
@@ -7474,9 +7484,8 @@
         saveRemoteSyncSettingsToLocal();
         populateRemoteSyncPanel();
         updateStorageStatus();
+        loadHealthSummary();
         await startRemoteSync(true);
-        if (sessionId !== state.remote.sessionId) { return; }
-        await loadHealthSummary();
         if (sessionId !== state.remote.sessionId) { return; }
         setStatus(state.remote.temporary ? "已开启临时同步，过往日记已隐藏。" : "已保存 GitHub 同步。");
       }
@@ -7512,6 +7521,7 @@
         resetProjectProgress();
         state.remote.sessionId += 1;
         healthSummaryLoadId += 1;
+        cancelHealthSummaryRefresh();
         state.healthCalendar.loading = false;
         remoteRequestControllers.forEach(function (controller) { controller.abort(); });
         remoteRequestControllers.clear();
@@ -7535,8 +7545,20 @@
         if (controller) {
           remoteRequestControllers.add(controller);
         }
+        const sourceSignal = options && options.signal;
+        function abortFromSource() { controller.abort(); }
+        if (controller && sourceSignal) {
+          if (sourceSignal.aborted) {
+            controller.abort();
+          } else {
+            sourceSignal.addEventListener("abort", abortFromSource, { once: true });
+          }
+        }
         function release() {
           remoteRequestControllers.delete(controller);
+          if (controller && sourceSignal) {
+            sourceSignal.removeEventListener("abort", abortFromSource);
+          }
         }
         try {
           const response = await fetch(url, Object.assign({}, options,
@@ -7700,7 +7722,6 @@
             await syncRemoteRecords({
               silent: true,
               conditional: true,
-              refreshHealthSummary: false,
               refreshJournalPrivateHighlights: false
             });
           } finally {
@@ -7972,10 +7993,6 @@
           state.remote.readInFlight = false;
           state.remote.readProgressVisible = false;
           updateStorageStatus();
-          if (opts.refreshHealthSummary !== false && state.remote.enabled) {
-            await loadHealthSummary();
-            if (sessionId !== state.remote.sessionId) { return; }
-          }
           if (state.remote.enabled && state.filter === "projects") {
             await loadProjectProgress();
             if (sessionId !== state.remote.sessionId) { return; }
@@ -9022,34 +9039,111 @@
         });
       }
 
-      async function loadHealthSummary() {
-        const sessionId = state.remote.sessionId;
-        const loadId = healthSummaryLoadId + 1;
-        healthSummaryLoadId = loadId;
-        if (!window.fetch) {
+      function scheduleHealthSummaryRefresh() {
+        window.clearTimeout(healthSummaryRefreshTimer);
+        healthSummaryRefreshTimer = null;
+        if (!state.remote.enabled || document.visibilityState === "hidden") {
           return;
         }
+        healthSummaryRefreshTimer = window.setTimeout(function () {
+          healthSummaryRefreshTimer = null;
+          loadHealthSummary();
+        }, HEALTH_SUMMARY_REFRESH_INTERVAL);
+      }
 
-        try {
-          const payload = await fetchHealthSummaryPayload();
-          assertRemoteSession(sessionId);
-          if (loadId !== healthSummaryLoadId) {
-            return;
-          }
-
-          const summary = normalizeHealthSummaryPayload(payload);
-          if (!summary) {
-            clearHealthSummary({ clearCache: true });
-            return;
-          }
-
-          state.healthSummary.payload = payload;
-          saveHealthSummaryCache(payload);
-          renderHealthSummary(summary);
-        } catch (error) {
-          if (sessionId !== state.remote.sessionId) { return; }
-          console.warn("Health summary unavailable", error);
+      function cancelHealthSummaryRefresh() {
+        window.clearTimeout(healthSummaryRefreshTimer);
+        healthSummaryRefreshTimer = null;
+        healthSummaryLastStartedAt = null;
+        if (healthSummaryRequest) {
+          healthSummaryRequest.cancel();
+          healthSummaryRequest = null;
         }
+      }
+
+      function handleHealthSummaryResume() {
+        if (state.remote.enabled && document.visibilityState !== "hidden") {
+          loadHealthSummary();
+        }
+      }
+
+      function handleHealthSummaryVisibilityChange() {
+        if (document.visibilityState === "hidden") {
+          window.clearTimeout(healthSummaryRefreshTimer);
+          healthSummaryRefreshTimer = null;
+          return;
+        }
+        handleHealthSummaryResume();
+      }
+
+      function loadHealthSummary() {
+        if (!window.fetch) {
+          return Promise.resolve();
+        }
+        const now = Date.now();
+        const sessionId = state.remote.sessionId;
+        if (healthSummaryRequest) {
+          const age = now - healthSummaryRequest.startedAt;
+          if (healthSummaryRequest.sessionId === sessionId && age >= 0 && age < HEALTH_SUMMARY_REQUEST_TIMEOUT) {
+            return healthSummaryRequest.promise;
+          }
+          healthSummaryRequest.cancel();
+        }
+        if (healthSummaryLastStartedAt !== null && now >= healthSummaryLastStartedAt
+          && now - healthSummaryLastStartedAt < HEALTH_SUMMARY_EVENT_INTERVAL) {
+          return Promise.resolve();
+        }
+        window.clearTimeout(healthSummaryRefreshTimer);
+        healthSummaryRefreshTimer = null;
+        healthSummaryLastStartedAt = now;
+        const request = {
+          sessionId: sessionId,
+          loadId: ++healthSummaryLoadId,
+          startedAt: now,
+          controller: typeof AbortController === "function" ? new AbortController() : null,
+          canceled: false,
+          promise: null
+        };
+        healthSummaryRequest = request;
+        const cancellation = new Promise(function (_resolve, reject) {
+          request.cancel = function () {
+            if (request.canceled) { return; }
+            request.canceled = true;
+            const error = new Error("Health summary request expired or was canceled");
+            error.name = "AbortError";
+            reject(error);
+            if (request.controller) { request.controller.abort(); }
+          };
+        });
+        const timeout = window.setTimeout(request.cancel, HEALTH_SUMMARY_REQUEST_TIMEOUT);
+        request.promise = (async function () {
+          try {
+            const result = await Promise.race([fetchHealthSummaryPayload(request), cancellation]);
+            assertRemoteSession(sessionId);
+            if (request.canceled || request.loadId !== healthSummaryLoadId) {
+              return;
+            }
+            const payload = result && result.payload;
+            const summary = normalizeHealthSummaryPayload(payload);
+            if (!summary) {
+              return;
+            }
+            state.healthSummary.payload = payload;
+            state.healthSummary.etag = result.etag || "";
+            saveHealthSummaryCache(payload);
+            renderHealthSummary(summary);
+          } catch (error) {
+            if (sessionId !== state.remote.sessionId || request.loadId !== healthSummaryLoadId) { return; }
+            console.warn("Health summary unavailable", error);
+          } finally {
+            window.clearTimeout(timeout);
+            if (healthSummaryRequest === request) {
+              healthSummaryRequest = null;
+              scheduleHealthSummaryRefresh();
+            }
+          }
+        })();
+        return request.promise;
       }
 
       function clearHealthSummary(options) {
@@ -9127,16 +9221,16 @@
         }
       }
 
-      async function fetchHealthSummaryPayload() {
-        const remotePayload = await fetchRemoteHealthSummaryPayload();
+      async function fetchHealthSummaryPayload(request) {
+        const remotePayload = await fetchRemoteHealthSummaryPayload(request);
         if (remotePayload) {
           return remotePayload;
         }
 
-        return fetchLocalHealthSummaryPayload();
+        return fetchLocalHealthSummaryPayload(request);
       }
 
-      async function fetchRemoteHealthSummaryPayload() {
+      async function fetchRemoteHealthSummaryPayload(request) {
         if (!state.remote.enabled || !state.remote.token || !state.remote.repo) {
           return null;
         }
@@ -9148,16 +9242,15 @@
           }
           const response = await fetchForRemoteSession(getRemotePathContentsUrl(HEALTH_SUMMARY_PATH, true), {
             headers: headers,
-            cache: "no-store"
+            cache: "no-store",
+            signal: request && request.controller ? request.controller.signal : undefined
           });
 
           if (response.status === 304) {
-            return state.healthSummary.payload;
+            return { payload: state.healthSummary.payload, etag: state.healthSummary.etag };
           }
 
           if (response.status === 404) {
-            state.healthSummary.payload = null;
-            state.healthSummary.etag = "";
             return null;
           }
 
@@ -9168,23 +9261,22 @@
           const data = await response.json();
           const text = decodeBase64Utf8(String(data.content || ""));
           const payload = JSON.parse(text);
-          state.healthSummary.payload = payload;
-          state.healthSummary.etag = response.headers.get("ETag") || "";
-          return payload;
+          return { payload: payload, etag: response.headers.get("ETag") || "" };
         } catch (error) {
           console.warn("Remote health summary unavailable", error);
           throw error;
         }
       }
 
-      async function fetchLocalHealthSummaryPayload() {
+      async function fetchLocalHealthSummaryPayload(request) {
         if (isLocalFilePage()) {
           return null;
         }
 
         try {
           const response = await fetchForRemoteSession(HEALTH_SUMMARY_PATH + "?t=" + encodeURIComponent(String(Date.now())), {
-            cache: "no-store"
+            cache: "no-store",
+            signal: request && request.controller ? request.controller.signal : undefined
           });
 
           if (response.status === 404) {
@@ -9196,9 +9288,7 @@
           }
 
           const payload = await response.json();
-          state.healthSummary.payload = payload;
-          state.healthSummary.etag = "";
-          return payload;
+          return { payload: payload, etag: "" };
         } catch (error) {
           console.warn("Local health summary unavailable", error);
           throw error;

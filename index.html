@@ -7993,6 +7993,7 @@
           state.remote.readInFlight = false;
           state.remote.readProgressVisible = false;
           updateStorageStatus();
+          scheduleSyncedJournalAchievementCheck();
           if (state.remote.enabled && state.filter === "projects") {
             await loadProjectProgress();
             if (sessionId !== state.remote.sessionId) { return; }
@@ -11888,6 +11889,7 @@
       function journalAchievementCheckpointReady(model) {
         return Boolean(model && model.datesComplete && model.dailyComplete
           && !state.sessionOnly && !state.remote.temporary && !state.localSaveError
+          && !state.remote.readInFlight && !state.remote.error
           && (!state.remote.enabled || state.remote.checkedThisSession)
           && (model.metrics.totalDays > 0 || model.metrics.totalCharacters > 0));
       }
@@ -11967,11 +11969,11 @@
           journalAchievementPendingBefore = journalAchievementPendingBefore || before;
           return;
         }
+        const model = catchupModel || getJournalAchievementModel();
+        if (!model || state.remote.readInFlight || state.remote.error) return;
         loadJournalAchievementCheckpoint();
         const baseline = journalAchievementPendingBefore || before;
         journalAchievementPendingBefore = null;
-        const model = catchupModel || getJournalAchievementModel();
-        if (!model) return;
         const unlocked = window.MinimalNotesAchievements.newlyUnlocked(baseline, model)
           .filter(badge => !journalAchievementBadgeNotified.has(badge.id));
         const broken = window.MinimalNotesAchievements.newlyBrokenRecords(baseline, model).filter(function (record) {

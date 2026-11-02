@@ -2133,6 +2133,16 @@
       font-size: 13px;
       line-height: 1.6;
     }
+    .notification-stack {
+      position: fixed; z-index: 45;
+      top: calc(16px + env(safe-area-inset-top)); right: 16px;
+      width: min(360px, calc(100% - 32px));
+      max-height: calc(100dvh - 32px - env(safe-area-inset-top));
+      overflow-y: auto; display: flex; flex-direction: column; gap: 12px;
+    }
+    .notification-stack > .achievement-toast {
+      position: static; width: 100%; max-height: none; flex: 0 0 auto;
+    }
     .achievement-toast p { margin: 4px 0 10px; }
     .achievement-toast-section + .achievement-toast-section { margin-top: 14px; }
     .achievement-toast-actions { display: flex; justify-content: flex-end; gap: 8px; }
@@ -3337,12 +3347,19 @@
       <path d="M16 7v17M9.25 18 16 24.75 22.75 18" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"></path>
     </svg>
   </button>
+  <div class="notification-stack">
   <div id="journalAchievementToast" class="achievement-toast" role="region" aria-label="日记勋章与纪录通知" hidden>
     <div id="journalAchievementToastText" role="status" aria-live="polite" aria-atomic="true"></div>
     <div class="achievement-toast-actions">
       <button id="journalAchievementToastDismiss" type="button">收起</button>
       <button id="journalAchievementToastView" type="button">查看勋章</button>
     </div>
+  </div>
+  <div id="birthdayToast" class="achievement-toast" role="region" aria-label="生日提醒" hidden>
+    <strong>今天的生日</strong>
+    <p id="birthdayToastText" role="status" aria-live="polite" aria-atomic="true"></p>
+    <div class="achievement-toast-actions"><button id="birthdayToastDismiss" type="button">收起</button></div>
+  </div>
   </div>
   <div id="gTeacherFeedbackMenu" class="g-teacher-feedback-menu" role="menu" aria-label="G老师日记反馈" hidden>
     <button type="button" data-g-teacher-feedback-aspect="content" data-g-teacher-feedback="like" role="menuitemcheckbox">内容喜欢</button>
@@ -3366,6 +3383,8 @@
 
   <script src="minimal-notes-store.js?v=20261013-partial-stats"></script>
   <script src="minimal-notes-cache.js?v=20260924-journal-stats"></script>
+  <script src="vendor/solarlunar-3.1.0.min.js"></script>
+  <script src="minimal-notes-birthdays.js?v=20261103"></script>
   <script src="minimal-notes-achievements.js?v=20260925-cumulative-milestones"></script>
   <script>
     (function () {
@@ -3826,6 +3845,10 @@
       const cacheTransactions = new Set();
       let recordListRenderInProgress = false;
 
+      let birthdayState = { sessionId: -1, payload: null, loadedDay: "", loading: false, scope: "", shownDay: "" };
+      let birthdayTimer = null;
+      let birthdayExpiryTimer = null;
+      const birthdayMemoryCheckpoint = new Map();
       bindEvents();
       updateTodayHeading();
       scheduleTodayHeadingUpdate();
@@ -3851,6 +3874,11 @@
           document.getElementById("statusDetailsText").textContent = statusText.textContent;
           document.getElementById("statusDetailsDialog").showModal();
         });
+        document.getElementById("birthdayToastDismiss").addEventListener("click", function () {
+          document.getElementById("birthdayToast").hidden = true;
+        });
+        window.addEventListener("focus", checkBirthdays);
+        document.addEventListener("visibilitychange", checkBirthdays);
         retryLocalSaveButton.addEventListener("click", retryLocalSave);
         document.getElementById("journalAchievementToastDismiss").addEventListener("click", function () {
           document.getElementById("journalAchievementToast").hidden = true;
@@ -7516,6 +7544,7 @@
       }
 
       function invalidateRemoteSession() {
+        resetBirthdayReminder();
         clearUpcomingTasksCache();
         clearProjectProgressCache();
         resetProjectProgress();
@@ -7690,6 +7719,7 @@
       }
 
       async function startRemoteSync(runNow) {
+        checkBirthdays();
         window.clearTimeout(remotePollTimer);
         remotePollTimer = null;
         if (!state.remote.enabled) {
@@ -10361,7 +10391,8 @@
         return path === JOURNAL_PRIVATE_HIGHLIGHTS_PATH.toLowerCase()
           || path === HEALTH_SUMMARY_PATH.toLowerCase()
           || path === HEALTH_CALENDAR_PATH.toLowerCase()
-          || path === HEALTH_HISTORY_PATH.toLowerCase();
+          || path === HEALTH_HISTORY_PATH.toLowerCase()
+          || path === "minimal-notes-birthdays.json";
       }
 
       function encodeRemotePath(path) {
@@ -11236,6 +11267,91 @@
           && result.sha
           && result.sha === state.remote.staleSha
         );
+      }
+
+      // Birthday data is authenticated private-repository data, never a public
+      // relative URL or an extra copy in localStorage. Only a scoped shown date persists.
+      function resetBirthdayReminder() {
+        window.clearTimeout(birthdayTimer);
+        birthdayTimer = null;
+        window.clearTimeout(birthdayExpiryTimer);
+        birthdayExpiryTimer = null;
+        birthdayState = { sessionId: -1, payload: null, loadedDay: "", loading: false, scope: "", shownDay: "" };
+        document.getElementById("birthdayToast").hidden = true;
+        document.getElementById("birthdayToastText").textContent = "";
+      }
+
+      function scheduleBirthdayCheck() {
+        window.clearTimeout(birthdayTimer);
+        birthdayTimer = window.setTimeout(checkBirthdays, window.MinimalNotesBirthdays.nextReminderDelay(new Date()));
+      }
+
+      async function checkBirthdays() {
+        const helper = window.MinimalNotesBirthdays;
+        if (!helper || !state.remote.enabled || !state.remote.token || !state.remote.repo || state.remote.temporary) {
+          resetBirthdayReminder();
+          return;
+        }
+        const sessionId = state.remote.sessionId;
+        if (birthdayState.sessionId !== sessionId) { resetBirthdayReminder(); birthdayState.sessionId = sessionId; }
+        const current = birthdayState;
+        const day = helper.getReminderDay(new Date());
+        if (current.shownDay && current.shownDay !== helper.getDay(new Date()).date) {
+          document.getElementById("birthdayToast").hidden = true;
+          document.getElementById("birthdayToastText").textContent = "";
+          current.shownDay = "";
+        }
+        scheduleBirthdayCheck();
+        if (document.visibilityState === "hidden" || !helper.canNotify(new Date()) || current.loading) { return; }
+        current.loading = true;
+        try {
+          if (!current.payload || current.loadedDay !== day) {
+            // Scope includes authorization without storing the credential again.
+            current.scope = await projectProgressCacheScope();
+            assertRemoteSession(sessionId);
+            const response = await fetchForRemoteSession(getRemotePathContentsUrl("minimal-notes-birthdays.json", true), { headers: getRemoteHeaders(false), cache: "no-store" });
+            assertRemoteSession(sessionId);
+            if (!response.ok) { return; }
+            const file = await response.json();
+            assertRemoteSession(sessionId);
+            if (file.encoding !== "base64" || !file.content || file.size > 65536) { return; }
+            const payload = helper.validatePayload(JSON.parse(decodeBase64Utf8(file.content)));
+            assertRemoteSession(sessionId);
+            current.payload = payload;
+            current.loadedDay = day;
+          }
+          if (document.visibilityState === "hidden" || !helper.canNotify(new Date())) { return; }
+          const matches = helper.matching(current.payload, new Date());
+          // A response that straddled midnight is reconsidered against today's source.
+          if (matches.date !== day) { current.loadedDay = ""; window.setTimeout(checkBirthdays, 0); return; }
+          if (!matches.birthdays.length || current.shownDay === day) { return; }
+          const scope = current.scope || "session:" + sessionId;
+          const key = "minimal-notes-birthday-shown-v1:" + scope;
+          let shown = birthdayMemoryCheckpoint.get(scope);
+          if (current.scope) {
+            try { shown = localStorage.getItem(key) || shown; } catch (error) { /* Memory fallback. */ }
+          }
+          if (shown === day) { return; }
+          document.getElementById("birthdayToastText").textContent = "今天是" + matches.birthdays.map(function (person) { return person.displayName || person.name; }).join("、") + "的生日。";
+          document.getElementById("birthdayToast").hidden = false;
+          current.shownDay = day;
+          window.clearTimeout(birthdayExpiryTimer);
+          // Remove an already visible "today" card at midnight, without creating
+          // a new reminder before the user's 05:00 boundary.
+          birthdayExpiryTimer = window.setTimeout(function () {
+            if (sessionId !== state.remote.sessionId) { return; }
+            document.getElementById("birthdayToast").hidden = true;
+            document.getElementById("birthdayToastText").textContent = "";
+          }, Date.parse(day + "T00:00:00+08:00") + 86400000 - Date.now());
+          birthdayMemoryCheckpoint.set(scope, day);
+          if (current.scope) {
+            try { localStorage.setItem(key, day); } catch (error) { /* This page still deduplicates. */ }
+          }
+        } catch (error) {
+          // A failed or stale read is not an empty birthday list and never consumes a reminder.
+        } finally {
+          if (sessionId === state.remote.sessionId) { current.loading = false; }
+        }
       }
 
       function resetProjectProgress() {

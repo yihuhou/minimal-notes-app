@@ -15479,7 +15479,7 @@
       function extractTimeRangeInfoFromText(text) {
         const source = String(text || "");
         const periodTimePattern = "(?:" + getTimePeriodPatternSource() + ")?\\s*" + getTimeFragmentPatternSource();
-        const rangeMatch = source.match(new RegExp("(" + periodTimePattern + ")\\s*(?:到|至|-|~|～)\\s*(" + periodTimePattern + ")"));
+        const rangeMatch = source.match(new RegExp("(" + periodTimePattern + ")\\s*(?:到|至|[-‐‑‒–—―−－~～])\\s*(" + periodTimePattern + ")"));
         if (!rangeMatch) {
           return null;
         }
@@ -15507,7 +15507,11 @@
           && range.ambiguousMeridiem
           && start.getHours() >= 12
           && range.hours < 12) {
-          end.setHours(range.hours + 12, range.minutes, 0, 0);
+          const afternoonEnd = new Date(end.getTime());
+          afternoonEnd.setHours(range.hours + 12, range.minutes, 0, 0);
+          if (afternoonEnd.getTime() > start.getTime()) {
+            return afternoonEnd;
+          }
         }
 
         if (end.getTime() <= start.getTime()) {

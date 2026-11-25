@@ -5777,7 +5777,7 @@
           && new Date(value + "T12:00:00Z").toISOString().slice(0, 10) === value;
       }
 
-      function parseMinutesTiming(source) {
+      function parseMinutesTiming(source, kind) {
         const parts = String(source || "").split(/[;；]/).map(function (part) { return part.trim(); });
         const valueFor = function (key) {
           const values = parts.filter(function (part) { return part.startsWith(key + "="); })
@@ -5798,6 +5798,8 @@
         const rawDuration = valueFor("录音总时长秒");
         const duration = /^(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(rawDuration) ? Number(rawDuration) : NaN;
         const durationSeconds = Number.isFinite(duration) && duration >= 0 ? duration : null;
+        const rawDiscussionSpan = valueFor("讨论跨度秒");
+        const discussionSpan = /^\d+$/.test(rawDiscussionSpan) ? Number(rawDiscussionSpan) : NaN;
         const precisionKey = "发生时间精度", approximateKey = "发生时间约数";
         const countFor = function (key) { return parts.filter(function (part) { return part.startsWith(key + "="); }).length; };
         const rawPrecision = valueFor(precisionKey), rawApproximate = valueFor(approximateKey);
@@ -5808,7 +5810,8 @@
           ? rawApproximate === "true" : null;
         if ((countFor(precisionKey) > 0 && occurrencePrecision === null)
           || (countFor(approximateKey) > 0 && occurrenceApproximate === null)) { occurrenceAt = null; }
-        return { occurrenceAt: occurrenceAt, durationSeconds: durationSeconds, occurrencePrecision: occurrencePrecision, occurrenceApproximate: occurrenceApproximate };
+        return { occurrenceAt: occurrenceAt, durationSeconds: durationSeconds, occurrencePrecision: occurrencePrecision, occurrenceApproximate: occurrenceApproximate,
+          ...(kind === "讨论" ? { discussionSpanSeconds: Number.isSafeInteger(discussionSpan) ? discussionSpan : null } : {}) };
       }
 
       function parseMinutesRecord(record) {
@@ -5817,7 +5820,7 @@
           /^【纪要】([^\n]+)\n发生日期：(\d{4}-\d{2}-\d{2})\n纪要类型：(录音|谈话|日程|邮件|讨论)\n关联日程：([^\n]*)\n来源说明：([^\n]*)\n(?:核实状态：(未核实|已核实)\n)?\n([\s\S]+)$/
         );
         if (!match || !isMinutesDate(match[2])) { return null; }
-        return { title: match[1], date: match[2], kind: match[3], meetingId: match[4], source: match[5], verification: match[6] || "未核实", body: match[7], ...parseMinutesTiming(match[5]) };
+        return { title: match[1], date: match[2], kind: match[3], meetingId: match[4], source: match[5], verification: match[6] || "未核实", body: match[7], ...parseMinutesTiming(match[5], match[3]) };
       }
 
       function isMinutesRecord(record) { return Boolean(parseMinutesRecord(record)); }
@@ -6020,7 +6023,9 @@
         const fields = parseMinutesRecord(record);
         const time = formatMinutesTiming({ occurrenceAt: fields.occurrenceAt, occurrenceApproximate: fields.occurrenceApproximate });
         const dateTime = fields.date + (time ? " " + time : "");
-        const duration = formatMinutesTiming({ durationSeconds: fields.durationSeconds });
+        const duration = fields.kind === "讨论"
+          ? (fields.discussionSpanSeconds == null ? "" : "讨论跨度 " + formatMinutesTiming({ durationSeconds: fields.discussionSpanSeconds }))
+          : formatMinutesTiming({ durationSeconds: fields.durationSeconds });
         const expanded = expandedMinutesIds.has(record.id);
         const detailsId = "minutes-details-" + record.id;
         const meeting = state.records.find(function (item) { return item.id === fields.meetingId && item.type === "meeting"; });

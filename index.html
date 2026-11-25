@@ -6024,7 +6024,7 @@
         const time = formatMinutesTiming({ occurrenceAt: fields.occurrenceAt, occurrenceApproximate: fields.occurrenceApproximate });
         const dateTime = fields.date + (time ? " " + time : "");
         const duration = fields.kind === "讨论"
-          ? (fields.discussionSpanSeconds == null ? "" : "讨论跨度 " + formatMinutesTiming({ durationSeconds: fields.discussionSpanSeconds }))
+          ? (fields.discussionSpanSeconds == null ? "" : formatMinutesTiming({ durationSeconds: fields.discussionSpanSeconds }))
           : formatMinutesTiming({ durationSeconds: fields.durationSeconds });
         const expanded = expandedMinutesIds.has(record.id);
         const detailsId = "minutes-details-" + record.id;
